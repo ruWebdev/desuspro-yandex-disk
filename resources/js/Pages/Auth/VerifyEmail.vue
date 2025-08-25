@@ -20,37 +20,35 @@ const verificationLinkSent = computed(
 </script>
 
 <template>
-    <Head title="Email Verification" />
+
+    <Head title="Подтверждение Email" />
     <div class="page page-center">
         <div class="container-tight py-4">
-            <div class="text-center mb-4">
-                <a href="/" class="navbar-brand navbar-brand-autodark">
-                    <img src="/favicon.ico" height="36" alt="Logo" />
-                </a>
-            </div>
+
 
             <div class="card card-md">
                 <div class="card-body">
-                    <h2 class="card-title text-center mb-2">Verify your email</h2>
+                    <h2 class="card-title text-center mb-2">Подтвердите ваш email</h2>
                     <p class="text-secondary mb-3">
-                        Thanks for signing up! Before getting started, please verify your email address by clicking the link we just emailed to you.
-                        If you didn't receive the email, we will gladly send you another.
+                        Спасибо за регистрацию! Прежде чем начать, подтвердите адрес электронной почты, перейдя по
+                        ссылке из письма, которое мы вам отправили.
+                        Если письмо не пришло, мы с радостью отправим его ещё раз.
                     </p>
 
                     <div class="alert alert-success" v-if="verificationLinkSent" role="alert">
-                        A new verification link has been sent to the email address you provided during registration.
+                        Новая ссылка для подтверждения отправлена на указанный при регистрации адрес электронной почты.
                     </div>
 
                     <form @submit.prevent="submit">
                         <div class="d-flex justify-content-between align-items-center gap-2">
                             <button type="submit" class="btn btn-primary" :disabled="form.processing">
-                                <span v-if="!form.processing">Resend Verification Email</span>
+                                <span v-if="!form.processing">Отправить письмо ещё раз</span>
                                 <span v-else class="spinner-border spinner-border-sm me-2" role="status"></span>
-                                <span v-if="form.processing">Sending...</span>
+                                <span v-if="form.processing">Отправка...</span>
                             </button>
 
                             <Link :href="route('logout')" method="post" as="button" class="btn btn-link">
-                                Log Out
+                            Выйти
                             </Link>
                         </div>
                     </form>

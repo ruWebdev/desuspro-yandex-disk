@@ -4,18 +4,18 @@ import { Head } from '@inertiajs/vue3';
 </script>
 
 <template>
-    <Head title="Dashboard" />
+    <Head title="Панель" />
 
     <TablerLayout>
         <template #header>
-            Dashboard
+            Панель
         </template>
 
         <div class="row row-deck">
             <div class="col-12">
                 <div class="card">
                     <div class="card-body">
-                        You're logged in!
+                        Вы вошли в систему!
                     </div>
                 </div>
             </div>

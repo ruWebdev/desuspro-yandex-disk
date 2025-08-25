@@ -116,7 +116,7 @@ function submitEdit() {
                         <kbd>ctrl + K</kbd>
                       </span>
                     </div>
-                    <a href="#" class="btn btn-icon" aria-label="Button">
+                    <a href="#" class="btn btn-icon" aria-label="Кнопка">
                       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-1">
                         <path d="M5 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
                         <path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
@@ -154,21 +154,21 @@ function submitEdit() {
                   <tbody class="table-tbody">
                     <tr v-for="(u, idx) in filteredUsers" :key="u.id">
                       <td>
-                        <input class="form-check-input m-0 align-middle table-selectable-check" type="checkbox" :aria-label="`Select user ${idx+1}`" />
+                        <input class="form-check-input m-0 align-middle table-selectable-check" type="checkbox" :aria-label="`Выбрать пользователя ${idx+1}`" />
                       </td>
                       <td class="sort-name">{{ u.name }}</td>
                       <td class="sort-email">{{ u.email }}</td>
                       <td class="sort-actions py-0">
                         <span class="on-unchecked">
                           <div class="btn-list">
-                            <button class="btn btn-ghost-primary btn-icon" aria-label="Edit" @click="startEdit(u)">
+                            <button class="btn btn-ghost-primary btn-icon" aria-label="Редактировать" @click="startEdit(u)">
                               <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" /><path d="M13.5 6.5l4 4" /></svg>
                             </button>
                           </div>
                         </span>
                         <div class="on-checked">
                           <div class="d-flex justify-content-end">
-                            <a href="#" class="btn btn-2 btn-icon" aria-label="More">
+                            <a href="#" class="btn btn-2 btn-icon" aria-label="Ещё">
                               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-2">
                                 <path d="M5 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
                                 <path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />

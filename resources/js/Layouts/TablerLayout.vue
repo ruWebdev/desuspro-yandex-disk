@@ -16,13 +16,13 @@ const user = computed(() => page.props?.auth?.user || null);
           <Link :href="route('dashboard')" class="text-reset text-decoration-none">{{ page.props?.appName || 'App' }}</Link>
         </h1>
         <!-- Navbar toggler controls the light menu below -->
-        <button class="navbar-toggler" type="button" @click="navOpen = !navOpen" aria-label="Toggle navigation" data-bs-toggle="collapse" data-bs-target="#navbar-menu" :aria-expanded="navOpen.toString()" aria-controls="navbar-menu">
+        <button class="navbar-toggler" type="button" @click="navOpen = !navOpen" aria-label="Переключить навигацию" data-bs-toggle="collapse" data-bs-target="#navbar-menu" :aria-expanded="navOpen.toString()" aria-controls="navbar-menu">
           <span class="navbar-toggler-icon"></span>
         </button>
         <!-- Right: user dropdown/actions in top dark bar -->
         <div class="navbar-nav ms-auto align-items-center">
           <div v-if="user" class="nav-item dropdown">
-            <a href="#" class="nav-link d-flex lh-1 text-reset p-0" data-bs-toggle="dropdown" aria-label="Open user menu">
+            <a href="#" class="nav-link d-flex lh-1 text-reset p-0" data-bs-toggle="dropdown" aria-label="Открыть меню пользователя">
               <span class="avatar avatar-sm">{{ user.name?.charAt(0).toUpperCase() }}</span>
               <div class="d-none d-xl-block ps-2">
                 <div>{{ user.name }}</div>
@@ -30,9 +30,9 @@ const user = computed(() => page.props?.auth?.user || null);
               </div>
             </a>
             <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow" data-bs-theme="light">
-              <Link class="dropdown-item" :href="route('profile.edit')">Profile</Link>
+              <Link class="dropdown-item" :href="route('profile.edit')">Профиль</Link>
               <div class="dropdown-divider"></div>
-              <Link class="dropdown-item" :href="route('logout')" method="post" as="button">Log Out</Link>
+              <Link class="dropdown-item" :href="route('logout')" method="post" as="button">Выйти</Link>
             </div>
           </div>
         </div>
@@ -49,7 +49,7 @@ const user = computed(() => page.props?.auth?.user || null);
                 <ul class="navbar-nav">
                   <li class="nav-item">
                     <Link :href="route('dashboard')" class="nav-link" :class="{ active: route().current('dashboard') }">
-                      <span class="nav-link-title">Dashboard</span>
+                      <span class="nav-link-title">Панель</span>
                     </Link>
                   </li>
                   <li class="nav-item dropdown" :class="{ active: route().current('users.photographers.index') || route().current('users.photo_editors.index') }">
@@ -82,7 +82,7 @@ const user = computed(() => page.props?.auth?.user || null);
         <div class="container-fluid">
           <div class="row align-items-center">
             <div class="col">
-              <div class="page-pretitle">Overview</div>
+              <div class="page-pretitle">Обзор</div>
               <h2 class="page-title">
                 <slot name="header" />
               </h2>
