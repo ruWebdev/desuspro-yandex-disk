@@ -1,0 +1,153 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\YandexToken;
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
+
+class YandexDiskService
+{
+    private string $authUrl = 'https://oauth.yandex.com/authorize';
+    private string $tokenUrl = 'https://oauth.yandex.com/token';
+    private string $apiBase = 'https://cloud-api.yandex.net/v1/disk';
+
+    public function getAuthorizeUrl(string $state): string
+    {
+        $clientId = Config::get('services.yandex.client_id');
+        $scope = Config::get('services.yandex.scope');
+        $redirect = Config::get('services.yandex.redirect');
+
+        $query = http_build_query([
+            'response_type' => 'code',
+            'client_id' => $clientId,
+            'redirect_uri' => $redirect,
+            'scope' => $scope,
+            'force_confirm' => 'yes',
+            'state' => $state,
+        ]);
+
+        return $this->authUrl.'?'.$query;
+    }
+
+    public function exchangeCodeForToken(string $code): array
+    {
+        $response = Http::asForm()->post($this->tokenUrl, [
+            'grant_type' => 'authorization_code',
+            'code' => $code,
+            'client_id' => Config::get('services.yandex.client_id'),
+            'client_secret' => Config::get('services.yandex.client_secret'),
+        ])->throw();
+
+        return $response->json();
+    }
+
+    public function refreshAccessToken(YandexToken $token): YandexToken
+    {
+        if (!$token->refresh_token) {
+            return $token; // Nothing to refresh
+        }
+
+        $response = Http::asForm()->post($this->tokenUrl, [
+            'grant_type' => 'refresh_token',
+            'refresh_token' => $token->refresh_token,
+            'client_id' => Config::get('services.yandex.client_id'),
+            'client_secret' => Config::get('services.yandex.client_secret'),
+        ])->throw();
+
+        $data = $response->json();
+        $expiresIn = Arr::get($data, 'expires_in');
+        $token->access_token = Arr::get($data, 'access_token', $token->access_token);
+        $token->token_type = Arr::get($data, 'token_type', $token->token_type);
+        if ($expiresIn) {
+            $token->expires_at = Carbon::now()->addSeconds((int) $expiresIn);
+        }
+        $token->save();
+
+        return $token;
+    }
+
+    public function ensureValidToken(YandexToken $token): YandexToken
+    {
+        if ($token->isExpired()) {
+            return $this->refreshAccessToken($token);
+        }
+        return $token;
+    }
+
+    private function authHeaders(string $accessToken): array
+    {
+        return [
+            'Authorization' => 'OAuth '.$accessToken,
+            'Accept' => 'application/json',
+        ];
+    }
+
+    public function diskInfo(string $accessToken): array
+    {
+        $res = Http::withHeaders($this->authHeaders($accessToken))
+            ->get($this->apiBase)
+            ->throw();
+        return $res->json();
+    }
+
+    public function listResources(string $accessToken, string $path = '/', int $limit = 20): array
+    {
+        $res = Http::withHeaders($this->authHeaders($accessToken))
+            ->get($this->apiBase.'/resources', [
+                'path' => $path,
+                'limit' => $limit,
+            ])->throw();
+        return $res->json();
+    }
+
+    public function createFolder(string $accessToken, string $path): array
+    {
+        $res = Http::withHeaders($this->authHeaders($accessToken))
+            ->put($this->apiBase.'/resources', [
+                'path' => $path,
+            ])->throw();
+        return $res->json();
+    }
+
+    public function deleteResource(string $accessToken, string $path, bool $permanently = false): array
+    {
+        $res = Http::withHeaders($this->authHeaders($accessToken))
+            ->delete($this->apiBase.'/resources', [
+                'path' => $path,
+                'permanently' => $permanently ? 'true' : 'false',
+            ])->throw();
+        return $res->json();
+    }
+
+    public function downloadUrl(string $accessToken, string $path): string
+    {
+        $res = Http::withHeaders($this->authHeaders($accessToken))
+            ->get($this->apiBase.'/resources/download', [
+                'path' => $path,
+            ])->throw();
+        return Arr::get($res->json(), 'href');
+    }
+
+    public function upload(string $accessToken, string $path, string $contents, bool $overwrite = true): array
+    {
+        // Step 1: get upload URL
+        $res = Http::withHeaders($this->authHeaders($accessToken))
+            ->get($this->apiBase.'/resources/upload', [
+                'path' => $path,
+                'overwrite' => $overwrite ? 'true' : 'false',
+            ])->throw();
+        $href = Arr::get($res->json(), 'href');
+
+        // Step 2: upload via PUT to href
+        Http::withHeaders(['Content-Type' => 'application/octet-stream'])
+            ->put($href, $contents)
+            ->throw();
+
+        return ['success' => true, 'path' => $path];
+    }
+}

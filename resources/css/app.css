@@ -1,0 +1,6 @@
+/* Tabler core CSS */
+@import "@tabler/core/dist/css/tabler.min.css";
+/* Optional Tabler extra CSS bundles: uncomment if needed */
+/* @import "@tabler/core/dist/css/tabler-flags.min.css"; */
+/* @import "@tabler/core/dist/css/tabler-payments.min.css"; */
+/* @import "@tabler/core/dist/css/tabler-vendors.min.css"; */
