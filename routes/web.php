@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\BrandController;
+use App\Http\Controllers\TaskController;
 use App\Http\Controllers\Manager\UserManagementController;
 use App\Http\Controllers\Users\RoleUsersController;
 use App\Http\Controllers\Integrations\YandexDiskController;
@@ -43,6 +44,10 @@ Route::middleware('auth')->group(function () {
 
 // Users by role (manager-only)
 Route::middleware(['auth', 'role:Manager'])->group(function () {
+    // All Tasks (global)
+    Route::get('/tasks', [TaskController::class, 'all'])->name('tasks.all');
+    Route::post('/tasks', [TaskController::class, 'storeGlobal'])->name('tasks.store');
+
     // Photographers
     Route::get('/users/photographers', [RoleUsersController::class, 'index'])
         ->defaults('role', 'Photographer')

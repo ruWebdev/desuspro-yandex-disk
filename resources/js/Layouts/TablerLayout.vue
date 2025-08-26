@@ -57,6 +57,11 @@ const user = computed(() => page.props?.auth?.user || null);
                       <span class="nav-link-title">Бренды</span>
                     </Link>
                   </li>
+                  <li class="nav-item">
+                    <Link :href="route('tasks.all')" class="nav-link" :class="{ active: route().current('tasks.all') }">
+                      <span class="nav-link-title">Все задания</span>
+                    </Link>
+                  </li>
                   <li class="nav-item dropdown" :class="{ active: route().current('users.photographers.index') || route().current('users.photo_editors.index') }">
                     <a href="#navbar-users" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" role="button" aria-expanded="false">
                       <span class="nav-link-title">Пользователи</span>

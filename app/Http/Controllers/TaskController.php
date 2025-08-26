@@ -14,6 +14,24 @@ use ZipArchive;
 
 class TaskController extends Controller
 {
+    /**
+     * Global list of all tasks with brand names and basic info.
+     */
+    public function all(Request $request): Response
+    {
+        $tasks = Task::query()
+            ->with(['brand:id,name','assignee:id,name'])
+            ->orderByDesc('created_at')
+            ->get(['id','brand_id','name','status','ownership','assignee_id','created_at']);
+
+        $brands = Brand::query()->orderBy('name')->get(['id','name']);
+
+        return Inertia::render('Tasks/All', [
+            'tasks' => $tasks,
+            'brands' => $brands,
+        ]);
+    }
+
     public function index(Request $request, Brand $brand): Response
     {
         $tasks = Task::query()
@@ -46,6 +64,26 @@ class TaskController extends Controller
             'name' => $data['name'],
             'ownership' => $data['ownership'],
         ]);
+        return back()->with('status', 'task-created');
+    }
+
+    /**
+     * Create a task globally with specified brand.
+     */
+    public function storeGlobal(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => ['required','string','max:255'],
+            'brand_id' => ['required','exists:brands,id'],
+            'ownership' => ['nullable','in:Photographer,PhotoEditor'],
+        ]);
+
+        Task::create([
+            'brand_id' => $data['brand_id'],
+            'name' => $data['name'],
+            'ownership' => $data['ownership'] ?? 'Photographer',
+        ]);
+
         return back()->with('status', 'task-created');
     }
 
