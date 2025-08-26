@@ -5,6 +5,12 @@ import { Link, usePage } from '@inertiajs/vue3';
 const navOpen = ref(false);
 const page = usePage();
 const user = computed(() => page.props?.auth?.user || null);
+
+// Roles from shared props (expects user.roles as array of role names)
+const roles = computed(() => (user.value?.roles || []).map(r => (typeof r === 'string' ? r : r.name)));
+const isManager = computed(() => roles.value.includes('Manager'));
+const isPhotographer = computed(() => roles.value.includes('Photographer'));
+const isPhotoEditor = computed(() => roles.value.includes('PhotoEditor'));
 </script>
 
 <template>
@@ -47,35 +53,44 @@ const user = computed(() => page.props?.auth?.user || null);
             <div class="row flex-column flex-md-row flex-fill align-items-center">
               <div class="col">
                 <ul class="navbar-nav">
-                  <li class="nav-item">
-                    <Link :href="route('dashboard')" class="nav-link" :class="{ active: route().current('dashboard') }">
-                      <span class="nav-link-title">Панель</span>
-                    </Link>
-                  </li>
-                  <li class="nav-item">
-                    <Link :href="route('brands.index')" class="nav-link" :class="{ active: route().current('brands.*') }">
-                      <span class="nav-link-title">Бренды</span>
-                    </Link>
-                  </li>
-                  <li class="nav-item">
-                    <Link :href="route('tasks.all')" class="nav-link" :class="{ active: route().current('tasks.all') }">
-                      <span class="nav-link-title">Все задания</span>
-                    </Link>
-                  </li>
-                  <li class="nav-item dropdown" :class="{ active: route().current('users.photographers.index') || route().current('users.photo_editors.index') }">
-                    <a href="#navbar-users" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" role="button" aria-expanded="false">
-                      <span class="nav-link-title">Пользователи</span>
-                    </a>
-                    <div class="dropdown-menu">
-                      <Link :href="route('users.photographers.index')" class="dropdown-item" :class="{ active: route().current('users.photographers.index') }">
-                        Фотографы
+                  <template v-if="isManager">
+                    <li class="nav-item">
+                      <Link :href="route('dashboard')" class="nav-link" :class="{ active: route().current('dashboard') }">
+                        <span class="nav-link-title">Панель</span>
                       </Link>
-                      <Link :href="route('users.photo_editors.index')" class="dropdown-item" :class="{ active: route().current('users.photo_editors.index') }">
-                        Фоторедакторы
+                    </li>
+                    <li class="nav-item">
+                      <Link :href="route('brands.index')" class="nav-link" :class="{ active: route().current('brands.*') }">
+                        <span class="nav-link-title">Бренды</span>
                       </Link>
-                    </div>
-                  </li>
-                  <!-- Add more nav items/dropdowns as needed -->
+                    </li>
+                    <li class="nav-item">
+                      <Link :href="route('tasks.all')" class="nav-link" :class="{ active: route().current('tasks.all') }">
+                        <span class="nav-link-title">Все задания</span>
+                      </Link>
+                    </li>
+                    <li class="nav-item dropdown" :class="{ active: route().current('users.photographers.index') || route().current('users.photo_editors.index') }">
+                      <a href="#navbar-users" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" role="button" aria-expanded="false">
+                        <span class="nav-link-title">Пользователи</span>
+                      </a>
+                      <div class="dropdown-menu">
+                        <Link :href="route('users.photographers.index')" class="dropdown-item" :class="{ active: route().current('users.photographers.index') }">
+                          Фотографы
+                        </Link>
+                        <Link :href="route('users.photo_editors.index')" class="dropdown-item" :class="{ active: route().current('users.photo_editors.index') }">
+                          Фоторедакторы
+                        </Link>
+                      </div>
+                    </li>
+                  </template>
+                  <template v-else>
+                    <li class="nav-item">
+                      <Link :href="isPhotographer ? route('photographer.tasks') : route('photo_editor.tasks')" class="nav-link"
+                        :class="{ active: isPhotographer ? route().current('photographer.tasks') : route().current('photo_editor.tasks') }">
+                        <span class="nav-link-title">Задания</span>
+                      </Link>
+                    </li>
+                  </template>
                 </ul>
               </div>
               <div class="col-auto ms-md-auto d-none d-md-flex">

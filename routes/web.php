@@ -8,6 +8,7 @@ use App\Http\Controllers\Manager\UserManagementController;
 use App\Http\Controllers\Users\RoleUsersController;
 use App\Http\Controllers\Integrations\YandexDiskController;
 use Illuminate\Foundation\Application;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -19,6 +20,17 @@ Route::get('/', function () {
 });
 
 Route::get('/dashboard', function () {
+    $user = Auth::user();
+    if ($user) {
+        // Redirect role-based
+        $roles = method_exists($user, 'getRoleNames') ? $user->getRoleNames() : collect();
+        if ($roles->contains('Photographer')) {
+            return redirect()->route('photographer.tasks');
+        }
+        if ($roles->contains('PhotoEditor')) {
+            return redirect()->route('photo_editor.tasks');
+        }
+    }
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
@@ -41,6 +53,19 @@ Route::middleware('auth')->group(function () {
         Route::get('/download-url', [YandexDiskController::class, 'downloadUrl'])->name('download_url');
         Route::post('/upload', [YandexDiskController::class, 'upload'])->name('upload');
     });
+});
+
+// Role-specific entry pages
+Route::middleware(['auth', 'role:Photographer'])->group(function () {
+    Route::get('/photographer/tasks', function () {
+        return Inertia::render('Photographer/Tasks');
+    })->name('photographer.tasks');
+});
+
+Route::middleware(['auth', 'role:PhotoEditor'])->group(function () {
+    Route::get('/photo-editor/tasks', function () {
+        return Inertia::render('PhotoEditor/Tasks');
+    })->name('photo_editor.tasks');
 });
 
 // Users by role (manager-only)

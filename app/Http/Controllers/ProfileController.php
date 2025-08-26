@@ -51,6 +51,12 @@ class ProfileController extends Controller
 
         $user = $request->user();
 
+        // Forbid deletion for Photographer and PhotoEditor roles
+        $roles = method_exists($user, 'getRoleNames') ? $user->getRoleNames() : collect();
+        if ($roles->contains('Photographer') || $roles->contains('PhotoEditor')) {
+            return Redirect::route('profile.edit')->with('status', 'forbidden-delete');
+        }
+
         Auth::logout();
 
         $user->delete();

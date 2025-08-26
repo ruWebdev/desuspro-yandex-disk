@@ -1,7 +1,7 @@
 <script setup>
 import TablerLayout from '@/Layouts/TablerLayout.vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 
 const props = defineProps({
   mustVerifyEmail: { type: Boolean },
@@ -9,6 +9,10 @@ const props = defineProps({
 });
 
 const user = usePage().props.auth.user;
+const roles = computed(() => (user?.roles || []).map(r => (typeof r === 'string' ? r : r.name)));
+const isPhotographer = computed(() => roles.value.includes('Photographer'));
+const isPhotoEditor = computed(() => roles.value.includes('PhotoEditor'));
+const isDeletionRestricted = computed(() => isPhotographer.value || isPhotoEditor.value);
 
 // Profile form
 const profileForm = useForm({
@@ -84,6 +88,12 @@ function submitDelete() {
       </template>
 
       <div class="row g-3">
+        <!-- Deletion forbidden notice -->
+        <div v-if="props.status === 'forbidden-delete'" class="col-12">
+          <div class="alert alert-warning" role="alert">
+            Удаление аккаунта недоступно для вашей роли.
+          </div>
+        </div>
         <!-- Profile info -->
         <div class="col-12 col-lg-6">
           <div class="card">
@@ -186,8 +196,8 @@ function submitDelete() {
           </div>
         </div>
 
-        <!-- Delete account -->
-        <div class="col-12">
+        <!-- Delete account (hidden for Photographer/PhotoEditor) -->
+        <div v-if="!isDeletionRestricted" class="col-12">
           <div class="card">
             <div class="card-header">
               <h3 class="card-title mb-0 text-danger">Удаление аккаунта</h3>
@@ -201,7 +211,7 @@ function submitDelete() {
 
       <!-- Delete modal -->
       <teleport to="body">
-        <div v-if="showDeleteModal" class="modal modal-blur fade show d-block" tabindex="-1" role="dialog" style="z-index: 1050;">
+        <div v-if="showDeleteModal && !isDeletionRestricted" class="modal modal-blur fade show d-block" tabindex="-1" role="dialog" style="z-index: 1050;">
           <div class="modal-dialog" role="document">
             <div class="modal-content">
               <div class="modal-header">

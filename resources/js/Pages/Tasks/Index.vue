@@ -120,6 +120,135 @@ const commentsLoading = ref(false);
 const comments = ref([]);
 const newComment = ref('');
 const submitting = ref(false);
+
+// Yandex.Disk files state (as in All.vue)
+const filesLoading = ref(false);
+const filesError = ref('');
+const yandexItems = ref([]);
+
+// Upload state (Photographer) for Yandex area
+const fileInputRef = ref(null);
+const uploading = ref(false);
+const uploadError = ref('');
+
+// Folder path (for display/copy) — browser URL
+const folderPath = computed(() => yandexBrowserUrl() || '');
+
+async function copyFolderPath() {
+  const text = folderPath.value;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+  } catch (e) { console.error('Copy failed', e); }
+}
+
+function openFolderUrl() {
+  const url = folderPath.value;
+  if (!url) return;
+  window.open(url, '_blank');
+}
+
+function yandexFolderPath() {
+  if (!oc.value.brandName || !oc.value.taskName) return null;
+  const base = `${oc.value.brandName}/${oc.value.taskName}`;
+  const suffix = oc.value.ownership === 'Photographer' ? 'ЗАДАНИЕ_Ф' : 'ЗАДАНИЕ_Р';
+  return `disk:/${base}/${suffix}`;
+}
+
+function yandexBrowserUrl() {
+  if (!oc.value.brandName || !oc.value.taskName) return '';
+  const parts = [
+    oc.value.brandName,
+    oc.value.taskName,
+    oc.value.ownership === 'Photographer' ? 'ЗАДАНИЕ_Ф' : 'ЗАДАНИЕ_Р',
+  ];
+  const encoded = parts.map(p => encodeURIComponent(p));
+  return `https://disk.yandex.ru/client/disk/${encoded.join('/')}`;
+}
+
+async function loadYandexFiles() {
+  const path = yandexFolderPath();
+  if (!path) return;
+  filesLoading.value = true;
+  filesError.value = '';
+  try {
+    const url = route('integrations.yandex.list') + `?path=${encodeURIComponent(path)}&limit=100`;
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    yandexItems.value = (data && data._embedded && Array.isArray(data._embedded.items)) ? data._embedded.items : [];
+  } catch (e) {
+    console.error(e);
+    filesError.value = 'Не удалось загрузить список файлов.';
+    yandexItems.value = [];
+  } finally {
+    filesLoading.value = false;
+  }
+}
+
+async function downloadYandexItem(item) {
+  if (!item || item.type !== 'file') return;
+  let reqPath = item.path;
+  if (!reqPath) {
+    const folder = yandexFolderPath();
+    if (!folder) return;
+    reqPath = `${folder}/${item.name}`;
+  }
+  const url = route('integrations.yandex.download_url') + `?path=${encodeURIComponent(reqPath)}`;
+  try {
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data && data.href) window.open(data.href, '_blank');
+  } catch (e) { console.error(e); }
+}
+
+function openUploader() {
+  uploadError.value = '';
+  if (fileInputRef.value) fileInputRef.value.value = null;
+  fileInputRef.value?.click();
+}
+
+async function onFilesChosen(e) {
+  const files = e.target?.files;
+  if (!files || !files.length) return;
+  await uploadFiles(Array.from(files));
+}
+
+async function uploadFiles(files) {
+  const folder = yandexFolderPath();
+  if (!folder) return;
+  uploading.value = true;
+  uploadError.value = '';
+  try {
+    for (const f of files) {
+      const fd = new FormData();
+      fd.append('path', `${folder}/${f.name}`);
+      fd.append('file', f, f.name);
+      const res = await fetch(route('integrations.yandex.upload'), {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') },
+        body: fd,
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Upload failed (${res.status}): ${text}`);
+      }
+    }
+    await loadYandexFiles();
+  } catch (e) {
+    console.error(e);
+    uploadError.value = 'Ошибка загрузки файлов. Попробуйте ещё раз.';
+  } finally { uploading.value = false; }
+}
 function openOffcanvas(task, ownership) {
   oc.value = {
     brandId: task.brand_id,
@@ -134,6 +263,7 @@ function openOffcanvas(task, ownership) {
   comments.value = [];
   newComment.value = '';
   loadSubtaskAndComments(task.id, ownership);
+  loadYandexFiles();
 }
 
 async function loadSubtaskAndComments(taskId, ownership) {
@@ -296,7 +426,7 @@ function downloadTaskFiles() {
 
     <!-- Right offcanvas -->
     <teleport to="body">
-      <div class="offcanvas offcanvas-end" :class="{ show: offcanvasOpen }"
+      <div class="offcanvas offcanvas-end w-50" :class="{ show: offcanvasOpen }"
         :style="offcanvasOpen ? 'visibility: visible;' : ''" tabindex="-1" role="dialog">
         <div class="offcanvas-header">
           <h5 class="offcanvas-title">
@@ -312,16 +442,62 @@ function downloadTaskFiles() {
         </div>
         <div class="offcanvas-body">
           <div class="mb-3">
-            <div class="btn-group" role="group">
-              <button class="btn" :class="{ 'btn-primary': activeOcTab === 'files' }" @click="activeOcTab = 'files'">Файлы</button>
-              <button class="btn" :class="{ 'btn-primary': activeOcTab === 'comments' }" @click="activeOcTab = 'comments'">Комментарии</button>
-            </div>
+            <ul class="nav nav-pills">
+              <li class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: activeOcTab === 'files' }"
+                  @click="activeOcTab = 'files'">Файлы</button>
+              </li>
+              <li class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: activeOcTab === 'comments' }"
+                  @click="activeOcTab = 'comments'">Комментарии</button>
+              </li>
+            </ul>
           </div>
 
           <div v-if="activeOcTab === 'files'">
-            <div class="d-flex align-items-center gap-2">
-              <button class="btn btn-outline" @click="downloadTaskFiles">Скачать все</button>
-              <span class="text-secondary small">Файлы относятся ко всей задаче.</span>
+            <!-- Folder path with copy (browser URL) -->
+            <div class="mb-3">
+              <label class="form-label">URL папки (для просмотра в браузере)</label>
+              <div class="input-group">
+                <input type="text" class="form-control" :value="folderPath" readonly />
+                <button class="btn btn-outline-secondary" type="button" @click="copyFolderPath">Копировать</button>
+                <button class="btn btn-secondary" type="button" @click="openFolderUrl">Перейти</button>
+              </div>
+            </div>
+
+            <div v-if="filesLoading" class="text-secondary">Загрузка списка файлов…</div>
+            <div v-else>
+              <div v-if="filesError" class="text-danger">{{ filesError }}</div>
+              <div v-else>
+                <div v-if="!yandexItems.length" class="text-secondary">Файлы не найдены.</div>
+                <ul v-else class="list-group">
+                  <li v-for="it in yandexItems" :key="it.resource_id || it.path || it.name"
+                    class="list-group-item d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="badge" :class="it.type === 'dir' ? 'bg-secondary' : 'bg-primary'">{{ it.type ===
+                        'dir' ?
+                        'Папка' : 'Файл' }}</span>
+                      <span>{{ it.name }}</span>
+                      <span v-if="it.size && it.type === 'file'" class="text-secondary small">{{ (it.size / 1024 /
+                        1024).toFixed(2) }} MB</span>
+                    </div>
+                    <div>
+                      <button v-if="it.type === 'file'" class="btn btn-sm btn-outline-primary"
+                        @click="() => downloadYandexItem(it)">Скачать</button>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Photographer upload UI below the list -->
+            <div v-if="oc.ownership === 'Photographer'" class="mt-3 d-flex align-items-center gap-2">
+              <input type="file" accept="image/*" multiple ref="fileInputRef" class="d-none" @change="onFilesChosen" />
+              <button class="btn btn-primary" :disabled="uploading" @click="openUploader">
+                <span v-if="!uploading">Загрузить фото</span>
+                <span v-else>Загрузка…</span>
+              </button>
+              <span v-if="uploadError" class="text-danger small">{{ uploadError }}</span>
             </div>
           </div>
 
@@ -332,16 +508,19 @@ function downloadTaskFiles() {
               <ul class="list-unstyled">
                 <li v-for="c in comments" :key="c.id" class="mb-2 d-flex justify-content-between align-items-start">
                   <div>
-                    <div class="fw-bold">{{ c.user?.name || '—' }} <span class="text-secondary small">{{ new Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
+                    <div class="fw-bold">{{ c.user?.name || '—' }} <span class="text-secondary small">{{ new
+                      Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
                     <div style="white-space: pre-wrap;">{{ c.content }}</div>
                   </div>
                   <button class="btn btn-ghost-danger btn-sm" title="Удалить" @click="deleteComment(c)">Удалить</button>
                 </li>
               </ul>
               <div class="mt-2">
-                <textarea v-model="newComment" rows="2" class="form-control" placeholder="Новый комментарий…"></textarea>
+                <textarea v-model="newComment" rows="2" class="form-control"
+                  placeholder="Новый комментарий…"></textarea>
                 <div class="mt-2 d-flex justify-content-end">
-                  <button class="btn btn-primary" :disabled="!newComment.trim() || submitting" @click="addComment">Добавить</button>
+                  <button class="btn btn-primary" :disabled="!newComment.trim() || submitting"
+                    @click="addComment">Добавить</button>
                 </div>
               </div>
             </div>
