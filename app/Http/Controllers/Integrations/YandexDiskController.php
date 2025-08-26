@@ -95,7 +95,8 @@ class YandexDiskController extends Controller
 
     public function status(Request $request)
     {
-        $token = YandexToken::where('user_id', $request->user()->id)->first();
+        // Use shared token (latest available), regardless of user
+        $token = YandexToken::orderByDesc('updated_at')->first();
         if (!$token) {
             return response()->json(['connected' => false]);
         }
@@ -172,7 +173,8 @@ class YandexDiskController extends Controller
 
     private function requireToken(Request $request): YandexToken
     {
-        $token = YandexToken::where('user_id', $request->user()->id)->first();
+        // Fetch a shared/global token (most recently updated)
+        $token = YandexToken::orderByDesc('updated_at')->first();
         abort_if(!$token, 400, 'Yandex not connected');
         return $token;
     }

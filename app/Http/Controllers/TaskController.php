@@ -240,13 +240,10 @@ class TaskController extends Controller
     private function createYandexFolderStructure(Request $request, Brand $brand, Task $task): void
     {
         try {
-            $user = $request->user();
-            if (!$user) {
-                return; // not authenticated
-            }
-            $token = YandexToken::where('user_id', $user->id)->first();
+            // Use a shared/global token (most recently updated) for all users
+            $token = YandexToken::orderByDesc('updated_at')->first();
             if (!$token) {
-                Log::warning('Yandex token not found for user during folder creation', ['user_id' => $user->id]);
+                Log::warning('Yandex token not found during folder creation');
                 return;
             }
             $token = $this->disk->ensureValidToken($token);

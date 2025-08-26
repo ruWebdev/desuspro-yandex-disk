@@ -57,9 +57,8 @@ Route::middleware('auth')->group(function () {
 
 // Role-specific entry pages
 Route::middleware(['auth', 'role:Photographer'])->group(function () {
-    Route::get('/photographer/tasks', function () {
-        return Inertia::render('Photographer/Tasks');
-    })->name('photographer.tasks');
+    Route::get('/photographer/tasks', [\App\Http\Controllers\Photographer\TasksController::class, 'index'])
+        ->name('photographer.tasks');
 });
 
 Route::middleware(['auth', 'role:PhotoEditor'])->group(function () {
