@@ -20,7 +20,6 @@ const filteredUsers = computed(() => {
   });
   if (!q) return base;
   return base.filter((u) =>
-    (u.name || '').toLowerCase().includes(q) ||
     (u.email || '').toLowerCase().includes(q) ||
     (u.last_name || '').toLowerCase().includes(q) ||
     (u.first_name || '').toLowerCase().includes(q) ||
@@ -28,13 +27,17 @@ const filteredUsers = computed(() => {
   );
 });
 
+function displayName(u) {
+  const parts = [u.last_name, u.first_name, u.middle_name].filter(Boolean);
+  return parts.length ? parts.join(' ') : (u.email || '');
+}
+
 // Sort by created_at desc by default
 const displayedUsers = computed(() => {
   return [...filteredUsers.value].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 });
 
 const createForm = useForm({
-  name: '',
   last_name: '',
   first_name: '',
   middle_name: '',
@@ -45,7 +48,6 @@ const createForm = useForm({
 
 const editingUser = ref(null);
 const editForm = useForm({
-  name: '',
   last_name: '',
   first_name: '',
   middle_name: '',
@@ -93,7 +95,6 @@ function submitCreate() {
 function startEdit(user) {
   editingUser.value = user;
   editForm.reset();
-  editForm.name = user.name;
   editForm.last_name = user.last_name || '';
   editForm.first_name = user.first_name || '';
   editForm.middle_name = user.middle_name || '';
@@ -110,7 +111,7 @@ function cancelEdit() {
 
 function submitEdit() {
   if (!editingUser.value) return;
-  editForm.put(route('users.photo_editors.update', editingUser.value.id), {
+  editForm.put(route('users.photo_editors.update', { user: editingUser.value.id }), {
     preserveScroll: true,
     onSuccess: () => {
       cancelEdit();
@@ -130,7 +131,7 @@ function cancelDelete() {
 
 function submitDelete() {
   if (!userToDelete.value) return;
-  deleteForm.delete(route('users.photo_editors.destroy', userToDelete.value.id), {
+  deleteForm.delete(route('users.photo_editors.destroy', { user: userToDelete.value.id }), {
     preserveScroll: true,
     onSuccess: () => {
       cancelDelete();
@@ -210,7 +211,7 @@ function submitDelete() {
                         <input class="form-check-input m-0 align-middle table-selectable-check" type="checkbox"
                           :aria-label="`Выбрать пользователя ${idx + 1}`" />
                       </td>
-                      <td class="sort-name">{{ u.name }}</td>
+                      <td class="sort-name">{{ displayName(u) }}</td>
                       <td>{{ u.last_name || '-' }}</td>
                       <td>{{ u.first_name || '-' }}</td>
                       <td>{{ u.middle_name || '-' }}</td>
@@ -322,10 +323,6 @@ function submitDelete() {
               <form @submit.prevent="submitCreate">
                 <div class="row g-2">
                   <div class="col-12 col-md-6">
-                    <label class="form-label">Имя</label>
-                    <input v-model="createForm.name" type="text" class="form-control" required />
-                  </div>
-                  <div class="col-12 col-md-6">
                     <label class="form-label">Фамилия</label>
                     <input v-model="createForm.last_name" type="text" class="form-control" />
                   </div>
@@ -386,7 +383,7 @@ function submitDelete() {
               <button type="button" class="btn-close" aria-label="Close" @click="cancelDelete"></button>
             </div>
             <div class="modal-body">
-              Вы уверены, что хотите удалить пользователя <strong>{{ userToDelete?.name }}</strong>? Это действие
+              Вы уверены, что хотите удалить пользователя <strong>{{ displayName(userToDelete) }}</strong>? Это действие
               необратимо.
             </div>
             <div class="modal-footer">
@@ -416,10 +413,6 @@ function submitDelete() {
             <div class="modal-body">
               <form @submit.prevent="submitEdit">
                 <div class="row g-2">
-                  <div class="col-12 col-md-6">
-                    <label class="form-label">Имя</label>
-                    <input v-model="editForm.name" type="text" class="form-control" required />
-                  </div>
                   <div class="col-12 col-md-6">
                     <label class="form-label">Фамилия</label>
                     <input v-model="editForm.last_name" type="text" class="form-control" />

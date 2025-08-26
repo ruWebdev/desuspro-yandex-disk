@@ -24,8 +24,9 @@ class RoleUsersController extends Controller
 
         $users = User::query()
             ->role($role) // spatie/laravel-permission scope
-            ->select(['id', 'name', 'email', 'last_name', 'first_name', 'middle_name', 'is_blocked', 'created_at'])
-            ->orderBy('name')
+            ->select(['id', 'email', 'last_name', 'first_name', 'middle_name', 'is_blocked', 'created_at'])
+            ->orderBy('last_name')
+            ->orderBy('first_name')
             ->get();
 
         $page = match ($role) {
@@ -49,7 +50,6 @@ class RoleUsersController extends Controller
         }
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'last_name' => ['nullable', 'string', 'max:255'],
@@ -59,7 +59,6 @@ class RoleUsersController extends Controller
         ]);
 
         $user = new User();
-        $user->name = $validated['name'];
         $user->email = $validated['email'];
         $user->password = bcrypt($validated['password']);
         $user->last_name = $validated['last_name'] ?? null;
@@ -77,14 +76,13 @@ class RoleUsersController extends Controller
     /**
      * Update the specified user under a role.
      */
-    public function update(Request $request, string $role, User $user): RedirectResponse
+    public function update(Request $request, User $user, string $role): RedirectResponse
     {
         if (!in_array($role, ['Photographer', 'PhotoEditor'])) {
             abort(404);
         }
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'password' => ['nullable', 'string', 'min:8'],
             'last_name' => ['nullable', 'string', 'max:255'],
@@ -93,7 +91,6 @@ class RoleUsersController extends Controller
             'is_blocked' => ['sometimes', 'boolean'],
         ]);
 
-        $user->name = $validated['name'];
         $user->email = $validated['email'];
         $user->last_name = $validated['last_name'] ?? null;
         $user->first_name = $validated['first_name'] ?? null;
@@ -117,7 +114,7 @@ class RoleUsersController extends Controller
     /**
      * Remove the specified user.
      */
-    public function destroy(Request $request, string $role, User $user): RedirectResponse
+    public function destroy(Request $request, User $user, string $role): RedirectResponse
     {
         if (!in_array($role, ['Photographer', 'PhotoEditor'])) {
             abort(404);

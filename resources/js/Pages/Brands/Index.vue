@@ -149,7 +149,7 @@ function submitDelete() {
                     <td>{{ b.name }}</td>
                     <td>{{ new Date(b.created_at).toLocaleString('ru-RU') }}</td>
                     <td>
-                      <div class="btn-list">
+                      <div class="btn-list flex-nowrap">
                         <Link class="btn btn-outline-primary btn-sm" :href="route('brands.tasks.index', b.id)">
                           Задачи
                         </Link>
