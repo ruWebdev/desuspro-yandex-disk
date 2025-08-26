@@ -1,0 +1,134 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Brand;
+use App\Models\Task;
+use App\Models\User;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Inertia\Inertia;
+use Inertia\Response;
+use ZipArchive;
+
+class TaskController extends Controller
+{
+    public function index(Request $request, Brand $brand): Response
+    {
+        $tasks = Task::query()
+            ->where('brand_id', $brand->id)
+            ->with(['assignee:id,name'])
+            ->orderByDesc('created_at')
+            ->get([ 'id','brand_id','name','status','ownership','assignee_id','public_link','highlighted','comment','size','created_at' ]);
+
+        $photographers = User::role('Photographer')->get(['id','name']);
+        $editors = User::role('PhotoEditor')->get(['id','name']);
+
+        return Inertia::render('Tasks/Index', [
+            'brand' => $brand->only(['id','name']),
+            'tasks' => $tasks,
+            'assignees' => [
+                'Photographer' => $photographers,
+                'PhotoEditor' => $editors,
+            ],
+        ]);
+    }
+
+    public function store(Request $request, Brand $brand): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => ['required','string','max:255'],
+            'ownership' => ['required','in:Photographer,PhotoEditor'],
+        ]);
+        $task = Task::create([
+            'brand_id' => $brand->id,
+            'name' => $data['name'],
+            'ownership' => $data['ownership'],
+        ]);
+        return back()->with('status', 'task-created');
+    }
+
+    public function update(Request $request, Brand $brand, Task $task): RedirectResponse
+    {
+        abort_unless($task->brand_id === $brand->id, 404);
+        $data = $request->validate([
+            'name' => ['sometimes','required','string','max:255'],
+            'status' => ['sometimes','required','in:created,assigned,done'],
+            'ownership' => ['sometimes','required','in:Photographer,PhotoEditor'],
+            'assignee_id' => ['nullable','exists:users,id'],
+            'highlighted' => ['sometimes','boolean'],
+            'comment' => ['nullable','string'],
+        ]);
+        $task->fill($data)->save();
+        return back()->with('status', 'task-updated');
+    }
+
+    public function destroy(Brand $brand, Task $task): RedirectResponse
+    {
+        abort_unless($task->brand_id === $brand->id, 404);
+        // Remove files folder
+        Storage::disk('public')->deleteDirectory("tasks/{$task->id}");
+        $task->delete();
+        return back()->with('status', 'task-deleted');
+    }
+
+    public function upload(Request $request, Brand $brand, Task $task): RedirectResponse
+    {
+        abort_unless($task->brand_id === $brand->id, 404);
+        $request->validate([
+            'files.*' => ['file','max:51200'], // 50MB per file
+        ]);
+        $totalAdded = 0;
+        if ($request->hasFile('files')) {
+            foreach ($request->file('files') as $file) {
+                $path = $file->store("tasks/{$task->id}", 'public');
+                $totalAdded += $file->getSize();
+            }
+        }
+        if ($totalAdded > 0) {
+            $task->size = ($task->size ?? 0) + $totalAdded;
+            $task->save();
+        }
+        return back()->with('status', 'files-uploaded');
+    }
+
+    public function download(Brand $brand, Task $task)
+    {
+        abort_unless($task->brand_id === $brand->id, 404);
+        $disk = Storage::disk('public');
+        $folder = "tasks/{$task->id}";
+        if (!$disk->exists($folder)) {
+            return back()->with('status', 'no-files');
+        }
+        // Create zip in temp
+        $zipFile = tempnam(sys_get_temp_dir(), 'taskzip_') . '.zip';
+        $zip = new ZipArchive();
+        if ($zip->open($zipFile, ZipArchive::CREATE) === true) {
+            $files = $disk->allFiles($folder);
+            foreach ($files as $file) {
+                $zip->addFromString(basename($file), $disk->get($file));
+            }
+            $zip->close();
+        }
+        return response()->download($zipFile, 'task-'.$task->id.'-files.zip')->deleteFileAfterSend(true);
+    }
+
+    public function generatePublicLink(Brand $brand, Task $task): RedirectResponse
+    {
+        abort_unless($task->brand_id === $brand->id, 404);
+        if (!$task->public_link) {
+            $task->public_link = url('/share/tasks/'.$task->id.'/'.bin2hex(random_bytes(8)));
+            $task->save();
+        }
+        return back()->with('status', 'public-link-created');
+    }
+
+    public function removePublicLink(Brand $brand, Task $task): RedirectResponse
+    {
+        abort_unless($task->brand_id === $brand->id, 404);
+        $task->public_link = null;
+        $task->save();
+        return back()->with('status', 'public-link-removed');
+    }
+}

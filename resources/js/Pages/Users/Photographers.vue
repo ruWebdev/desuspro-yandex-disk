@@ -14,22 +14,38 @@ const filteredUsers = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
   if (!q) return props.users;
   return props.users.filter((u) =>
-    (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q)
+    (u.name || '').toLowerCase().includes(q) ||
+    (u.email || '').toLowerCase().includes(q) ||
+    (u.last_name || '').toLowerCase().includes(q) ||
+    (u.first_name || '').toLowerCase().includes(q) ||
+    (u.middle_name || '').toLowerCase().includes(q)
   );
 });
 
 const createForm = useForm({
   name: '',
+  last_name: '',
+  first_name: '',
+  middle_name: '',
   email: '',
   password: '',
+  is_blocked: false,
 });
 
 const editingUser = ref(null);
 const editForm = useForm({
   name: '',
+  last_name: '',
+  first_name: '',
+  middle_name: '',
   email: '',
   password: '', // optional on update
+  is_blocked: false,
 });
+
+// Delete
+const deleteForm = useForm({});
+const userToDelete = ref(null);
 
 const creating = computed(() => createForm.processing);
 const updating = computed(() => editForm.processing);
@@ -37,9 +53,10 @@ const updating = computed(() => editForm.processing);
 // Modal state
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
+const showDeleteModal = ref(false);
 
 // Manage body class when any modal is open
-const anyModalOpen = computed(() => showCreateModal.value || showEditModal.value);
+const anyModalOpen = computed(() => showCreateModal.value || showEditModal.value || showDeleteModal.value);
 watch(anyModalOpen, (open) => {
   if (open) document.body.classList.add('modal-open');
   else document.body.classList.remove('modal-open');
@@ -66,7 +83,11 @@ function startEdit(user) {
   editingUser.value = user;
   editForm.reset();
   editForm.name = user.name;
+  editForm.last_name = user.last_name || '';
+  editForm.first_name = user.first_name || '';
+  editForm.middle_name = user.middle_name || '';
   editForm.email = user.email;
+  editForm.is_blocked = !!user.is_blocked;
   showEditModal.value = true;
 }
 
@@ -82,6 +103,26 @@ function submitEdit() {
     preserveScroll: true,
     onSuccess: () => {
       cancelEdit();
+    },
+  });
+}
+
+function startDelete(user) {
+  userToDelete.value = user;
+  showDeleteModal.value = true;
+}
+
+function cancelDelete() {
+  userToDelete.value = null;
+  showDeleteModal.value = false;
+}
+
+function submitDelete() {
+  if (!userToDelete.value) return;
+  deleteForm.delete(route('users.photographers.destroy', userToDelete.value.id), {
+    preserveScroll: true,
+    onSuccess: () => {
+      cancelDelete();
     },
   });
 }
@@ -151,9 +192,14 @@ function submitEdit() {
                       <th>
                         <button class="table-sort d-flex justify-content-between" data-sort="sort-name">Имя</button>
                       </th>
+                      <th>Фамилия</th>
+                      <th>Имя</th>
+                      <th>Отчество</th>
                       <th>
                         <button class="table-sort d-flex justify-content-between" data-sort="sort-email">Email</button>
                       </th>
+                      <th>Доступ</th>
+                      <th>Создан</th>
                       <th class="w-1">Действия</th>
                     </tr>
                   </thead>
@@ -164,17 +210,37 @@ function submitEdit() {
                           :aria-label="`Выбрать пользователя ${idx + 1}`" />
                       </td>
                       <td class="sort-name">{{ u.name }}</td>
+                      <td>{{ u.last_name || '-' }}</td>
+                      <td>{{ u.first_name || '-' }}</td>
+                      <td>{{ u.middle_name || '-' }}</td>
                       <td class="sort-email">{{ u.email }}</td>
+                      <td>
+                        <span :class="['badge', u.is_blocked ? 'bg-red' : 'bg-green']">{{ u.is_blocked ? 'Заблокирован' : 'Разрешен' }}</span>
+                      </td>
+                      <td>{{ new Date(u.created_at).toLocaleDateString() }}</td>
                       <td class="sort-actions py-0">
                         <span class="on-unchecked">
-                          <div class="btn-list">
-                            <button class="btn btn-ghost-primary btn-icon" aria-label="Редактировать" @click="startEdit(u)">
+                          <div class="btn-list flex-nowrap">
+                            <button class="btn btn-ghost-primary btn-icon" aria-label="Редактировать"
+                              @click="startEdit(u)">
                               <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24"
                                 viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
                                 stroke-linecap="round" stroke-linejoin="round">
                                 <path stroke="none" d="M0 0h24v24H0z" fill="none" />
                                 <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
                                 <path d="M13.5 6.5l4 4" />
+                              </svg>
+                            </button>
+                            <button class="btn btn-ghost-danger btn-icon" aria-label="Удалить" @click="startDelete(u)">
+                              <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24"
+                                viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                <path d="M4 7h16" />
+                                <path d="M10 11v6" />
+                                <path d="M14 11v6" />
+                                <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" />
+                                <path d="M9 7v-2a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v2" />
                               </svg>
                             </button>
                           </div>
@@ -257,6 +323,18 @@ function submitEdit() {
                       <input v-model="createForm.name" type="text" class="form-control" required />
                     </div>
                     <div class="col-12 col-md-6">
+                      <label class="form-label">Фамилия</label>
+                      <input v-model="createForm.last_name" type="text" class="form-control" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <label class="form-label">Имя</label>
+                      <input v-model="createForm.first_name" type="text" class="form-control" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <label class="form-label">Отчество</label>
+                      <input v-model="createForm.middle_name" type="text" class="form-control" />
+                    </div>
+                    <div class="col-12 col-md-6">
                       <label class="form-label">Email</label>
                       <input v-model="createForm.email" type="email" class="form-control" required />
                     </div>
@@ -267,6 +345,12 @@ function submitEdit() {
                           placeholder="Минимум 8 символов" required />
                         <button class="btn" type="button" @click="generatePassword('create')">Сгенерировать</button>
                       </div>
+                    </div>
+                    <div class="col-12">
+                      <label class="form-check">
+                        <input class="form-check-input" type="checkbox" v-model="createForm.is_blocked" />
+                        <span class="form-check-label">Заблокировать доступ</span>
+                      </label>
                     </div>
                   </div>
                   <div v-if="createForm.hasErrors" class="text-danger small mt-2">
@@ -306,6 +390,18 @@ function submitEdit() {
                       <input v-model="editForm.name" type="text" class="form-control" required />
                     </div>
                     <div class="col-12 col-md-6">
+                      <label class="form-label">Фамилия</label>
+                      <input v-model="editForm.last_name" type="text" class="form-control" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <label class="form-label">Имя</label>
+                      <input v-model="editForm.first_name" type="text" class="form-control" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <label class="form-label">Отчество</label>
+                      <input v-model="editForm.middle_name" type="text" class="form-control" />
+                    </div>
+                    <div class="col-12 col-md-6">
                       <label class="form-label">Email</label>
                       <input v-model="editForm.email" type="email" class="form-control" required />
                     </div>
@@ -316,6 +412,12 @@ function submitEdit() {
                           placeholder="Оставьте пустым, чтобы не менять" />
                         <button class="btn" type="button" @click="generatePassword('edit')">Сгенерировать</button>
                       </div>
+                    </div>
+                    <div class="col-12">
+                      <label class="form-check">
+                        <input class="form-check-input" type="checkbox" v-model="editForm.is_blocked" />
+                        <span class="form-check-label">Заблокировать доступ</span>
+                      </label>
                     </div>
                   </div>
                   <div v-if="editForm.hasErrors" class="text-danger small mt-2">
@@ -334,6 +436,34 @@ function submitEdit() {
           </div>
         </div>
         <div class="modal-backdrop fade show" style="z-index: 1040;" @click="cancelEdit"></div>
+      </div>
+    </teleport>
+
+    <!-- Teleported Delete Modal -->
+    <teleport to="body">
+      <div v-if="showDeleteModal && userToDelete">
+        <div class="modal modal-blur fade show d-block" tabindex="-1" role="dialog" style="z-index: 1050;">
+          <div class="modal-dialog" role="document">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Удалить пользователя</h5>
+                <button type="button" class="btn-close" aria-label="Close" @click="cancelDelete"></button>
+              </div>
+              <div class="modal-body">
+                Вы уверены, что хотите удалить пользователя <strong>{{ userToDelete?.name }}</strong>? Это действие
+                необратимо.
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn me-auto" @click="cancelDelete">Отмена</button>
+                <button :disabled="deleteForm.processing" type="button" class="btn btn-danger" @click="submitDelete">
+                  <span v-if="deleteForm.processing" class="spinner-border spinner-border-sm me-2" />
+                  Удалить
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-backdrop fade show" style="z-index: 1040;" @click="cancelDelete"></div>
       </div>
     </teleport>
   </TablerLayout>

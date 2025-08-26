@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\BrandController;
 use App\Http\Controllers\Manager\UserManagementController;
 use App\Http\Controllers\Users\RoleUsersController;
 use App\Http\Controllers\Integrations\YandexDiskController;
@@ -52,6 +53,9 @@ Route::middleware(['auth', 'role:Manager'])->group(function () {
     Route::put('/users/photographers/{user}', [RoleUsersController::class, 'update'])
         ->defaults('role', 'Photographer')
         ->name('users.photographers.update');
+    Route::delete('/users/photographers/{user}', [RoleUsersController::class, 'destroy'])
+        ->defaults('role', 'Photographer')
+        ->name('users.photographers.destroy');
 
     // Photo Editors
     Route::get('/users/photo-editors', [RoleUsersController::class, 'index'])
@@ -63,6 +67,27 @@ Route::middleware(['auth', 'role:Manager'])->group(function () {
     Route::put('/users/photo-editors/{user}', [RoleUsersController::class, 'update'])
         ->defaults('role', 'PhotoEditor')
         ->name('users.photo_editors.update');
+    Route::delete('/users/photo-editors/{user}', [RoleUsersController::class, 'destroy'])
+        ->defaults('role', 'PhotoEditor')
+        ->name('users.photo_editors.destroy');
+
+    // Brands
+    Route::get('/brands', [BrandController::class, 'index'])->name('brands.index');
+    Route::post('/brands', [BrandController::class, 'store'])->name('brands.store');
+    Route::put('/brands/{brand}', [BrandController::class, 'update'])->name('brands.update');
+    Route::delete('/brands/{brand}', [BrandController::class, 'destroy'])->name('brands.destroy');
+
+    // Tasks (nested under brands)
+    Route::prefix('brands/{brand}')->group(function () {
+        Route::get('/tasks', [\App\Http\Controllers\TaskController::class, 'index'])->name('brands.tasks.index');
+        Route::post('/tasks', [\App\Http\Controllers\TaskController::class, 'store'])->name('brands.tasks.store');
+        Route::put('/tasks/{task}', [\App\Http\Controllers\TaskController::class, 'update'])->name('brands.tasks.update');
+        Route::delete('/tasks/{task}', [\App\Http\Controllers\TaskController::class, 'destroy'])->name('brands.tasks.destroy');
+        Route::post('/tasks/{task}/upload', [\App\Http\Controllers\TaskController::class, 'upload'])->name('brands.tasks.upload');
+        Route::get('/tasks/{task}/download', [\App\Http\Controllers\TaskController::class, 'download'])->name('brands.tasks.download');
+        Route::post('/tasks/{task}/public-link', [\App\Http\Controllers\TaskController::class, 'generatePublicLink'])->name('brands.tasks.public_link');
+        Route::delete('/tasks/{task}/public-link', [\App\Http\Controllers\TaskController::class, 'removePublicLink'])->name('brands.tasks.public_link.delete');
+    });
 });
 
 // Manager routes

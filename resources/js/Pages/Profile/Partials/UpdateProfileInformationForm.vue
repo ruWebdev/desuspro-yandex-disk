@@ -18,6 +18,9 @@ const user = usePage().props.auth.user;
 
 const form = useForm({
     name: user.name,
+    last_name: user.last_name ?? '',
+    first_name: user.first_name ?? '',
+    middle_name: user.middle_name ?? '',
     email: user.email,
 });
 </script>
@@ -26,11 +29,11 @@ const form = useForm({
     <section>
         <header>
             <h2 class="text-lg font-medium text-gray-900">
-                Profile Information
+                Профиль пользователя
             </h2>
 
             <p class="mt-1 text-sm text-gray-600">
-                Update your account's profile information and email address.
+                Обновите данные профиля и адрес электронной почты.
             </p>
         </header>
 
@@ -39,7 +42,7 @@ const form = useForm({
             class="mt-6 space-y-6"
         >
             <div>
-                <InputLabel for="name" value="Name" />
+                <InputLabel for="name" value="Отображаемое имя" />
 
                 <TextInput
                     id="name"
@@ -52,6 +55,42 @@ const form = useForm({
                 />
 
                 <InputError class="mt-2" :message="form.errors.name" />
+            </div>
+
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div>
+                    <InputLabel for="last_name" value="Фамилия" />
+                    <TextInput
+                        id="last_name"
+                        type="text"
+                        class="mt-1 block w-full"
+                        v-model="form.last_name"
+                        autocomplete="family-name"
+                    />
+                    <InputError class="mt-2" :message="form.errors.last_name" />
+                </div>
+                <div>
+                    <InputLabel for="first_name" value="Имя" />
+                    <TextInput
+                        id="first_name"
+                        type="text"
+                        class="mt-1 block w-full"
+                        v-model="form.first_name"
+                        autocomplete="given-name"
+                    />
+                    <InputError class="mt-2" :message="form.errors.first_name" />
+                </div>
+                <div>
+                    <InputLabel for="middle_name" value="Отчество" />
+                    <TextInput
+                        id="middle_name"
+                        type="text"
+                        class="mt-1 block w-full"
+                        v-model="form.middle_name"
+                        autocomplete="additional-name"
+                    />
+                    <InputError class="mt-2" :message="form.errors.middle_name" />
+                </div>
             </div>
 
             <div>
@@ -71,14 +110,14 @@ const form = useForm({
 
             <div v-if="mustVerifyEmail && user.email_verified_at === null">
                 <p class="mt-2 text-sm text-gray-800">
-                    Your email address is unverified.
+                    Ваш email не подтверждён.
                     <Link
                         :href="route('verification.send')"
                         method="post"
                         as="button"
                         class="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                     >
-                        Click here to re-send the verification email.
+                        Нажмите здесь, чтобы отправить письмо с подтверждением повторно.
                     </Link>
                 </p>
 
@@ -86,12 +125,12 @@ const form = useForm({
                     v-show="status === 'verification-link-sent'"
                     class="mt-2 text-sm font-medium text-green-600"
                 >
-                    A new verification link has been sent to your email address.
+                    На ваш email отправлена новая ссылка для подтверждения.
                 </div>
             </div>
 
             <div class="flex items-center gap-4">
-                <PrimaryButton :disabled="form.processing">Save</PrimaryButton>
+                <PrimaryButton :disabled="form.processing">Сохранить</PrimaryButton>
 
                 <Transition
                     enter-active-class="transition ease-in-out"
@@ -103,9 +142,22 @@ const form = useForm({
                         v-if="form.recentlySuccessful"
                         class="text-sm text-gray-600"
                     >
-                        Saved.
+                        Сохранено.
                     </p>
                 </Transition>
+            </div>
+
+            <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                    <div class="text-sm text-gray-600">Статус доступа</div>
+                    <span
+                        :class="['inline-flex mt-1 items-center rounded px-2 py-0.5 text-xs font-medium', user.is_blocked ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800']"
+                    >{{ user.is_blocked ? 'Заблокирован' : 'Разрешен' }}</span>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-600">Аккаунт создан</div>
+                    <div class="mt-1 text-sm">{{ new Date(user.created_at).toLocaleString() }}</div>
+                </div>
             </div>
         </form>
     </section>

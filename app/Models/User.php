@@ -23,6 +23,11 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        // Profile fields
+        'last_name',
+        'first_name',
+        'middle_name',
+        'is_blocked',
     ];
 
     /**
@@ -45,6 +50,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_blocked' => 'boolean',
         ];
     }
 

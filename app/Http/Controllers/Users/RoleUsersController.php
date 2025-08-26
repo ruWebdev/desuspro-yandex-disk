@@ -24,7 +24,7 @@ class RoleUsersController extends Controller
 
         $users = User::query()
             ->role($role) // spatie/laravel-permission scope
-            ->select(['id', 'name', 'email'])
+            ->select(['id', 'name', 'email', 'last_name', 'first_name', 'middle_name', 'is_blocked', 'created_at'])
             ->orderBy('name')
             ->get();
 
@@ -52,12 +52,20 @@ class RoleUsersController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
+            'last_name' => ['nullable', 'string', 'max:255'],
+            'first_name' => ['nullable', 'string', 'max:255'],
+            'middle_name' => ['nullable', 'string', 'max:255'],
+            'is_blocked' => ['sometimes', 'boolean'],
         ]);
 
         $user = new User();
         $user->name = $validated['name'];
         $user->email = $validated['email'];
         $user->password = bcrypt($validated['password']);
+        $user->last_name = $validated['last_name'] ?? null;
+        $user->first_name = $validated['first_name'] ?? null;
+        $user->middle_name = $validated['middle_name'] ?? null;
+        $user->is_blocked = (bool) ($request->boolean('is_blocked', false));
         $user->save();
 
         // assign role
@@ -79,10 +87,20 @@ class RoleUsersController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'password' => ['nullable', 'string', 'min:8'],
+            'last_name' => ['nullable', 'string', 'max:255'],
+            'first_name' => ['nullable', 'string', 'max:255'],
+            'middle_name' => ['nullable', 'string', 'max:255'],
+            'is_blocked' => ['sometimes', 'boolean'],
         ]);
 
         $user->name = $validated['name'];
         $user->email = $validated['email'];
+        $user->last_name = $validated['last_name'] ?? null;
+        $user->first_name = $validated['first_name'] ?? null;
+        $user->middle_name = $validated['middle_name'] ?? null;
+        if ($request->has('is_blocked')) {
+            $user->is_blocked = (bool) $request->boolean('is_blocked');
+        }
         if (!empty($validated['password'])) {
             $user->password = bcrypt($validated['password']);
         }
@@ -94,5 +112,25 @@ class RoleUsersController extends Controller
         }
 
         return back()->with('status', __('User updated.'));
+    }
+
+    /**
+     * Remove the specified user.
+     */
+    public function destroy(Request $request, string $role, User $user): RedirectResponse
+    {
+        if (!in_array($role, ['Photographer', 'PhotoEditor'])) {
+            abort(404);
+        }
+
+        // Ensure the user actually has this role (to avoid deleting wrong target)
+        if (! $user->hasRole($role)) {
+            abort(404);
+        }
+
+        // If you prefer soft deletes, switch to $user->delete(); (model must use SoftDeletes)
+        $user->delete();
+
+        return back()->with('status', __('User deleted.'));
     }
 }
