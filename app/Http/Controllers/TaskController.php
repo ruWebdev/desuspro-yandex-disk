@@ -35,9 +35,17 @@ class TaskController extends Controller
 
         $brands = Brand::query()->orderBy('name')->get(['id','name']);
 
+        // Assignee options by role for offcanvas executor dropdown
+        $photographers = User::role('Photographer')->get(['id','name']);
+        $editors = User::role('PhotoEditor')->get(['id','name']);
+
         return Inertia::render('Tasks/All', [
             'tasks' => $tasks,
             'brands' => $brands,
+            'assignees' => [
+                'Photographer' => $photographers,
+                'PhotoEditor' => $editors,
+            ],
         ]);
     }
 

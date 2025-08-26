@@ -6,6 +6,7 @@ import TablerLayout from '@/Layouts/TablerLayout.vue';
 const props = defineProps({
   tasks: { type: Array, required: true },
   brands: { type: Array, required: true },
+  assignees: { type: Object, default: () => ({ Photographer: [], PhotoEditor: [] }) },
 });
 
 // Filters
@@ -88,12 +89,34 @@ function submitCreate() {
 // Offcanvas state for per-ownership view
 const offcanvasOpen = ref(false);
 const oc = ref({ brandId: null, brandName: '', taskId: null, taskName: '', ownership: 'Photographer' });
-const activeOcTab = ref('files'); // files | comments
+const activeOcTab = ref('comments'); // files | comments
 const subtaskId = ref(null);
 const commentsLoading = ref(false);
 const comments = ref([]);
 const newComment = ref('');
 const submitting = ref(false);
+
+// Assignee selection state for offcanvas
+const assigneeOptions = computed(() => ({
+  Photographer: props.assignees?.Photographer || [],
+  PhotoEditor: props.assignees?.PhotoEditor || [],
+}));
+const selectedAssigneeId = ref(null);
+let lastAssigneeId = null;
+const canSaveAssignee = computed(() => (selectedAssigneeId.value ?? null) !== (lastAssigneeId ?? null));
+const assigneeButtonLabel = computed(() => lastAssigneeId ? 'Изменить' : 'Сохранить');
+function saveAssignee() {
+  const newId = selectedAssigneeId.value ? Number(selectedAssigneeId.value) : null;
+  if (lastAssigneeId && lastAssigneeId !== newId) {
+    const ok = window.confirm('Переназначить исполнителя? Текущее назначение будет изменено.');
+    if (!ok) return;
+  }
+  if (!oc.value.taskId) return;
+  router.put(route('brands.tasks.update', { brand: oc.value.brandId, task: oc.value.taskId }), { assignee_id: newId }, {
+    preserveScroll: true,
+    onSuccess: () => { lastAssigneeId = newId; },
+  });
+}
 
 // Yandex.Disk files state
 const filesLoading = ref(false);
@@ -196,10 +219,12 @@ function openOffcanvas(task, ownership) {
   };
   offcanvasOpen.value = true;
   // Load comments for the selected subtask
-  activeOcTab.value = 'files';
+  activeOcTab.value = 'comments';
   subtaskId.value = null;
   comments.value = [];
   newComment.value = '';
+  selectedAssigneeId.value = task.assignee_id || null;
+  lastAssigneeId = task.assignee_id || null;
   loadSubtaskAndComments(task.id, ownership);
   loadYandexFiles();
 }
@@ -402,15 +427,15 @@ function submitDelete() {
           <div class="mb-3">
             <ul class="nav nav-pills">
               <li class="nav-item">
-                <button type="button" class="nav-link" :class="{ active: activeOcTab === 'files' }"
-                  @click="activeOcTab = 'files'">
-                  Файлы
+                <button type="button" class="nav-link" :class="{ active: activeOcTab === 'comments' }"
+                  @click="activeOcTab = 'comments'">
+                  Информация
                 </button>
               </li>
               <li class="nav-item">
-                <button type="button" class="nav-link" :class="{ active: activeOcTab === 'comments' }"
-                  @click="activeOcTab = 'comments'">
-                  Комментарии
+                <button type="button" class="nav-link" :class="{ active: activeOcTab === 'files' }"
+                  @click="activeOcTab = 'files'">
+                  Файлы
                 </button>
               </li>
             </ul>
@@ -465,6 +490,19 @@ function submitDelete() {
           </div>
 
           <div v-else>
+            <!-- Executor dropdown + action button -->
+            <div class="mb-3 d-flex gap-2 align-items-end">
+              <div class="flex-grow-1">
+                <label class="form-label">Исполнитель ({{ oc.ownership === 'Photographer' ? 'Фотограф' : 'Фоторедактор' }})</label>
+                <select class="form-select" v-model="selectedAssigneeId">
+                  <option :value="null">— Не назначено —</option>
+                  <option v-for="u in assigneeOptions[oc.ownership]" :key="u.id" :value="u.id">{{ u.name }}</option>
+                </select>
+              </div>
+              <div>
+                <button class="btn btn-primary" :disabled="!canSaveAssignee" @click="saveAssignee">{{ assigneeButtonLabel }}</button>
+              </div>
+            </div>
             <div v-if="commentsLoading" class="text-secondary">Загрузка комментариев…</div>
             <div v-else>
               <div v-if="comments.length === 0" class="text-secondary mb-2">Комментариев пока нет.</div>

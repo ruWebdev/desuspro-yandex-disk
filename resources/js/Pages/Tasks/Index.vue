@@ -106,20 +106,40 @@ function togglePublicLink(task) {
   }
 }
 
-const assigneeOptions = computed(() => ({
-  Photographer: props.assignees.Photographer || [],
-  PhotoEditor: props.assignees.PhotoEditor || [],
-}));
+// (moved below with offcanvas state)
 
 // Offcanvas state and opener (match All.vue)
 const offcanvasOpen = ref(false);
 const oc = ref({ brandId: null, brandName: '', taskId: null, taskName: '', ownership: 'Photographer' });
-const activeOcTab = ref('files'); // files|comments
+const activeOcTab = ref('comments'); // files|comments
 const subtaskId = ref(null);
 const commentsLoading = ref(false);
 const comments = ref([]);
 const newComment = ref('');
 const submitting = ref(false);
+
+// Assignee selection for offcanvas
+const assigneeOptions = computed(() => ({
+  Photographer: props.assignees?.Photographer || [],
+  PhotoEditor: props.assignees?.PhotoEditor || [],
+}));
+const selectedAssigneeId = ref(null);
+let lastAssigneeId = null;
+const canSaveAssignee = computed(() => (selectedAssigneeId.value ?? null) !== (lastAssigneeId ?? null));
+const assigneeButtonLabel = computed(() => lastAssigneeId ? 'Изменить' : 'Сохранить');
+function saveAssignee() {
+  const newId = selectedAssigneeId.value ? Number(selectedAssigneeId.value) : null;
+  if (lastAssigneeId && lastAssigneeId !== newId) {
+    const ok = window.confirm('Переназначить исполнителя? Текущее назначение будет изменено.');
+    if (!ok) return;
+  }
+  if (!oc.value.taskId) return;
+  router.put(route('brands.tasks.update', { brand: oc.value.brandId, task: oc.value.taskId }), { assignee_id: newId }, {
+    preserveScroll: true,
+    onSuccess: () => { lastAssigneeId = newId; },
+    onError: () => { selectedAssigneeId.value = lastAssigneeId; },
+  });
+}
 
 // Yandex.Disk files state (as in All.vue)
 const filesLoading = ref(false);
@@ -258,10 +278,12 @@ function openOffcanvas(task, ownership) {
     ownership,
   };
   offcanvasOpen.value = true;
-  activeOcTab.value = 'files';
+  activeOcTab.value = 'comments';
   subtaskId.value = null;
   comments.value = [];
   newComment.value = '';
+  selectedAssigneeId.value = task.assignee_id || null;
+  lastAssigneeId = task.assignee_id || null;
   loadSubtaskAndComments(task.id, ownership);
   loadYandexFiles();
 }
@@ -444,12 +466,12 @@ function downloadTaskFiles() {
           <div class="mb-3">
             <ul class="nav nav-pills">
               <li class="nav-item">
-                <button type="button" class="nav-link" :class="{ active: activeOcTab === 'files' }"
-                  @click="activeOcTab = 'files'">Файлы</button>
+                <button type="button" class="nav-link" :class="{ active: activeOcTab === 'comments' }"
+                  @click="activeOcTab = 'comments'">Информация</button>
               </li>
               <li class="nav-item">
-                <button type="button" class="nav-link" :class="{ active: activeOcTab === 'comments' }"
-                  @click="activeOcTab = 'comments'">Комментарии</button>
+                <button type="button" class="nav-link" :class="{ active: activeOcTab === 'files' }"
+                  @click="activeOcTab = 'files'">Файлы</button>
               </li>
             </ul>
           </div>
@@ -502,6 +524,14 @@ function downloadTaskFiles() {
           </div>
 
           <div v-else>
+            <!-- Executor dropdown -->
+            <div class="mb-3">
+              <label class="form-label">Исполнитель ({{ oc.ownership === 'Photographer' ? 'Фотограф' : 'Фоторедактор' }})</label>
+              <select class="form-select" v-model="selectedAssigneeId" @change="onAssigneeChanged">
+                <option :value="null">— Не назначено —</option>
+                <option v-for="u in assigneeOptions[oc.ownership]" :key="u.id" :value="u.id">{{ u.name }}</option>
+              </select>
+            </div>
             <div v-if="commentsLoading" class="text-secondary">Загрузка комментариев…</div>
             <div v-else>
               <div v-if="comments.length === 0" class="text-secondary mb-2">Комментариев пока нет.</div>
