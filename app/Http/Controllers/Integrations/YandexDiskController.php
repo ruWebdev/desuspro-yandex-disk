@@ -10,6 +10,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class YandexDiskController extends Controller
@@ -24,13 +25,37 @@ class YandexDiskController extends Controller
         $state = Str::random(32);
         $request->session()->put('yandex_oauth_state', $state);
         $url = $this->disk->getAuthorizeUrl($state);
+
+        // Diagnostic logging
+        Log::info('Yandex OAuth connect init', [
+            'saved_state' => $state,
+            'session_id' => $request->session()->getId(),
+            'redirect_uri' => Config::get('services.yandex.redirect'),
+            'app_url' => Config::get('app.url'),
+            'user_id' => optional($request->user())->id,
+        ]);
         return redirect()->away($url);
     }
 
     public function callback(Request $request)
     {
         $state = $request->string('state');
-        if ($state !== $request->session()->pull('yandex_oauth_state')) {
+        $expected = $request->session()->pull('yandex_oauth_state');
+
+        // Diagnostic logging prior to validation
+        Log::info('Yandex OAuth callback received', [
+            'received_state' => (string) $state,
+            'expected_state' => (string) $expected,
+            'matches' => (string) $state === (string) $expected,
+            'session_id' => $request->session()->getId(),
+            'full_url' => $request->fullUrl(),
+            'referer' => $request->headers->get('referer'),
+            'host' => $request->getHost(),
+            'scheme' => $request->getScheme(),
+            'user_id' => optional($request->user())->id,
+        ]);
+
+        if ($state !== $expected) {
             abort(403, 'Invalid OAuth state');
         }
 
