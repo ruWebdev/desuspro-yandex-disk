@@ -99,11 +99,43 @@ const fileInputRef = ref(null);
 const uploading = ref(false);
 const uploadError = ref('');
 
+// Folder path (for display/copy) — browser URL
+const folderPath = computed(() => yandexBrowserUrl() || '');
+
+async function copyFolderPath() {
+  const text = folderPath.value;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+  } catch (e) {
+    console.error('Copy failed', e);
+  }
+}
+
 function yandexFolderPath() {
   if (!oc.value.brandName || !oc.value.taskName) return null;
-  const base = `/${oc.value.brandName}/${oc.value.taskName}`;
+  const base = `${oc.value.brandName}/${oc.value.taskName}`;
   const suffix = oc.value.ownership === 'Photographer' ? 'ЗАДАНИЕ_Ф' : 'ЗАДАНИЕ_Р';
-  return `${base}/${suffix}`;
+  return `disk:/${base}/${suffix}`;
+}
+
+function yandexBrowserUrl() {
+  if (!oc.value.brandName || !oc.value.taskName) return '';
+  const parts = [
+    oc.value.brandName,
+    oc.value.taskName,
+    oc.value.ownership === 'Photographer' ? 'ЗАДАНИЕ_Ф' : 'ЗАДАНИЕ_Р',
+  ];
+  const encoded = parts.map(p => encodeURIComponent(p));
+  return `https://disk.yandex.ru/client/disk/${encoded.join('/')}`;
 }
 
 async function loadYandexFiles() {
@@ -349,7 +381,7 @@ function submitDelete() {
 
     <!-- Right offcanvas -->
     <teleport to="body">
-      <div class="offcanvas offcanvas-end" :class="{ show: offcanvasOpen }"
+      <div class="offcanvas offcanvas-end w-50" :class="{ show: offcanvasOpen }"
         :style="offcanvasOpen ? 'visibility: visible;' : ''" tabindex="-1" role="dialog">
         <div class="offcanvas-header">
           <h5 class="offcanvas-title">
@@ -362,10 +394,20 @@ function submitDelete() {
         </div>
         <div class="offcanvas-body">
           <div class="mb-3">
-            <div class="btn-group" role="group">
-              <button class="btn" :class="{ 'btn-primary': activeOcTab === 'files' }" @click="activeOcTab = 'files'">Файлы</button>
-              <button class="btn" :class="{ 'btn-primary': activeOcTab === 'comments' }" @click="activeOcTab = 'comments'">Комментарии</button>
-            </div>
+            <ul class="nav nav-pills">
+              <li class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: activeOcTab === 'files' }"
+                  @click="activeOcTab = 'files'">
+                  Файлы
+                </button>
+              </li>
+              <li class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: activeOcTab === 'comments' }"
+                  @click="activeOcTab = 'comments'">
+                  Комментарии
+                </button>
+              </li>
+            </ul>
           </div>
 
           <div v-if="activeOcTab === 'files'">
@@ -374,14 +416,13 @@ function submitDelete() {
               <span class="text-secondary small">Список файлов из папки Яндекс.Диска для выбранной роли.</span>
             </div>
 
-            <!-- Photographer upload UI -->
-            <div v-if="oc.ownership === 'Photographer'" class="mb-3 d-flex align-items-center gap-2">
-              <input type="file" accept="image/*" multiple ref="fileInputRef" class="d-none" @change="onFilesChosen" />
-              <button class="btn btn-primary" :disabled="uploading" @click="openUploader">
-                <span v-if="!uploading">Загрузить фото</span>
-                <span v-else>Загрузка…</span>
-              </button>
-              <span v-if="uploadError" class="text-danger small">{{ uploadError }}</span>
+            <!-- Folder path with copy (browser URL) -->
+            <div class="mb-3">
+              <label class="form-label">URL папки (для просмотра в браузере)</label>
+              <div class="input-group">
+                <input type="text" class="form-control" :value="folderPath" readonly />
+                <button class="btn btn-outline-secondary" type="button" @click="copyFolderPath">Копировать</button>
+              </div>
             </div>
 
             <div v-if="filesLoading" class="text-secondary">Загрузка списка файлов…</div>
@@ -390,18 +431,33 @@ function submitDelete() {
               <div v-else>
                 <div v-if="!yandexItems.length" class="text-secondary">Файлы не найдены.</div>
                 <ul v-else class="list-group">
-                  <li v-for="it in yandexItems" :key="it.resource_id || it.path || it.name" class="list-group-item d-flex justify-content-between align-items-center">
+                  <li v-for="it in yandexItems" :key="it.resource_id || it.path || it.name"
+                    class="list-group-item d-flex justify-content-between align-items-center">
                     <div class="d-flex align-items-center gap-2">
-                      <span class="badge" :class="it.type === 'dir' ? 'bg-secondary' : 'bg-primary'">{{ it.type === 'dir' ? 'Папка' : 'Файл' }}</span>
+                      <span class="badge" :class="it.type === 'dir' ? 'bg-secondary' : 'bg-primary'">{{ it.type ===
+                        'dir' ?
+                        'Папка' : 'Файл' }}</span>
                       <span>{{ it.name }}</span>
-                      <span v-if="it.size && it.type==='file'" class="text-secondary small">{{ (it.size/1024/1024).toFixed(2) }} MB</span>
+                      <span v-if="it.size && it.type === 'file'" class="text-secondary small">{{
+                        (it.size / 1024 /1024).toFixed(2) }} MB</span>
                     </div>
                     <div>
-                      <button v-if="it.type==='file'" class="btn btn-sm btn-outline-primary" @click="() => downloadYandexItem(it)">Скачать</button>
+                      <button v-if="it.type === 'file'" class="btn btn-sm btn-outline-primary"
+                        @click="() => downloadYandexItem(it)">Скачать</button>
                     </div>
                   </li>
                 </ul>
               </div>
+            </div>
+
+            <!-- Photographer upload UI moved below the list -->
+            <div v-if="oc.ownership === 'Photographer'" class="mt-3 d-flex align-items-center gap-2">
+              <input type="file" accept="image/*" multiple ref="fileInputRef" class="d-none" @change="onFilesChosen" />
+              <button class="btn btn-primary" :disabled="uploading" @click="openUploader">
+                <span v-if="!uploading">Загрузить фото</span>
+                <span v-else>Загрузка…</span>
+              </button>
+              <span v-if="uploadError" class="text-danger small">{{ uploadError }}</span>
             </div>
           </div>
 
@@ -412,16 +468,19 @@ function submitDelete() {
               <ul class="list-unstyled">
                 <li v-for="c in comments" :key="c.id" class="mb-2 d-flex justify-content-between align-items-start">
                   <div>
-                    <div class="fw-bold">{{ c.user?.name || '—' }} <span class="text-secondary small">{{ new Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
+                    <div class="fw-bold">{{ c.user?.name || '—' }} <span class="text-secondary small">{{ new
+                      Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
                     <div style="white-space: pre-wrap;">{{ c.content }}</div>
                   </div>
                   <button class="btn btn-ghost-danger btn-sm" title="Удалить" @click="deleteComment(c)">Удалить</button>
                 </li>
               </ul>
               <div class="mt-2">
-                <textarea v-model="newComment" rows="2" class="form-control" placeholder="Новый комментарий…"></textarea>
+                <textarea v-model="newComment" rows="2" class="form-control"
+                  placeholder="Новый комментарий…"></textarea>
                 <div class="mt-2 d-flex justify-content-end">
-                  <button class="btn btn-primary" :disabled="!newComment.trim() || submitting" @click="addComment">Добавить</button>
+                  <button class="btn btn-primary" :disabled="!newComment.trim() || submitting"
+                    @click="addComment">Добавить</button>
                 </div>
               </div>
             </div>
@@ -462,7 +521,7 @@ function submitDelete() {
         </div>
       </div>
     </teleport>
-    
+
     <!-- Delete Task Modal -->
     <teleport to="body">
       <div v-if="showDelete && deleting">
