@@ -189,7 +189,8 @@ function submitDelete() {
                     <tr>
                       <th class="w-1"></th>
                       <th>
-                        <button class="table-sort d-flex justify-content-between" data-sort="sort-name">Отображаемое имя</button>
+                        <button class="table-sort d-flex justify-content-between" data-sort="sort-name">Отображаемое
+                          имя</button>
                       </th>
                       <th>Фамилия</th>
                       <th>Имя</th>
@@ -217,7 +218,9 @@ function submitDelete() {
                       <td>{{ u.middle_name || '-' }}</td>
                       <td class="sort-email">{{ u.email }}</td>
                       <td>
-                        <span :class="['badge', u.is_blocked ? 'bg-red' : 'bg-green']">{{ u.is_blocked ? 'Заблокирован' : 'Разрешен' }}</span>
+                        <span class="text-light" :class="['badge', u.is_blocked ? 'bg-red' : 'bg-green']">{{
+                          u.is_blocked ?
+                            'Заблокирован' : 'Разрешен' }}</span>
                       </td>
                       <td>{{ new Date(u.created_at).toLocaleString('ru-RU') }}</td>
                       <td class="sort-actions py-0">
