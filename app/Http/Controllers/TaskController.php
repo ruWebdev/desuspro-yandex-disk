@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Brand;
 use App\Models\Task;
 use App\Models\User;
+use App\Models\Subtask;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -64,6 +65,19 @@ class TaskController extends Controller
             'name' => $data['name'],
             'ownership' => $data['ownership'],
         ]);
+        // Auto-create two subtasks for Photographer and PhotoEditor
+        Subtask::create([
+            'task_id' => $task->id,
+            'name' => 'ЗАДАНИЕ_Ф',
+            'status' => 'created',
+            'ownership' => 'Photographer',
+        ]);
+        Subtask::create([
+            'task_id' => $task->id,
+            'name' => 'ЗАДАНИЕ_Р',
+            'status' => 'created',
+            'ownership' => 'PhotoEditor',
+        ]);
         return back()->with('status', 'task-created');
     }
 
@@ -78,10 +92,24 @@ class TaskController extends Controller
             'ownership' => ['nullable','in:Photographer,PhotoEditor'],
         ]);
 
-        Task::create([
+        $task = Task::create([
             'brand_id' => $data['brand_id'],
             'name' => $data['name'],
             'ownership' => $data['ownership'] ?? 'Photographer',
+        ]);
+
+        // Auto-create two subtasks for Photographer and PhotoEditor
+        Subtask::create([
+            'task_id' => $task->id,
+            'name' => 'ЗАДАНИЕ_Ф',
+            'status' => 'created',
+            'ownership' => 'Photographer',
+        ]);
+        Subtask::create([
+            'task_id' => $task->id,
+            'name' => 'ЗАДАНИЕ_Р',
+            'status' => 'created',
+            'ownership' => 'PhotoEditor',
         ]);
 
         return back()->with('status', 'task-created');
@@ -98,7 +126,19 @@ class TaskController extends Controller
             'highlighted' => ['sometimes','boolean'],
             'comment' => ['nullable','string'],
         ]);
+        $originalName = $task->name;
         $task->fill($data)->save();
+
+        // If the task name was updated, sync subtask names preserving suffix by ownership
+        if (array_key_exists('name', $data) && $data['name'] && $data['name'] !== $originalName) {
+            $newBase = $data['name'];
+            $subtasks = Subtask::where('task_id', $task->id)->get(['id','ownership','name']);
+            foreach ($subtasks as $sub) {
+                $suffix = $sub->ownership === 'Photographer' ? 'Ф' : 'Р';
+                $sub->name = $newBase . '_' . $suffix;
+                $sub->save();
+            }
+        }
         return back()->with('status', 'task-updated');
     }
 

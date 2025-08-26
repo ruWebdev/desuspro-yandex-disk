@@ -3,6 +3,7 @@
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\BrandController;
 use App\Http\Controllers\TaskController;
+use App\Http\Controllers\SubtaskController;
 use App\Http\Controllers\Manager\UserManagementController;
 use App\Http\Controllers\Users\RoleUsersController;
 use App\Http\Controllers\Integrations\YandexDiskController;
@@ -92,6 +93,16 @@ Route::middleware(['auth', 'role:Manager'])->group(function () {
         Route::get('/tasks/{task}/download', [\App\Http\Controllers\TaskController::class, 'download'])->name('brands.tasks.download');
         Route::post('/tasks/{task}/public-link', [\App\Http\Controllers\TaskController::class, 'generatePublicLink'])->name('brands.tasks.public_link');
         Route::delete('/tasks/{task}/public-link', [\App\Http\Controllers\TaskController::class, 'removePublicLink'])->name('brands.tasks.public_link.delete');
+
+        // Subtasks nested under a task
+        Route::prefix('tasks/{task}')->group(function () {
+            Route::get('/subtasks', [SubtaskController::class, 'index'])->name('brands.tasks.subtasks.index');
+            Route::post('/subtasks', [SubtaskController::class, 'store'])->name('brands.tasks.subtasks.store');
+            Route::put('/subtasks/{subtask}', [SubtaskController::class, 'update'])->name('brands.tasks.subtasks.update');
+            Route::delete('/subtasks/{subtask}', [SubtaskController::class, 'destroy'])->name('brands.tasks.subtasks.destroy');
+            Route::post('/subtasks/{subtask}/public-link', [SubtaskController::class, 'generatePublicLink'])->name('brands.tasks.subtasks.public_link');
+            Route::delete('/subtasks/{subtask}/public-link', [SubtaskController::class, 'removePublicLink'])->name('brands.tasks.subtasks.public_link.delete');
+        });
     });
 });
 

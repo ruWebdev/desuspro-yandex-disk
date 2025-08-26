@@ -12,13 +12,11 @@ const props = defineProps({
 // Search / filter
 const search = ref('');
 const statusFilter = ref('all'); // all|created|assigned|done
-const ownershipFilter = ref('all'); // all|Photographer|PhotoEditor
 
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase();
   return props.tasks.filter((t) => {
     if (statusFilter.value !== 'all' && t.status !== statusFilter.value) return false;
-    if (ownershipFilter.value !== 'all' && t.ownership !== ownershipFilter.value) return false;
     if (!q) return true;
     return (
       (t.name || '').toLowerCase().includes(q) ||
@@ -30,12 +28,14 @@ const filtered = computed(() => {
 
 const displayed = computed(() => [...filtered.value].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
 
-// Create modal
+// Create modal (match All.vue: only name, brand taken from page, server creates two subtasks)
 const showCreate = ref(false);
-const createForm = useForm({ name: '', ownership: 'Photographer' });
-const openCreate = () => { createForm.reset(); createForm.ownership = 'Photographer'; showCreate.value = true; };
+const createForm = useForm({ name: '', brand_id: null });
+const openCreate = () => { createForm.reset(); showCreate.value = true; };
 const submitCreate = () => {
-  createForm.post(route('brands.tasks.store', props.brand.id), {
+  if (!createForm.name) return;
+  createForm.brand_id = props.brand.id;
+  createForm.post(route('tasks.store'), {
     preserveScroll: true,
     onSuccess: () => { showCreate.value = false; createForm.reset(); },
   });
@@ -110,6 +110,20 @@ const assigneeOptions = computed(() => ({
   Photographer: props.assignees.Photographer || [],
   PhotoEditor: props.assignees.PhotoEditor || [],
 }));
+
+// Offcanvas state and opener (match All.vue)
+const offcanvasOpen = ref(false);
+const oc = ref({ brandId: null, brandName: '', taskId: null, taskName: '', ownership: 'Photographer' });
+function openOffcanvas(task, ownership) {
+  oc.value = {
+    brandId: task.brand_id,
+    brandName: props.brand?.name || '',
+    taskId: task.id,
+    taskName: task.name,
+    ownership,
+  };
+  offcanvasOpen.value = true;
+}
 </script>
 
 <template>
@@ -143,11 +157,6 @@ const assigneeOptions = computed(() => ({
                 <option value="assigned">Назначена</option>
                 <option value="done">Выполнена</option>
               </select>
-              <select v-model="ownershipFilter" class="form-select w-auto me-2">
-                <option value="all">Все типы</option>
-                <option value="Photographer">Фотограф</option>
-                <option value="PhotoEditor">Фоторедактор</option>
-              </select>
               <button class="btn btn-primary" @click="openCreate">Создать задачу</button>
               <Link class="btn" :href="route('brands.index')">К брендам</Link>
             </div>
@@ -155,63 +164,47 @@ const assigneeOptions = computed(() => ({
         </div>
       </div>
       <div class="table-responsive">
-        <table class="table table-vcenter">
+        <table class="table table-vcenter card-table">
           <thead>
             <tr>
-              <th class="w-1">#</th>
-              <th>Наименование</th>
+              <th>Задание</th>
+              <th>Бренд</th>
+              <th>Ответственный</th>
               <th>Статус</th>
-              <th>Принадлежность</th>
-              <th>Исполнитель</th>
-              <th>Публичная</th>
-              <th>Выделена</th>
-              <th>Комментарий</th>
-              <th>Размер</th>
-              <th class="w-1">Действия</th>
+              <th class="w-1">ПОДЗАДАНИЯ</th>
+              <th>Создан</th>
+              <th class="w-1">ДЕЙСТВИЯ</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="displayed.length === 0">
-              <td colspan="10" class="text-center text-secondary py-4">Задачи отсутствуют</td>
+              <td colspan="7" class="text-center text-secondary py-4">Задачи отсутствуют</td>
             </tr>
-            <tr v-for="(t, i) in displayed" :key="t.id">
-              <td>{{ i + 1 }}</td>
+            <tr v-for="t in displayed" :key="t.id">
               <td>{{ t.name }}</td>
-              <td>
-                <span v-if="t.status === 'created'" class="badge bg-secondary">Создана</span>
-                <span v-else-if="t.status === 'assigned'" class="badge bg-warning">Назначена</span>
-                <span v-else class="badge bg-success">Выполнена</span>
-              </td>
-              <td>{{ t.ownership === 'Photographer' ? 'Фотограф' : 'Фоторедактор' }}</td>
+              <td>{{ brand.name }}</td>
               <td>{{ t.assignee?.name || '—' }}</td>
               <td>
-                <div class="d-flex align-items-center gap-2">
-                  <span v-if="t.public_link" class="text-success" title="Публичная ссылка активна">Да</span>
-                  <span v-else class="text-muted">Нет</span>
+                <span class="badge" :class="{
+                  'bg-secondary': t.status === 'created' || !t.status,
+                  'bg-blue': t.status === 'assigned',
+                  'bg-green': t.status === 'done',
+                }">{{ t.status || 'created' }}</span>
+              </td>
+              <td class="text-nowrap">
+                <div class="btn-list d-flex flex-nowrap align-items-center gap-2" style="white-space: nowrap;">
+                  <button class="btn btn-ghost-primary btn-sm" @click="openOffcanvas(t, 'Photographer')" title="Открыть подзадачу: ФОТОГРАФ">ФОТОГРАФ</button>
+                  <button class="btn btn-ghost-purple btn-sm" @click="openOffcanvas(t, 'PhotoEditor')" title="Открыть подзадачу: ФОТОРЕДАКТОР">ФОТОРЕДАКТОР</button>
                 </div>
               </td>
-              <td>
-                <span :class="['badge', t.highlighted ? 'bg-primary' : 'bg-muted']">{{ t.highlighted ? 'Да' : 'Нет' }}</span>
-              </td>
-              <td class="text-truncate" style="max-width: 260px;" :title="t.comment">{{ t.comment || '—' }}</td>
-              <td>{{ (t.size || 0).toLocaleString('ru-RU') }} б</td>
-              <td>
-                <div class="btn-list">
-                  <button class="btn btn-ghost-primary btn-icon" title="Изменить" @click="startEdit(t)">
+              <td>{{ new Date(t.created_at).toLocaleString('ru-RU') }}</td>
+              <td class="text-nowrap">
+                <div class="btn-list d-flex flex-nowrap align-items-center gap-2">
+                  <button class="btn btn-icon btn-ghost-primary" title="Изменить" @click="startEdit(t)">
                     <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></svg>
                   </button>
-                  <button class="btn btn-ghost-info btn-icon" title="Загрузить файлы" @click="openUpload(t)">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/><path d="M7 9l5 -5l5 5"/><path d="M12 4l0 12"/></svg>
-                  </button>
-                  <button class="btn btn-ghost-secondary btn-icon" title="Скачать все" @click="downloadAll(t)">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/><path d="M7 7l5 5l5 -5"/><path d="M12 12l0 -9"/></svg>
-                  </button>
-                  <button class="btn btn-ghost-success btn-icon" :title="t.public_link ? 'Отключить публичную ссылку' : 'Сделать публичной'" @click="togglePublicLink(t)">
-                    <svg v-if="!t.public_link" xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 14a3.5 3.5 0 0 0 5 0l4 -4a3.5 3.5 0 0 0 -5 -5l-.5 .5" /><path d="M14 10a3.5 3.5 0 0 0 -5 0l-4 4a3.5 3.5 0 0 0 5 5l.5 -.5" /></svg>
-                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 3l18 18" /><path d="M10 14a3.5 3.5 0 0 0 5 0l1 -1" /><path d="M14 10a3.5 3.5 0 0 0 -5 0l-1 1" /></svg>
-                  </button>
-                  <button class="btn btn-ghost-danger btn-icon" title="Удалить" @click="askDelete(t)">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-2a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v2"/></svg>
+                  <button class="btn btn-icon btn-ghost-danger" title="Удалить" @click="askDelete(t)">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-2a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v2"/></svg>
                   </button>
                 </div>
               </td>
@@ -220,6 +213,28 @@ const assigneeOptions = computed(() => ({
         </table>
       </div>
     </div>
+
+    <!-- Right offcanvas -->
+    <teleport to="body">
+      <div class="offcanvas offcanvas-end" :class="{ show: offcanvasOpen }" :style="offcanvasOpen ? 'visibility: visible;' : ''" tabindex="-1" role="dialog">
+        <div class="offcanvas-header">
+          <h5 class="offcanvas-title">
+            {{ oc.brandName }} / {{ oc.taskName }}
+            <span class="badge ms-2" :class="{
+              'bg-blue': oc.ownership === 'Photographer',
+              'bg-purple': oc.ownership === 'PhotoEditor',
+            }">
+              {{ oc.ownership === 'Photographer' ? 'Фотограф' : 'Фоторедактор' }}
+            </span>
+          </h5>
+          <button type="button" class="btn-close text-reset" aria-label="Close" @click="offcanvasOpen = false"></button>
+        </div>
+        <div class="offcanvas-body">
+          <!-- TODO: content to be defined later -->
+          <div class="text-secondary">Здесь будет содержимое подзадачи.</div>
+        </div>
+      </div>
+    </teleport>
 
     <!-- Create Modal -->
     <teleport to="body">
@@ -237,13 +252,6 @@ const assigneeOptions = computed(() => ({
                     <label class="form-label">Наименование</label>
                     <input v-model="createForm.name" type="text" class="form-control" required />
                   </div>
-                  <div class="mb-2">
-                    <label class="form-label">Принадлежность</label>
-                    <select v-model="createForm.ownership" class="form-select">
-                      <option value="Photographer">Фотограф</option>
-                      <option value="PhotoEditor">Фоторедактор</option>
-                    </select>
-                  </div>
                   <div v-if="Object.keys(createForm.errors).length" class="text-danger small mt-2">
                     <div v-for="(err, key) in createForm.errors" :key="key">{{ err }}</div>
                   </div>
@@ -251,7 +259,7 @@ const assigneeOptions = computed(() => ({
               </div>
               <div class="modal-footer">
                 <button type="button" class="btn me-auto" @click="showCreate = false">Отмена</button>
-                <button :disabled="createForm.processing" type="button" class="btn btn-primary" @click="submitCreate">
+                <button :disabled="createForm.processing || !createForm.name" type="button" class="btn btn-primary" @click="submitCreate">
                   <span v-if="createForm.processing" class="spinner-border spinner-border-sm me-2" />Создать
                 </button>
               </div>

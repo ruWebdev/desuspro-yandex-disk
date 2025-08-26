@@ -5,14 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Task extends Model
+class Subtask extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'brand_id',
+        'task_id',
         'name',
         'status',
         'ownership',
@@ -28,18 +27,13 @@ class Task extends Model
         'size' => 'integer',
     ];
 
-    public function brand(): BelongsTo
+    public function task(): BelongsTo
     {
-        return $this->belongsTo(Brand::class);
+        return $this->belongsTo(Task::class);
     }
 
     public function assignee(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assignee_id');
-    }
-
-    public function subtasks(): HasMany
-    {
-        return $this->hasMany(Subtask::class);
     }
 }
