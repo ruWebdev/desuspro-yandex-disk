@@ -174,7 +174,7 @@ async function copyFolderPath() {
 function yandexFolderPath() {
   if (!oc.value.brandName || !oc.value.taskName) return null;
   const base = `${oc.value.brandName}/${oc.value.taskName}`;
-  const suffix = oc.value.ownership === 'Photographer' ? 'ЗАДАНИЕ_Ф' : 'ЗАДАНИЕ_Р';
+  const suffix = oc.value.ownership === 'Photographer' ? `${oc.value.taskName}_Ф` : `${oc.value.taskName}_Р`;
   return `disk:/${base}/${suffix}`;
 }
 
@@ -183,7 +183,7 @@ function yandexBrowserUrl() {
   const parts = [
     oc.value.brandName,
     oc.value.taskName,
-    oc.value.ownership === 'Photographer' ? 'ЗАДАНИЕ_Ф' : 'ЗАДАНИЕ_Р',
+    oc.value.ownership === 'Photographer' ? `${oc.value.taskName}_Ф` : `${oc.value.taskName}_Р`,
   ];
   const encoded = parts.map(p => encodeURIComponent(p));
   return `https://disk.yandex.ru/client/disk/${encoded.join('/')}`;

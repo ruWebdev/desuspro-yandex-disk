@@ -81,20 +81,20 @@ class TaskController extends Controller
             'name' => $data['name'],
             'ownership' => $data['ownership'],
         ]);
-        // Auto-create two subtasks for Photographer and PhotoEditor
+        // Auto-create two subtasks for Photographer and PhotoEditor with names based on task name
         Subtask::create([
             'task_id' => $task->id,
-            'name' => 'ЗАДАНИЕ_Ф',
+            'name' => $task->name . '_Ф',
             'status' => 'created',
             'ownership' => 'Photographer',
         ]);
         Subtask::create([
             'task_id' => $task->id,
-            'name' => 'ЗАДАНИЕ_Р',
+            'name' => $task->name . '_Р',
             'status' => 'created',
             'ownership' => 'PhotoEditor',
         ]);
-        // Create Yandex.Disk folders: /BrandName/TaskName/{ЗАДАНИЕ_Ф,ЗАДАНИЕ_Р}
+        // Create Yandex.Disk folders: /BrandName/TaskName/{TaskName_Ф,TaskName_Р}
         $this->createYandexFolderStructure($request, $brand, $task);
         return back()->with('status', 'task-created');
     }
@@ -116,16 +116,16 @@ class TaskController extends Controller
             'ownership' => $data['ownership'] ?? 'Photographer',
         ]);
 
-        // Auto-create two subtasks for Photographer and PhotoEditor
+        // Auto-create two subtasks for Photographer and PhotoEditor with names based on task name
         Subtask::create([
             'task_id' => $task->id,
-            'name' => 'ЗАДАНИЕ_Ф',
+            'name' => $task->name . '_Ф',
             'status' => 'created',
             'ownership' => 'Photographer',
         ]);
         Subtask::create([
             'task_id' => $task->id,
-            'name' => 'ЗАДАНИЕ_Р',
+            'name' => $task->name . '_Р',
             'status' => 'created',
             'ownership' => 'PhotoEditor',
         ]);
@@ -234,7 +234,7 @@ class TaskController extends Controller
 
     /**
      * Create folder structure on Yandex.Disk:
-     * /{BrandName}/{TaskName}/ЗАДАНИЕ_Ф and /ЗАДАНИЕ_Р
+     * /{BrandName}/{TaskName}/{TaskName}_Ф and /{TaskName}_Р
      * Silently logs and continues on errors (e.g., no token, already exists).
      */
     private function createYandexFolderStructure(Request $request, Brand $brand, Task $task): void
@@ -253,8 +253,8 @@ class TaskController extends Controller
 
             $brandPath = '/'.$brandName;
             $taskPath = $brandPath.'/'.$taskName;
-            $subPhotographer = $taskPath.'/'.'ЗАДАНИЕ_Ф';
-            $subEditor = $taskPath.'/'.'ЗАДАНИЕ_Р';
+            $subPhotographer = $taskPath.'/'.$taskName.'_Ф';
+            $subEditor = $taskPath.'/'.$taskName.'_Р';
 
             Log::info('Creating Yandex.Disk folder structure', [
                 'brandPath' => $brandPath,
