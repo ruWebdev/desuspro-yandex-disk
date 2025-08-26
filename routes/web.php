@@ -94,6 +94,11 @@ Route::middleware(['auth', 'role:Manager'])->group(function () {
         Route::post('/tasks/{task}/public-link', [\App\Http\Controllers\TaskController::class, 'generatePublicLink'])->name('brands.tasks.public_link');
         Route::delete('/tasks/{task}/public-link', [\App\Http\Controllers\TaskController::class, 'removePublicLink'])->name('brands.tasks.public_link.delete');
 
+        // Task comments
+        Route::get('/tasks/{task}/comments', [\App\Http\Controllers\TaskCommentController::class, 'index'])->name('brands.tasks.comments.index');
+        Route::post('/tasks/{task}/comments', [\App\Http\Controllers\TaskCommentController::class, 'store'])->name('brands.tasks.comments.store');
+        Route::delete('/tasks/{task}/comments/{comment}', [\App\Http\Controllers\TaskCommentController::class, 'destroy'])->name('brands.tasks.comments.destroy');
+
         // Subtasks nested under a task
         Route::prefix('tasks/{task}')->group(function () {
             Route::get('/subtasks', [SubtaskController::class, 'index'])->name('brands.tasks.subtasks.index');
@@ -102,6 +107,11 @@ Route::middleware(['auth', 'role:Manager'])->group(function () {
             Route::delete('/subtasks/{subtask}', [SubtaskController::class, 'destroy'])->name('brands.tasks.subtasks.destroy');
             Route::post('/subtasks/{subtask}/public-link', [SubtaskController::class, 'generatePublicLink'])->name('brands.tasks.subtasks.public_link');
             Route::delete('/subtasks/{subtask}/public-link', [SubtaskController::class, 'removePublicLink'])->name('brands.tasks.subtasks.public_link.delete');
+
+            // Subtask comments
+            Route::get('/subtasks/{subtask}/comments', [\App\Http\Controllers\SubtaskCommentController::class, 'index'])->name('brands.tasks.subtasks.comments.index');
+            Route::post('/subtasks/{subtask}/comments', [\App\Http\Controllers\SubtaskCommentController::class, 'store'])->name('brands.tasks.subtasks.comments.store');
+            Route::delete('/subtasks/{subtask}/comments/{comment}', [\App\Http\Controllers\SubtaskCommentController::class, 'destroy'])->name('brands.tasks.subtasks.comments.destroy');
         });
     });
 });

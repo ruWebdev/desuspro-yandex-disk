@@ -114,6 +114,12 @@ const assigneeOptions = computed(() => ({
 // Offcanvas state and opener (match All.vue)
 const offcanvasOpen = ref(false);
 const oc = ref({ brandId: null, brandName: '', taskId: null, taskName: '', ownership: 'Photographer' });
+const activeOcTab = ref('files'); // files|comments
+const subtaskId = ref(null);
+const commentsLoading = ref(false);
+const comments = ref([]);
+const newComment = ref('');
+const submitting = ref(false);
 function openOffcanvas(task, ownership) {
   oc.value = {
     brandId: task.brand_id,
@@ -123,6 +129,62 @@ function openOffcanvas(task, ownership) {
     ownership,
   };
   offcanvasOpen.value = true;
+  activeOcTab.value = 'files';
+  subtaskId.value = null;
+  comments.value = [];
+  newComment.value = '';
+  loadSubtaskAndComments(task.id, ownership);
+}
+
+async function loadSubtaskAndComments(taskId, ownership) {
+  try {
+    commentsLoading.value = true;
+    const url = route('brands.tasks.subtasks.index', { brand: oc.value.brandId, task: taskId });
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    const data = await res.json();
+    const st = (data.subtasks || []).find(s => s.ownership === ownership);
+    subtaskId.value = st ? st.id : null;
+    await loadComments();
+  } catch (e) { console.error(e); }
+  finally { commentsLoading.value = false; }
+}
+
+async function loadComments() {
+  if (!subtaskId.value) { comments.value = []; return; }
+  const url = route('brands.tasks.subtasks.comments.index', { brand: oc.value.brandId, task: oc.value.taskId, subtask: subtaskId.value });
+  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  comments.value = await res.json();
+}
+
+async function addComment() {
+  if (!subtaskId.value || !newComment.value.trim()) return;
+  submitting.value = true;
+  try {
+    const url = route('brands.tasks.subtasks.comments.store', { brand: oc.value.brandId, task: oc.value.taskId, subtask: subtaskId.value });
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') },
+      body: JSON.stringify({ content: newComment.value.trim() }),
+    });
+    const data = await res.json();
+    if (data && data.comment) comments.value.push(data.comment);
+    newComment.value = '';
+  } catch (e) { console.error(e); }
+  finally { submitting.value = false; }
+}
+
+async function deleteComment(c) {
+  if (!subtaskId.value) return;
+  const url = route('brands.tasks.subtasks.comments.destroy', { brand: oc.value.brandId, task: oc.value.taskId, subtask: subtaskId.value, comment: c.id });
+  try {
+    await fetch(url, { method: 'DELETE', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') } });
+    comments.value = comments.value.filter(x => x.id !== c.id);
+  } catch (e) { console.error(e); }
+}
+
+function downloadTaskFiles() {
+  if (!oc.value.taskId) return;
+  window.location.href = route('brands.tasks.download', { brand: oc.value.brandId, task: oc.value.taskId });
 }
 </script>
 
@@ -249,8 +311,41 @@ function openOffcanvas(task, ownership) {
           <button type="button" class="btn-close text-reset" aria-label="Close" @click="offcanvasOpen = false"></button>
         </div>
         <div class="offcanvas-body">
-          <!-- TODO: content to be defined later -->
-          <div class="text-secondary">Здесь будет содержимое подзадачи.</div>
+          <div class="mb-3">
+            <div class="btn-group" role="group">
+              <button class="btn" :class="{ 'btn-primary': activeOcTab === 'files' }" @click="activeOcTab = 'files'">Файлы</button>
+              <button class="btn" :class="{ 'btn-primary': activeOcTab === 'comments' }" @click="activeOcTab = 'comments'">Комментарии</button>
+            </div>
+          </div>
+
+          <div v-if="activeOcTab === 'files'">
+            <div class="d-flex align-items-center gap-2">
+              <button class="btn btn-outline" @click="downloadTaskFiles">Скачать все</button>
+              <span class="text-secondary small">Файлы относятся ко всей задаче.</span>
+            </div>
+          </div>
+
+          <div v-else>
+            <div v-if="commentsLoading" class="text-secondary">Загрузка комментариев…</div>
+            <div v-else>
+              <div v-if="comments.length === 0" class="text-secondary mb-2">Комментариев пока нет.</div>
+              <ul class="list-unstyled">
+                <li v-for="c in comments" :key="c.id" class="mb-2 d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="fw-bold">{{ c.user?.name || '—' }} <span class="text-secondary small">{{ new Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
+                    <div style="white-space: pre-wrap;">{{ c.content }}</div>
+                  </div>
+                  <button class="btn btn-ghost-danger btn-sm" title="Удалить" @click="deleteComment(c)">Удалить</button>
+                </li>
+              </ul>
+              <div class="mt-2">
+                <textarea v-model="newComment" rows="2" class="form-control" placeholder="Новый комментарий…"></textarea>
+                <div class="mt-2 d-flex justify-content-end">
+                  <button class="btn btn-primary" :disabled="!newComment.trim() || submitting" @click="addComment">Добавить</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </teleport>
