@@ -113,6 +113,7 @@ const offcanvasOpen = ref(false);
 const oc = ref({ brandId: null, brandName: '', taskId: null, taskName: '', ownership: 'Photographer' });
 const activeOcTab = ref('comments'); // files|comments
 const subtaskId = ref(null);
+const currentSubtask = ref(null);
 const commentsLoading = ref(false);
 const comments = ref([]);
 const newComment = ref('');
@@ -133,12 +134,16 @@ function saveAssignee() {
     const ok = window.confirm('Переназначить исполнителя? Текущее назначение будет изменено.');
     if (!ok) return;
   }
-  if (!oc.value.taskId) return;
-  router.put(route('brands.tasks.update', { brand: oc.value.brandId, task: oc.value.taskId }), { assignee_id: newId }, {
-    preserveScroll: true,
-    onSuccess: () => { lastAssigneeId = newId; },
-    onError: () => { selectedAssigneeId.value = lastAssigneeId; },
-  });
+  if (!oc.value.taskId || !subtaskId.value) return;
+  router.put(
+    route('brands.tasks.subtasks.update', { brand: oc.value.brandId, task: oc.value.taskId, subtask: subtaskId.value }),
+    { assignee_id: newId },
+    {
+      preserveScroll: true,
+      onSuccess: () => { lastAssigneeId = newId; },
+      onError: () => { selectedAssigneeId.value = lastAssigneeId; },
+    }
+  );
 }
 
 // Yandex.Disk files state (as in All.vue)
@@ -269,21 +274,26 @@ async function uploadFiles(files) {
     uploadError.value = 'Ошибка загрузки файлов. Попробуйте ещё раз.';
   } finally { uploading.value = false; }
 }
+
 function openOffcanvas(task, ownership) {
+  const brandName = props.brand?.name || task.brand?.name || '';
   oc.value = {
     brandId: task.brand_id,
-    brandName: props.brand?.name || '',
+    brandName,
     taskId: task.id,
     taskName: task.name,
     ownership,
   };
   offcanvasOpen.value = true;
+  // Load comments for the selected subtask
   activeOcTab.value = 'comments';
   subtaskId.value = null;
+  currentSubtask.value = null;
   comments.value = [];
   newComment.value = '';
-  selectedAssigneeId.value = task.assignee_id || null;
-  lastAssigneeId = task.assignee_id || null;
+  // Reset assignee until subtask loads
+  selectedAssigneeId.value = null;
+  lastAssigneeId = null;
   loadSubtaskAndComments(task.id, ownership);
   loadYandexFiles();
 }
@@ -291,14 +301,23 @@ function openOffcanvas(task, ownership) {
 async function loadSubtaskAndComments(taskId, ownership) {
   try {
     commentsLoading.value = true;
+    // fetch subtasks and pick by ownership
     const url = route('brands.tasks.subtasks.index', { brand: oc.value.brandId, task: taskId });
     const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
     const data = await res.json();
     const st = (data.subtasks || []).find(s => s.ownership === ownership);
+    currentSubtask.value = st || null;
     subtaskId.value = st ? st.id : null;
+    // Initialize assignee state from subtask
+    const aid = st?.assignee_id ?? null;
+    selectedAssigneeId.value = aid;
+    lastAssigneeId = aid;
     await loadComments();
-  } catch (e) { console.error(e); }
-  finally { commentsLoading.value = false; }
+  } catch (e) {
+    console.error(e);
+  } finally {
+    commentsLoading.value = false;
+  }
 }
 
 async function loadComments() {
@@ -386,7 +405,6 @@ function downloadTaskFiles() {
             <tr>
               <th>Задание</th>
               <th>Бренд</th>
-              <th>Ответственный</th>
               <th>Статус</th>
               <th class="w-1">ПОДЗАДАНИЯ</th>
               <th>Создан</th>
@@ -395,12 +413,11 @@ function downloadTaskFiles() {
           </thead>
           <tbody>
             <tr v-if="displayed.length === 0">
-              <td colspan="7" class="text-center text-secondary py-4">Задачи отсутствуют</td>
+              <td colspan="6" class="text-center text-secondary py-4">Задачи отсутствуют</td>
             </tr>
             <tr v-for="t in displayed" :key="t.id">
               <td>{{ t.name }}</td>
               <td>{{ brand.name }}</td>
-              <td>{{ t.assignee?.name || '—' }}</td>
               <td>
                 <span class="badge" :class="{
                   'bg-secondary': t.status === 'created' || !t.status,

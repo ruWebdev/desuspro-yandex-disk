@@ -91,6 +91,7 @@ const offcanvasOpen = ref(false);
 const oc = ref({ brandId: null, brandName: '', taskId: null, taskName: '', ownership: 'Photographer' });
 const activeOcTab = ref('comments'); // files | comments
 const subtaskId = ref(null);
+const currentSubtask = ref(null);
 const commentsLoading = ref(false);
 const comments = ref([]);
 const newComment = ref('');
@@ -111,11 +112,15 @@ function saveAssignee() {
     const ok = window.confirm('Переназначить исполнителя? Текущее назначение будет изменено.');
     if (!ok) return;
   }
-  if (!oc.value.taskId) return;
-  router.put(route('brands.tasks.update', { brand: oc.value.brandId, task: oc.value.taskId }), { assignee_id: newId }, {
-    preserveScroll: true,
-    onSuccess: () => { lastAssigneeId = newId; },
-  });
+  if (!oc.value.taskId || !subtaskId.value) return;
+  router.put(
+    route('brands.tasks.subtasks.update', { brand: oc.value.brandId, task: oc.value.taskId, subtask: subtaskId.value }),
+    { assignee_id: newId },
+    {
+      preserveScroll: true,
+      onSuccess: () => { lastAssigneeId = newId; },
+    }
+  );
 }
 
 // Yandex.Disk files state
@@ -221,10 +226,12 @@ function openOffcanvas(task, ownership) {
   // Load comments for the selected subtask
   activeOcTab.value = 'comments';
   subtaskId.value = null;
+  currentSubtask.value = null;
   comments.value = [];
   newComment.value = '';
-  selectedAssigneeId.value = task.assignee_id || null;
-  lastAssigneeId = task.assignee_id || null;
+  // Reset assignee until subtask loads
+  selectedAssigneeId.value = null;
+  lastAssigneeId = null;
   loadSubtaskAndComments(task.id, ownership);
   loadYandexFiles();
 }
@@ -237,7 +244,12 @@ async function loadSubtaskAndComments(taskId, ownership) {
     const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
     const data = await res.json();
     const st = (data.subtasks || []).find(s => s.ownership === ownership);
+    currentSubtask.value = st || null;
     subtaskId.value = st ? st.id : null;
+    // Initialize assignee state from subtask
+    const aid = st?.assignee_id ?? null;
+    selectedAssigneeId.value = aid;
+    lastAssigneeId = aid;
     await loadComments();
   } catch (e) {
     console.error(e);
@@ -343,7 +355,6 @@ function submitDelete() {
               <tr>
                 <th>Задание</th>
                 <th>Бренд</th>
-                <th>Ответственный</th>
                 <th>Статус</th>
                 <th class="w-1">ПОДЗАДАНИЯ</th>
                 <th>Создан</th>
@@ -352,12 +363,11 @@ function submitDelete() {
             </thead>
             <tbody>
               <tr v-if="displayedTasks.length === 0">
-                <td colspan="7" class="text-center text-secondary py-4">Нет заданий</td>
+                <td colspan="6" class="text-center text-secondary py-4">Нет заданий</td>
               </tr>
               <tr v-for="t in displayedTasks" :key="t.id">
                 <td>{{ t.name }}</td>
                 <td>{{t.brand?.name || (brands.find(b => b.id === t.brand_id)?.name)}}</td>
-                <td>{{ t.assignee?.name || '-' }}</td>
                 <td>
                   <span class="badge" :class="{
                     'bg-secondary': t.status === 'created' || !t.status,
