@@ -72,6 +72,12 @@ async function uploadFiles(files) {
   }
 }
 
+function openFolderUrl() {
+  const url = folderPath.value;
+  if (!url) return;
+  window.open(url, '_blank');
+}
+
 function submitCreate() {
   if (!createForm.value.name || !createForm.value.brand_id) return;
   router.post(route('tasks.store'), createForm.value, {
@@ -411,10 +417,6 @@ function submitDelete() {
           </div>
 
           <div v-if="activeOcTab === 'files'">
-            <div class="mb-2 d-flex align-items-center gap-2">
-              <button class="btn btn-outline" @click="() => downloadTaskFiles()">Скачать все (архив)</button>
-              <span class="text-secondary small">Список файлов из папки Яндекс.Диска для выбранной роли.</span>
-            </div>
 
             <!-- Folder path with copy (browser URL) -->
             <div class="mb-3">
@@ -422,6 +424,7 @@ function submitDelete() {
               <div class="input-group">
                 <input type="text" class="form-control" :value="folderPath" readonly />
                 <button class="btn btn-outline-secondary" type="button" @click="copyFolderPath">Копировать</button>
+                <button class="btn btn-secondary" type="button" @click="openFolderUrl">Перейти</button>
               </div>
             </div>
 
@@ -439,7 +442,7 @@ function submitDelete() {
                         'Папка' : 'Файл' }}</span>
                       <span>{{ it.name }}</span>
                       <span v-if="it.size && it.type === 'file'" class="text-secondary small">{{
-                        (it.size / 1024 /1024).toFixed(2) }} MB</span>
+                        (it.size / 1024 / 1024).toFixed(2) }} MB</span>
                     </div>
                     <div>
                       <button v-if="it.type === 'file'" class="btn btn-sm btn-outline-primary"
