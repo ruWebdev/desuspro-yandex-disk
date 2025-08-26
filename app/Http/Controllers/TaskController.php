@@ -6,15 +6,23 @@ use App\Models\Brand;
 use App\Models\Task;
 use App\Models\User;
 use App\Models\Subtask;
+use App\Models\YandexToken;
+use App\Services\YandexDiskService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 use ZipArchive;
 
 class TaskController extends Controller
 {
+    public function __construct(private readonly YandexDiskService $disk)
+    {
+        // Ensure routes using this controller require auth in routes if needed.
+    }
     /**
      * Global list of all tasks with brand names and basic info.
      */
@@ -78,6 +86,8 @@ class TaskController extends Controller
             'status' => 'created',
             'ownership' => 'PhotoEditor',
         ]);
+        // Create Yandex.Disk folders: /BrandName/TaskName/{ЗАДАНИЕ_Ф,ЗАДАНИЕ_Р}
+        $this->createYandexFolderStructure($request, $brand, $task);
         return back()->with('status', 'task-created');
     }
 
@@ -111,7 +121,11 @@ class TaskController extends Controller
             'status' => 'created',
             'ownership' => 'PhotoEditor',
         ]);
-
+        // Create Yandex.Disk folders using the selected brand
+        $brand = Brand::find($data['brand_id']);
+        if ($brand) {
+            $this->createYandexFolderStructure($request, $brand, $task);
+        }
         return back()->with('status', 'task-created');
     }
 
@@ -208,5 +222,83 @@ class TaskController extends Controller
         $task->public_link = null;
         $task->save();
         return back()->with('status', 'public-link-removed');
+    }
+
+    /**
+     * Create folder structure on Yandex.Disk:
+     * /{BrandName}/{TaskName}/ЗАДАНИЕ_Ф and /ЗАДАНИЕ_Р
+     * Silently logs and continues on errors (e.g., no token, already exists).
+     */
+    private function createYandexFolderStructure(Request $request, Brand $brand, Task $task): void
+    {
+        try {
+            $user = $request->user();
+            if (!$user) {
+                return; // not authenticated
+            }
+            $token = YandexToken::where('user_id', $user->id)->first();
+            if (!$token) {
+                Log::warning('Yandex token not found for user during folder creation', ['user_id' => $user->id]);
+                return;
+            }
+            $token = $this->disk->ensureValidToken($token);
+
+            $brandName = $this->sanitizeName($brand->name);
+            $taskName = $this->sanitizeName($task->name);
+
+            $brandPath = '/'.$brandName;
+            $taskPath = $brandPath.'/'.$taskName;
+            $subPhotographer = $taskPath.'/'.'ЗАДАНИЕ_Ф';
+            $subEditor = $taskPath.'/'.'ЗАДАНИЕ_Р';
+
+            Log::info('Creating Yandex.Disk folder structure', [
+                'brandPath' => $brandPath,
+                'taskPath' => $taskPath,
+                'subPhotographer' => $subPhotographer,
+                'subEditor' => $subEditor,
+            ]);
+
+            $this->ensureFolder($token->access_token, $brandPath);
+            $this->ensureFolder($token->access_token, $taskPath);
+            $this->ensureFolder($token->access_token, $subPhotographer);
+            $this->ensureFolder($token->access_token, $subEditor);
+        } catch (\Throwable $e) {
+            Log::error('Failed to create Yandex.Disk folders for task', [
+                'task_id' => $task->id,
+                'brand_id' => $brand->id,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /** Sanitize names for Yandex paths: remove slashes and trim spaces. */
+    private function sanitizeName(string $name): string
+    {
+        // Replace forward/back slashes and control characters
+        $name = preg_replace('/[\\\n\r\t]/u', ' ', $name);
+        $name = str_replace('/', '-', $name);
+        return trim($name);
+    }
+
+    /** Create folder if not exists, ignore 409 Conflict errors. */
+    private function ensureFolder(string $accessToken, string $path): void
+    {
+        try {
+            $this->disk->createFolder($accessToken, $path);
+        } catch (\Illuminate\Http\Client\RequestException $ex) {
+            $response = $ex->response;
+            $status = $response ? $response->status() : null;
+            $body = $response ? Str::limit($response->body(), 500) : null;
+            if ($status === 409) {
+                // already exists
+                return;
+            }
+            Log::error('Yandex.Disk createFolder failed', [
+                'path' => $path,
+                'status' => $status,
+                'body' => $body,
+            ]);
+            throw $ex; // rethrow other errors
+        }
     }
 }

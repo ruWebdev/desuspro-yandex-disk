@@ -87,6 +87,22 @@ class YandexDiskService
         ];
     }
 
+    /**
+     * Normalize path to Yandex format: 'disk:/...'.
+     */
+    private function normalizePath(string $path): string
+    {
+        $path = trim($path);
+        if ($path === '' || $path === '/') {
+            return 'disk:/';
+        }
+        if (str_starts_with($path, 'disk:')) {
+            return $path;
+        }
+        $path = ltrim($path, '/');
+        return 'disk:/'.$path;
+    }
+
     public function diskInfo(string $accessToken): array
     {
         $res = Http::withHeaders($this->authHeaders($accessToken))
@@ -99,7 +115,7 @@ class YandexDiskService
     {
         $res = Http::withHeaders($this->authHeaders($accessToken))
             ->get($this->apiBase.'/resources', [
-                'path' => $path,
+                'path' => $this->normalizePath($path),
                 'limit' => $limit,
             ])->throw();
         return $res->json();
@@ -107,20 +123,24 @@ class YandexDiskService
 
     public function createFolder(string $accessToken, string $path): array
     {
+        // Yandex Disk expects 'path' as a query parameter for PUT
         $res = Http::withHeaders($this->authHeaders($accessToken))
-            ->put($this->apiBase.'/resources', [
-                'path' => $path,
+            ->send('PUT', $this->apiBase.'/resources', [
+                'query' => ['path' => $this->normalizePath($path)],
             ])->throw();
         return $res->json();
     }
 
     public function deleteResource(string $accessToken, string $path, bool $permanently = false): array
     {
+        // Yandex Disk expects query parameters on DELETE
         $res = Http::withHeaders($this->authHeaders($accessToken))
-            ->delete($this->apiBase.'/resources', [
-                'path' => $path,
+            ->withOptions(['query' => [
+                'path' => $this->normalizePath($path),
                 'permanently' => $permanently ? 'true' : 'false',
-            ])->throw();
+            ]])
+            ->delete($this->apiBase.'/resources')
+            ->throw();
 
         if ($res->status() === 202 || $res->status() === 204) {
             return ['success' => true];
@@ -133,7 +153,7 @@ class YandexDiskService
     {
         $res = Http::withHeaders($this->authHeaders($accessToken))
             ->get($this->apiBase.'/resources/download', [
-                'path' => $path,
+                'path' => $this->normalizePath($path),
             ])->throw();
         return Arr::get($res->json(), 'href');
     }
@@ -151,7 +171,7 @@ class YandexDiskService
         // Step 1: get upload URL
         $res = Http::withHeaders($this->authHeaders($accessToken))
             ->get($this->apiBase.'/resources/upload', [
-                'path' => $path,
+                'path' => $this->normalizePath($path),
                 'overwrite' => $overwrite ? 'true' : 'false',
             ])->throw();
         $href = Arr::get($res->json(), 'href');
