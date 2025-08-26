@@ -131,6 +131,66 @@ class YandexDiskService
         return $res->json();
     }
 
+    /**
+     * Publish resource to make it publicly accessible (read-only link).
+     */
+    public function publish(string $accessToken, string $path): array
+    {
+        $res = Http::withHeaders($this->authHeaders($accessToken))
+            ->send('PUT', $this->apiBase.'/resources/publish', [
+                'query' => ['path' => $this->normalizePath($path)],
+            ])->throw();
+        return $res->json();
+    }
+
+    /**
+     * Get resource metadata. Optionally restrict returned fields (e.g. 'public_url').
+     */
+    public function getResource(string $accessToken, string $path, array $fields = []): array
+    {
+        $query = ['path' => $this->normalizePath($path)];
+        if (!empty($fields)) {
+            $query['fields'] = implode(',', $fields);
+        }
+        $res = Http::withHeaders($this->authHeaders($accessToken))
+            ->get($this->apiBase.'/resources', $query)
+            ->throw();
+        return $res->json();
+    }
+
+    /**
+     * Create folder, publish it, and return public_url in response.
+     */
+    public function createFolderPublic(string $accessToken, string $path): array
+    {
+        // Create (ignore 409 Conflict if already exists)
+        try {
+            $this->createFolder($accessToken, $path);
+        } catch (\Illuminate\Http\Client\RequestException $e) {
+            $code = optional($e->response)->status();
+            if ($code !== 409) { // 409 = already exists
+                throw $e;
+            }
+        }
+        // Publish (ignore 409 if already published)
+        try {
+            $this->publish($accessToken, $path);
+        } catch (\Illuminate\Http\Client\RequestException $e) {
+            $code = optional($e->response)->status();
+            if ($code !== 409) {
+                throw $e;
+            }
+        }
+        // Fetch meta with public_url
+        $meta = $this->getResource($accessToken, $path, ['public_url', 'path', 'name']);
+        return [
+            'success' => true,
+            'path' => Arr::get($meta, 'path', $path),
+            'name' => Arr::get($meta, 'name'),
+            'public_url' => Arr::get($meta, 'public_url'),
+        ];
+    }
+
     public function deleteResource(string $accessToken, string $path, bool $permanently = false): array
     {
         // Yandex Disk expects query parameters on DELETE

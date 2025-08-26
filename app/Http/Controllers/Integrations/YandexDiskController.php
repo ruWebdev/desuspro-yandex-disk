@@ -128,7 +128,10 @@ class YandexDiskController extends Controller
         $request->validate(['path' => 'required|string']);
         $token = $this->requireToken($request);
         $token = $this->disk->ensureValidToken($token);
-        return response()->json($this->disk->createFolder($token->access_token, $request->string('path')));
+        // Create folder and immediately publish it to get read-only public URL
+        return response()->json(
+            $this->disk->createFolderPublic($token->access_token, (string) $request->string('path'))
+        );
     }
 
     public function delete(Request $request)

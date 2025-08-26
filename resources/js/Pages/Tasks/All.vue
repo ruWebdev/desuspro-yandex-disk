@@ -97,6 +97,22 @@ const comments = ref([]);
 const newComment = ref('');
 const submitting = ref(false);
 
+// Bootstrap Offcanvas integration
+const offcanvasEl = ref(null);
+let offcanvasInstance = null;
+const hasOffcanvas = ref(false);
+onMounted(() => {
+  const Ctor = window.bootstrap?.Offcanvas;
+  if (Ctor && offcanvasEl.value) {
+    offcanvasInstance = new Ctor(offcanvasEl.value, { backdrop: true, keyboard: true, scroll: true });
+    hasOffcanvas.value = true;
+    offcanvasEl.value.addEventListener('show.bs.offcanvas', () => { offcanvasOpen.value = true; });
+    offcanvasEl.value.addEventListener('hidden.bs.offcanvas', () => { offcanvasOpen.value = false; });
+  }
+});
+
+function closeOffcanvas() { if (offcanvasInstance) offcanvasInstance.hide(); else offcanvasOpen.value = false; }
+
 // Assignee selection state for offcanvas
 const assigneeOptions = computed(() => ({
   Photographer: props.assignees?.Photographer || [],
@@ -126,15 +142,16 @@ function saveAssignee() {
 // Yandex.Disk files state
 const filesLoading = ref(false);
 const filesError = ref('');
-const yandexItems = ref([]); // raw items from Yandex API (_embedded.items)
+const yandexItems = ref([]);
+const publicFolderUrl = ref('');
 
 // Upload state (Photographer)
 const fileInputRef = ref(null);
 const uploading = ref(false);
 const uploadError = ref('');
 
-// Folder path (for display/copy) — browser URL
-const folderPath = computed(() => yandexBrowserUrl() || '');
+// Public folder URL (for display/copy)
+const folderPath = computed(() => publicFolderUrl.value || '');
 
 async function copyFolderPath() {
   const text = folderPath.value;
@@ -178,6 +195,23 @@ async function loadYandexFiles() {
   filesLoading.value = true;
   filesError.value = '';
   try {
+    // Ensure folder exists and is published, capture public_url
+    try {
+      const resCreate = await fetch(route('integrations.yandex.create_folder'), {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ path }),
+      });
+      if (resCreate.ok) {
+        const created = await resCreate.json();
+        publicFolderUrl.value = created?.public_url || '';
+      }
+    } catch (e) { /* ignore publish errors */ }
+
     const url = route('integrations.yandex.list') + `?path=${encodeURIComponent(path)}&limit=100`;
     const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -234,6 +268,7 @@ function openOffcanvas(task, ownership) {
   lastAssigneeId = null;
   loadSubtaskAndComments(task.id, ownership);
   loadYandexFiles();
+  if (offcanvasInstance) offcanvasInstance.show();
 }
 
 async function loadSubtaskAndComments(taskId, ownership) {
@@ -422,8 +457,9 @@ function submitDelete() {
 
     <!-- Right offcanvas -->
     <teleport to="body">
-      <div class="offcanvas offcanvas-end w-50" :class="{ show: offcanvasOpen }"
-        :style="offcanvasOpen ? 'visibility: visible;' : ''" tabindex="-1" role="dialog">
+      <div class="offcanvas offcanvas-end w-50" ref="offcanvasEl" tabindex="-1" role="dialog"
+        :class="{ show: offcanvasOpen && !hasOffcanvas }"
+        :style="offcanvasOpen && !hasOffcanvas ? 'visibility: visible; z-index: 1045;' : ''">
         <div class="offcanvas-header">
           <h5 class="offcanvas-title">
             {{ oc.brandName }} / {{ oc.taskName }}<br />
@@ -431,7 +467,7 @@ function submitDelete() {
               {{ oc.ownership === 'Photographer' ? 'Фотограф' : 'Фоторедактор' }}
             </span>
           </h5>
-          <button type="button" class="btn-close text-reset" aria-label="Close" @click="offcanvasOpen = false"></button>
+          <button type="button" class="btn-close text-reset" aria-label="Close" @click="closeOffcanvas"></button>
         </div>
         <div class="offcanvas-body">
           <div class="mb-3">
@@ -538,6 +574,8 @@ function submitDelete() {
           </div>
         </div>
       </div>
+      <!-- Fallback backdrop when Bootstrap Offcanvas is not available -->
+      <div v-if="offcanvasOpen && !hasOffcanvas" class="modal-backdrop fade show" style="z-index: 1040;" @click="closeOffcanvas"></div>
     </teleport>
 
     <!-- Create Task Modal -->
