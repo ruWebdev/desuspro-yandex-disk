@@ -127,6 +127,7 @@ function openOffcanvas(task, ownership) {
 </script>
 
 <template>
+
   <Head :title="`Задачи — ${brand.name}`" />
   <TablerLayout>
     <template #header>
@@ -144,7 +145,9 @@ function openOffcanvas(task, ownership) {
             <div class="ms-auto d-flex flex-wrap btn-list">
               <div class="input-group input-group-flat w-auto me-2">
                 <span class="input-group-text">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    class="icon icon-1">
                     <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
                     <path d="M21 21l-6 -6" />
                   </svg>
@@ -193,18 +196,33 @@ function openOffcanvas(task, ownership) {
               </td>
               <td class="text-nowrap">
                 <div class="btn-list d-flex flex-nowrap align-items-center gap-2" style="white-space: nowrap;">
-                  <button class="btn btn-ghost-primary btn-sm" @click="openOffcanvas(t, 'Photographer')" title="Открыть подзадачу: ФОТОГРАФ">ФОТОГРАФ</button>
-                  <button class="btn btn-ghost-purple btn-sm" @click="openOffcanvas(t, 'PhotoEditor')" title="Открыть подзадачу: ФОТОРЕДАКТОР">ФОТОРЕДАКТОР</button>
+                  <button class="btn btn-ghost-primary btn-sm" @click="openOffcanvas(t, 'Photographer')"
+                    title="Открыть подзадачу: ФОТОГРАФ">ФОТОГРАФ</button>
+                  <button class="btn btn-ghost-purple btn-sm" @click="openOffcanvas(t, 'PhotoEditor')"
+                    title="Открыть подзадачу: ФОТОРЕДАКТОР">ФОТОРЕДАКТОР</button>
                 </div>
               </td>
               <td>{{ new Date(t.created_at).toLocaleString('ru-RU') }}</td>
               <td class="text-nowrap">
                 <div class="btn-list d-flex flex-nowrap align-items-center gap-2">
                   <button class="btn btn-icon btn-ghost-primary" title="Изменить" @click="startEdit(t)">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24"
+                      stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+                      <path d="M13.5 6.5l4 4" />
+                    </svg>
                   </button>
                   <button class="btn btn-icon btn-ghost-danger" title="Удалить" @click="askDelete(t)">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-2a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v2"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="16" height="16" viewBox="0 0 24 24"
+                      stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                      <path d="M4 7h16" />
+                      <path d="M10 11v6" />
+                      <path d="M14 11v6" />
+                      <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" />
+                      <path d="M9 7v-2a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v2" />
+                    </svg>
                   </button>
                 </div>
               </td>
@@ -216,11 +234,12 @@ function openOffcanvas(task, ownership) {
 
     <!-- Right offcanvas -->
     <teleport to="body">
-      <div class="offcanvas offcanvas-end" :class="{ show: offcanvasOpen }" :style="offcanvasOpen ? 'visibility: visible;' : ''" tabindex="-1" role="dialog">
+      <div class="offcanvas offcanvas-end" :class="{ show: offcanvasOpen }"
+        :style="offcanvasOpen ? 'visibility: visible;' : ''" tabindex="-1" role="dialog">
         <div class="offcanvas-header">
           <h5 class="offcanvas-title">
-            {{ oc.brandName }} / {{ oc.taskName }}
-            <span class="badge ms-2" :class="{
+            {{ oc.brandName }} / {{ oc.taskName }}<br />
+            <span class="badge text-light" :class="{
               'bg-blue': oc.ownership === 'Photographer',
               'bg-purple': oc.ownership === 'PhotoEditor',
             }">
@@ -259,7 +278,8 @@ function openOffcanvas(task, ownership) {
               </div>
               <div class="modal-footer">
                 <button type="button" class="btn me-auto" @click="showCreate = false">Отмена</button>
-                <button :disabled="createForm.processing || !createForm.name" type="button" class="btn btn-primary" @click="submitCreate">
+                <button :disabled="createForm.processing || !createForm.name" type="button" class="btn btn-primary"
+                  @click="submitCreate">
                   <span v-if="createForm.processing" class="spinner-border spinner-border-sm me-2" />Создать
                 </button>
               </div>
@@ -308,7 +328,8 @@ function openOffcanvas(task, ownership) {
                       <label class="form-label">Исполнитель</label>
                       <select v-model="editForm.assignee_id" class="form-select">
                         <option :value="null">— Не назначено —</option>
-                        <option v-for="u in assigneeOptions[editForm.ownership]" :key="u.id" :value="u.id">{{ u.name }}</option>
+                        <option v-for="u in assigneeOptions[editForm.ownership]" :key="u.id" :value="u.id">{{ u.name }}
+                        </option>
                       </select>
                     </div>
                     <div class="col-sm-4 d-flex align-items-end">
@@ -320,7 +341,8 @@ function openOffcanvas(task, ownership) {
                   </div>
                   <div class="mt-2">
                     <label class="form-label">Комментарий</label>
-                    <textarea v-model="editForm.comment" rows="3" class="form-control" placeholder="Комментарий"></textarea>
+                    <textarea v-model="editForm.comment" rows="3" class="form-control"
+                      placeholder="Комментарий"></textarea>
                   </div>
                   <div v-if="Object.keys(editForm.errors).length" class="text-danger small mt-2">
                     <div v-for="(err, key) in editForm.errors" :key="key">{{ err }}</div>

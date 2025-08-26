@@ -171,8 +171,8 @@ function onDeleteTask(t) {
         :style="offcanvasOpen ? 'visibility: visible;' : ''" tabindex="-1" role="dialog">
         <div class="offcanvas-header">
           <h5 class="offcanvas-title">
-            {{ oc.brandName }} / {{ oc.taskName }}
-            <span class="ms-2 badge" :class="oc.ownership === 'Photographer' ? 'bg-blue' : 'bg-purple'">
+            {{ oc.brandName }} / {{ oc.taskName }}<br />
+            <span class="badge text-light" :class="oc.ownership === 'Photographer' ? 'bg-blue' : 'bg-purple'">
               {{ oc.ownership === 'Photographer' ? 'Фотограф' : 'Фоторедактор' }}
             </span>
           </h5>
