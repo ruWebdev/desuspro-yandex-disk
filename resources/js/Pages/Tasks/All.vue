@@ -62,8 +62,23 @@ function onEditTask(t) {
 }
 
 function onDeleteTask(t) {
-  if (!window.confirm('Удалить задание и связанные данные?')) return;
-  router.delete(route('brands.tasks.destroy', { brand: t.brand_id, task: t.id }));
+  deleting.value = t;
+  showDelete.value = true;
+}
+
+// Delete modal state/handlers
+const showDelete = ref(false);
+const deleting = ref(null);
+function cancelDelete() {
+  showDelete.value = false;
+  deleting.value = null;
+}
+function submitDelete() {
+  if (!deleting.value) return;
+  router.delete(route('brands.tasks.destroy', { brand: deleting.value.brand_id, task: deleting.value.id }), {
+    onSuccess: () => { cancelDelete(); },
+    preserveScroll: true,
+  });
 }
 </script>
 
@@ -215,6 +230,30 @@ function onDeleteTask(t) {
             </div>
           </div>
         </div>
+      </div>
+    </teleport>
+    
+    <!-- Delete Task Modal -->
+    <teleport to="body">
+      <div v-if="showDelete && deleting">
+        <div class="modal modal-blur fade show d-block" tabindex="-1" role="dialog" style="z-index: 1050;">
+          <div class="modal-dialog" role="document">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Удалить задание</h5>
+                <button type="button" class="btn-close" aria-label="Close" @click="cancelDelete"></button>
+              </div>
+              <div class="modal-body">
+                Вы уверены, что хотите удалить задание <strong>{{ deleting?.name }}</strong>? Это действие необратимо.
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn me-auto" @click="cancelDelete">Отмена</button>
+                <button type="button" class="btn btn-danger" @click="submitDelete">Удалить</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-backdrop fade show" style="z-index: 1040;" @click="cancelDelete"></div>
       </div>
     </teleport>
   </TablerLayout>
