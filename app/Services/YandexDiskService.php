@@ -121,6 +121,11 @@ class YandexDiskService
                 'path' => $path,
                 'permanently' => $permanently ? 'true' : 'false',
             ])->throw();
+
+        if ($res->status() === 202 || $res->status() === 204) {
+            return ['success' => true];
+        }
+
         return $res->json();
     }
 
@@ -133,7 +138,15 @@ class YandexDiskService
         return Arr::get($res->json(), 'href');
     }
 
-    public function upload(string $accessToken, string $path, string $contents, bool $overwrite = true): array
+    /**
+     * @param string $accessToken
+     * @param string $path
+     * @param resource|string $contents Stream resource or file contents as a string
+     * @param bool $overwrite
+     * @return array
+     * @throws \Illuminate\Http\Client\RequestException
+     */
+    public function upload(string $accessToken, string $path, $contents, bool $overwrite = true): array
     {
         // Step 1: get upload URL
         $res = Http::withHeaders($this->authHeaders($accessToken))
@@ -144,8 +157,8 @@ class YandexDiskService
         $href = Arr::get($res->json(), 'href');
 
         // Step 2: upload via PUT to href
-        Http::withHeaders(['Content-Type' => 'application/octet-stream'])
-            ->put($href, $contents)
+        Http::withBody($contents, 'application/octet-stream')
+            ->put($href)
             ->throw();
 
         return ['success' => true, 'path' => $path];

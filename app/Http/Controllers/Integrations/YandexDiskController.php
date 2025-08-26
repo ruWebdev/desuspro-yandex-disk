@@ -40,24 +40,36 @@ class YandexDiskController extends Controller
     public function callback(Request $request)
     {
         $state = $request->string('state');
-        $expected = $request->session()->pull('yandex_oauth_state');
-
-        // Diagnostic logging prior to validation
-        Log::info('Yandex OAuth callback received', [
+        $expected = $request->session()->get('yandex_oauth_state'); // Не используем pull, чтобы не удалять сразу
+        
+        // Логируем до проверки состояния
+        $logContext = [
             'received_state' => (string) $state,
             'expected_state' => (string) $expected,
-            'matches' => (string) $state === (string) $expected,
             'session_id' => $request->session()->getId(),
+            'session_data' => $request->session()->all(),
+            'cookies' => $request->cookies->all(),
             'full_url' => $request->fullUrl(),
-            'referer' => $request->headers->get('referer'),
             'host' => $request->getHost(),
             'scheme' => $request->getScheme(),
-            'user_id' => optional($request->user())->id,
-        ]);
+            'session_domain' => config('session.domain'),
+            'session_same_site' => config('session.same_site'),
+            'app_url' => config('app.url'),
+        ];
 
-        if ($state !== $expected) {
-            abort(403, 'Invalid OAuth state');
+        Log::info('Yandex OAuth callback - State validation', $logContext);
+
+        // Проверяем состояние
+        if (empty($state) || empty($expected) || !hash_equals((string)$expected, (string)$state)) {
+            Log::error('Invalid OAuth state', $logContext);
+            // Очищаем состояние из сессии, чтобы избежать повторного использования
+            $request->session()->forget('yandex_oauth_state');
+            return redirect()->route('dashboard')
+                ->with('error', 'Неверное состояние OAuth. Пожалуйста, попробуйте снова.');
         }
+
+        // Если состояние верное, удаляем его из сессии
+        $request->session()->forget('yandex_oauth_state');
 
         $code = $request->string('code');
         if (!$code) {
@@ -140,8 +152,19 @@ class YandexDiskController extends Controller
         $request->validate(['path' => 'required|string', 'file' => 'required|file']);
         $token = $this->requireToken($request);
         $token = $this->disk->ensureValidToken($token);
-        $contents = file_get_contents($request->file('file')->getRealPath());
-        return response()->json($this->disk->upload($token->access_token, $request->string('path'), $contents));
+
+        $file = $request->file('file');
+        $resource = fopen($file->getRealPath(), 'r');
+
+        try {
+            $result = $this->disk->upload($token->access_token, $request->string('path'), $resource);
+        } finally {
+            if (is_resource($resource)) {
+                fclose($resource);
+            }
+        }
+
+        return response()->json($result);
     }
 
     private function requireToken(Request $request): YandexToken
