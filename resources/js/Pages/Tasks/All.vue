@@ -31,6 +31,47 @@ function openCreate() {
   modalOpen.value = true;
 }
 
+function openUploader() {
+  uploadError.value = '';
+  if (fileInputRef.value) fileInputRef.value.value = null; // reset
+  fileInputRef.value?.click();
+}
+
+async function onFilesChosen(e) {
+  const files = e.target?.files;
+  if (!files || !files.length) return;
+  await uploadFiles(Array.from(files));
+}
+
+async function uploadFiles(files) {
+  const folder = yandexFolderPath();
+  if (!folder) return;
+  uploading.value = true;
+  uploadError.value = '';
+  try {
+    for (const f of files) {
+      const fd = new FormData();
+      fd.append('path', `${folder}/${f.name}`);
+      fd.append('file', f, f.name);
+      const res = await fetch(route('integrations.yandex.upload'), {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') },
+        body: fd,
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Upload failed (${res.status}): ${text}`);
+      }
+    }
+    await loadYandexFiles();
+  } catch (e) {
+    console.error(e);
+    uploadError.value = 'Ошибка загрузки файлов. Попробуйте ещё раз.';
+  } finally {
+    uploading.value = false;
+  }
+}
+
 function submitCreate() {
   if (!createForm.value.name || !createForm.value.brand_id) return;
   router.post(route('tasks.store'), createForm.value, {
@@ -48,6 +89,64 @@ const comments = ref([]);
 const newComment = ref('');
 const submitting = ref(false);
 
+// Yandex.Disk files state
+const filesLoading = ref(false);
+const filesError = ref('');
+const yandexItems = ref([]); // raw items from Yandex API (_embedded.items)
+
+// Upload state (Photographer)
+const fileInputRef = ref(null);
+const uploading = ref(false);
+const uploadError = ref('');
+
+function yandexFolderPath() {
+  if (!oc.value.brandName || !oc.value.taskName) return null;
+  const base = `/${oc.value.brandName}/${oc.value.taskName}`;
+  const suffix = oc.value.ownership === 'Photographer' ? 'ЗАДАНИЕ_Ф' : 'ЗАДАНИЕ_Р';
+  return `${base}/${suffix}`;
+}
+
+async function loadYandexFiles() {
+  const path = yandexFolderPath();
+  if (!path) return;
+  filesLoading.value = true;
+  filesError.value = '';
+  try {
+    const url = route('integrations.yandex.list') + `?path=${encodeURIComponent(path)}&limit=100`;
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    yandexItems.value = (data && data._embedded && Array.isArray(data._embedded.items)) ? data._embedded.items : [];
+  } catch (e) {
+    console.error(e);
+    filesError.value = 'Не удалось загрузить список файлов.';
+    yandexItems.value = [];
+  } finally {
+    filesLoading.value = false;
+  }
+}
+
+async function downloadYandexItem(item) {
+  if (!item || item.type !== 'file') return;
+  const path = item.path || item.resource_id || null;
+  // item.path usually like "disk:/..."; if missing, rebuild from name + parent path
+  let reqPath = item.path;
+  if (!reqPath) {
+    const folder = yandexFolderPath();
+    if (!folder) return;
+    reqPath = `${folder}/${item.name}`;
+  }
+  const url = route('integrations.yandex.download_url') + `?path=${encodeURIComponent(reqPath)}`;
+  try {
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data && data.href) {
+      window.open(data.href, '_blank');
+    }
+  } catch (e) { console.error(e); }
+}
+
 function openOffcanvas(task, ownership) {
   const brandName = task.brand?.name || (props.brands.find(b => b.id === task.brand_id)?.name) || '';
   oc.value = {
@@ -64,6 +163,7 @@ function openOffcanvas(task, ownership) {
   comments.value = [];
   newComment.value = '';
   loadSubtaskAndComments(task.id, ownership);
+  loadYandexFiles();
 }
 
 async function loadSubtaskAndComments(taskId, ownership) {
@@ -269,9 +369,39 @@ function submitDelete() {
           </div>
 
           <div v-if="activeOcTab === 'files'">
-            <div class="d-flex align-items-center gap-2">
-              <button class="btn btn-outline" @click="() => downloadTaskFiles()">Скачать все</button>
-              <span class="text-secondary small">Файлы относятся ко всей задаче.</span>
+            <div class="mb-2 d-flex align-items-center gap-2">
+              <button class="btn btn-outline" @click="() => downloadTaskFiles()">Скачать все (архив)</button>
+              <span class="text-secondary small">Список файлов из папки Яндекс.Диска для выбранной роли.</span>
+            </div>
+
+            <!-- Photographer upload UI -->
+            <div v-if="oc.ownership === 'Photographer'" class="mb-3 d-flex align-items-center gap-2">
+              <input type="file" accept="image/*" multiple ref="fileInputRef" class="d-none" @change="onFilesChosen" />
+              <button class="btn btn-primary" :disabled="uploading" @click="openUploader">
+                <span v-if="!uploading">Загрузить фото</span>
+                <span v-else>Загрузка…</span>
+              </button>
+              <span v-if="uploadError" class="text-danger small">{{ uploadError }}</span>
+            </div>
+
+            <div v-if="filesLoading" class="text-secondary">Загрузка списка файлов…</div>
+            <div v-else>
+              <div v-if="filesError" class="text-danger">{{ filesError }}</div>
+              <div v-else>
+                <div v-if="!yandexItems.length" class="text-secondary">Файлы не найдены.</div>
+                <ul v-else class="list-group">
+                  <li v-for="it in yandexItems" :key="it.resource_id || it.path || it.name" class="list-group-item d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="badge" :class="it.type === 'dir' ? 'bg-secondary' : 'bg-primary'">{{ it.type === 'dir' ? 'Папка' : 'Файл' }}</span>
+                      <span>{{ it.name }}</span>
+                      <span v-if="it.size && it.type==='file'" class="text-secondary small">{{ (it.size/1024/1024).toFixed(2) }} MB</span>
+                    </div>
+                    <div>
+                      <button v-if="it.type==='file'" class="btn btn-sm btn-outline-primary" @click="() => downloadYandexItem(it)">Скачать</button>
+                    </div>
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
 
