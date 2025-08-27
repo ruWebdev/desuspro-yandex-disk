@@ -49,9 +49,26 @@ Route::middleware('auth')->group(function () {
         Route::get('/disk', [YandexDiskController::class, 'diskInfo'])->name('disk');
         Route::get('/list', [YandexDiskController::class, 'list'])->name('list');
         Route::post('/create-folder', [YandexDiskController::class, 'createFolder'])->name('create_folder');
+        Route::post('/move', [YandexDiskController::class, 'move'])->name('move');
         Route::delete('/delete', [YandexDiskController::class, 'delete'])->name('delete');
         Route::get('/download-url', [YandexDiskController::class, 'downloadUrl'])->name('download_url');
         Route::post('/upload', [YandexDiskController::class, 'upload'])->name('upload');
+    });
+
+    // Subtasks and comments should be available to authenticated users (Photographer/PhotoEditor/Manager)
+    Route::prefix('brands/{brand}/tasks/{task}')->group(function () {
+        // Subtasks
+        Route::get('/subtasks', [SubtaskController::class, 'index'])->name('brands.tasks.subtasks.index');
+        Route::post('/subtasks', [SubtaskController::class, 'store'])->name('brands.tasks.subtasks.store');
+        Route::put('/subtasks/{subtask}', [SubtaskController::class, 'update'])->name('brands.tasks.subtasks.update');
+        Route::delete('/subtasks/{subtask}', [SubtaskController::class, 'destroy'])->name('brands.tasks.subtasks.destroy');
+        Route::post('/subtasks/{subtask}/public-link', [SubtaskController::class, 'generatePublicLink'])->name('brands.tasks.subtasks.public_link');
+        Route::delete('/subtasks/{subtask}/public-link', [SubtaskController::class, 'removePublicLink'])->name('brands.tasks.subtasks.public_link.delete');
+
+        // Subtask comments
+        Route::get('/subtasks/{subtask}/comments', [\App\Http\Controllers\SubtaskCommentController::class, 'index'])->name('brands.tasks.subtasks.comments.index');
+        Route::post('/subtasks/{subtask}/comments', [\App\Http\Controllers\SubtaskCommentController::class, 'store'])->name('brands.tasks.subtasks.comments.store');
+        Route::delete('/subtasks/{subtask}/comments/{comment}', [\App\Http\Controllers\SubtaskCommentController::class, 'destroy'])->name('brands.tasks.subtasks.comments.destroy');
     });
 });
 
@@ -62,9 +79,7 @@ Route::middleware(['auth', 'role:Photographer'])->group(function () {
 });
 
 Route::middleware(['auth', 'role:PhotoEditor'])->group(function () {
-    Route::get('/photo-editor/tasks', function () {
-        return Inertia::render('PhotoEditor/Tasks');
-    })->name('photo_editor.tasks');
+    Route::get('/photo-editor/tasks', [\App\Http\Controllers\PhotoEditor\TasksController::class, 'index'])->name('photo_editor.tasks');
 });
 
 // Users by role (manager-only)
@@ -107,7 +122,7 @@ Route::middleware(['auth', 'role:Manager'])->group(function () {
     Route::put('/brands/{brand}', [BrandController::class, 'update'])->name('brands.update');
     Route::delete('/brands/{brand}', [BrandController::class, 'destroy'])->name('brands.destroy');
 
-    // Tasks (nested under brands)
+    // Tasks (nested under brands) - manager operations
     Route::prefix('brands/{brand}')->group(function () {
         Route::get('/tasks', [\App\Http\Controllers\TaskController::class, 'index'])->name('brands.tasks.index');
         Route::post('/tasks', [\App\Http\Controllers\TaskController::class, 'store'])->name('brands.tasks.store');
@@ -122,21 +137,6 @@ Route::middleware(['auth', 'role:Manager'])->group(function () {
         Route::get('/tasks/{task}/comments', [\App\Http\Controllers\TaskCommentController::class, 'index'])->name('brands.tasks.comments.index');
         Route::post('/tasks/{task}/comments', [\App\Http\Controllers\TaskCommentController::class, 'store'])->name('brands.tasks.comments.store');
         Route::delete('/tasks/{task}/comments/{comment}', [\App\Http\Controllers\TaskCommentController::class, 'destroy'])->name('brands.tasks.comments.destroy');
-
-        // Subtasks nested under a task
-        Route::prefix('tasks/{task}')->group(function () {
-            Route::get('/subtasks', [SubtaskController::class, 'index'])->name('brands.tasks.subtasks.index');
-            Route::post('/subtasks', [SubtaskController::class, 'store'])->name('brands.tasks.subtasks.store');
-            Route::put('/subtasks/{subtask}', [SubtaskController::class, 'update'])->name('brands.tasks.subtasks.update');
-            Route::delete('/subtasks/{subtask}', [SubtaskController::class, 'destroy'])->name('brands.tasks.subtasks.destroy');
-            Route::post('/subtasks/{subtask}/public-link', [SubtaskController::class, 'generatePublicLink'])->name('brands.tasks.subtasks.public_link');
-            Route::delete('/subtasks/{subtask}/public-link', [SubtaskController::class, 'removePublicLink'])->name('brands.tasks.subtasks.public_link.delete');
-
-            // Subtask comments
-            Route::get('/subtasks/{subtask}/comments', [\App\Http\Controllers\SubtaskCommentController::class, 'index'])->name('brands.tasks.subtasks.comments.index');
-            Route::post('/subtasks/{subtask}/comments', [\App\Http\Controllers\SubtaskCommentController::class, 'store'])->name('brands.tasks.subtasks.comments.store');
-            Route::delete('/subtasks/{subtask}/comments/{comment}', [\App\Http\Controllers\SubtaskCommentController::class, 'destroy'])->name('brands.tasks.subtasks.comments.destroy');
-        });
     });
 });
 

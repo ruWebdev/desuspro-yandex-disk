@@ -36,8 +36,10 @@ class HandleInertiaRequests extends Middleware
                     ? array_merge(
                         $request->user()->toArray(),
                         [
-                            // Provide role names as a simple array
-                            'roles' => $request->user()->getRoleNames(),
+                            // Provide role names as a simple array; guard if method missing
+                            'roles' => method_exists($request->user(), 'getRoleNames')
+                                ? $request->user()->getRoleNames()->toArray()
+                                : [],
                         ]
                     )
                     : null,

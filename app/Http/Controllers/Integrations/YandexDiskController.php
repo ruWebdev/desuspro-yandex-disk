@@ -171,6 +171,24 @@ class YandexDiskController extends Controller
         return response()->json($result);
     }
 
+    public function move(Request $request)
+    {
+        $data = $request->validate([
+            'from' => ['required','string'],
+            'to' => ['required','string'],
+            'overwrite' => ['sometimes','boolean'],
+        ]);
+        $token = $this->requireToken($request);
+        $token = $this->disk->ensureValidToken($token);
+        $res = $this->disk->moveResource(
+            $token->access_token,
+            (string) $request->string('from'),
+            (string) $request->string('to'),
+            (bool) $request->boolean('overwrite', false)
+        );
+        return response()->json($res);
+    }
+
     private function requireToken(Request $request): YandexToken
     {
         // Fetch a shared/global token (most recently updated)

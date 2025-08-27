@@ -45,6 +45,14 @@ function statusClass(status, hasAssignee) {
   return hasAssignee ? 'bg-primary' : 'bg-secondary';
 }
 
+// Find assignee FIO by id per ownership
+function assigneeNameById(ownership, id) {
+  if (!id) return '';
+  const list = ownership === 'Photographer' ? (props.assignees?.Photographer || []) : (props.assignees?.PhotoEditor || []);
+  const u = list.find(x => x.id === id);
+  return u?.name || '';
+}
+
 function updateListSubtask(taskId, ownership, patch) {
   const t = props.tasks.find(x => x.id === taskId);
   if (!t || !Array.isArray(t.subtasks)) return;
@@ -262,19 +270,16 @@ async function copyFolderPath() {
 }
 
 function yandexFolderPath() {
-  if (!oc.value.brandName || !oc.value.taskName) return null;
-  const base = `${oc.value.brandName}/${oc.value.taskName}`;
-  const suffix = oc.value.ownership === 'Photographer' ? `ф_${oc.value.taskName}` : `д_${oc.value.taskName}`;
-  return `disk:/${base}/${suffix}`;
+  if (!oc.value.brandName || !currentSubtask.value?.name) return null;
+  // New format: BRAND/ф_SubtaskName or BRAND/д_SubtaskName (no Task folder)
+  const prefix = oc.value.ownership === 'Photographer' ? 'ф_' : 'д_';
+  return `disk:/${oc.value.brandName}/${prefix}${currentSubtask.value.name}`;
 }
 
 function yandexBrowserUrl() {
-  if (!oc.value.brandName || !oc.value.taskName) return '';
-  const parts = [
-    oc.value.brandName,
-    oc.value.taskName,
-    oc.value.ownership === 'Photographer' ? `ф_${oc.value.taskName}` : `д_${oc.value.taskName}`,
-  ];
+  if (!oc.value.brandName || !currentSubtask.value?.name) return '';
+  const prefix = oc.value.ownership === 'Photographer' ? 'ф_' : 'д_';
+  const parts = [oc.value.brandName, `${prefix}${currentSubtask.value.name}`];
   const encoded = parts.map(p => encodeURIComponent(p));
   return `https://disk.yandex.ru/client/disk/${encoded.join('/')}`;
 }
@@ -337,7 +342,7 @@ async function downloadYandexItem(item) {
   } catch (e) { console.error(e); }
 }
 
-function openOffcanvas(task, ownership) {
+function openOffcanvasTab(task, ownership, tab) {
   const brandName = task.brand?.name || (props.brands.find(b => b.id === task.brand_id)?.name) || '';
   oc.value = {
     brandId: task.brand_id,
@@ -348,7 +353,7 @@ function openOffcanvas(task, ownership) {
   };
   offcanvasOpen.value = true;
   // Load comments for the selected subtask
-  activeOcTab.value = 'comments';
+  activeOcTab.value = tab || 'comments';
   subtaskId.value = null;
   currentSubtask.value = null;
   comments.value = [];
@@ -357,9 +362,11 @@ function openOffcanvas(task, ownership) {
   selectedAssigneeId.value = null;
   lastAssigneeId = null;
   loadSubtaskAndComments(task.id, ownership);
-  loadYandexFiles();
   if (offcanvasInstance) offcanvasInstance.show();
 }
+
+function openOffcanvas(task, ownership) { openOffcanvasTab(task, ownership, 'comments'); }
+function openFilesOffcanvas(task, ownership) { openOffcanvasTab(task, ownership, 'files'); }
 
 async function loadSubtaskAndComments(taskId, ownership) {
   try {
@@ -376,6 +383,7 @@ async function loadSubtaskAndComments(taskId, ownership) {
     selectedAssigneeId.value = aid;
     lastAssigneeId = aid;
     await loadComments();
+    await loadYandexFiles();
   } catch (e) {
     console.error(e);
   } finally {
@@ -494,8 +502,8 @@ function submitDelete() {
               <tr>
                 <th>Задание</th>
                 <th>Бренд</th>
-                <th class="w-1">Подзадание Ф</th>
-                <th class="w-1">Подзадание Д</th>
+                <th class="w-1">Фотограф</th>
+                <th class="w-1">Дизайнер</th>
                 <th>Создан</th>
                 <th class="w-1">ДЕЙСТВИЯ</th>
               </tr>
@@ -509,27 +517,39 @@ function submitDelete() {
                 <td>{{t.brand?.name || (brands.find(b => b.id === t.brand_id)?.name)}}</td>
                 <td class="text-nowrap">
                   <div class="btn-list d-flex flex-nowrap align-items-center gap-2" style="white-space: nowrap;">
-                    <span v-if="subtaskByOwnership(t, 'Photographer')" class="badge text-light"
-                      :class="statusClass(subtaskByOwnership(t, 'Photographer').status, !!subtaskByOwnership(t, 'Photographer').assignee_id)">{{
-                        statusLabel(subtaskByOwnership(t, 'Photographer').status, !!subtaskByOwnership(t,
-                          'Photographer').assignee_id)
-                      }}</span>
-                    <button class="btn btn-opacity-primary btn-sm" @click="openOffcanvas(t, 'Photographer')"
-                      title="Открыть подзадачу: ФОТОГРАФ">
-                      Детали
+                    <template v-if="subtaskByOwnership(t, 'Photographer')">
+                      <span v-if="subtaskByOwnership(t, 'Photographer').assignee_id" class="me-1 text-secondary">
+                        {{ assigneeNameById('Photographer', subtaskByOwnership(t, 'Photographer').assignee_id) }}
+                      </span>
+                      <button class="btn btn-sm text-light"
+                        :class="statusClass(subtaskByOwnership(t, 'Photographer').status, !!subtaskByOwnership(t, 'Photographer').assignee_id)"
+                        @click="openOffcanvas(t, 'Photographer')"
+                        title="Открыть подзадачу: ФОТОГРАФ (Информация)">
+                        {{ statusLabel(subtaskByOwnership(t, 'Photographer').status, !!subtaskByOwnership(t, 'Photographer').assignee_id) }}
+                      </button>
+                    </template>
+                    <button class="btn btn-opacity-primary btn-sm" @click="openFilesOffcanvas(t, 'Photographer')"
+                      title="Открыть подзадачу: ФОТОГРАФ (Файлы)">
+                      Файлы
                     </button>
                   </div>
                 </td>
                 <td class="text-nowrap">
                   <div class="btn-list d-flex flex-nowrap align-items-center gap-2" style="white-space: nowrap;">
-                    <span v-if="subtaskByOwnership(t, 'PhotoEditor')" class="badge text-light"
-                      :class="statusClass(subtaskByOwnership(t, 'PhotoEditor').status, !!subtaskByOwnership(t, 'PhotoEditor').assignee_id)">{{
-                        statusLabel(subtaskByOwnership(t, 'PhotoEditor').status, !!subtaskByOwnership(t,
-                          'PhotoEditor').assignee_id)
-                      }}</span>
-                    <button class="btn btn-opacity-purple btn-sm" @click="openOffcanvas(t, 'PhotoEditor')"
-                      title="Открыть подзадачу: ФОТОРЕДАКТОР">
-                      Детали
+                    <template v-if="subtaskByOwnership(t, 'PhotoEditor')">
+                      <span v-if="subtaskByOwnership(t, 'PhotoEditor').assignee_id" class="me-1 text-secondary">
+                        {{ assigneeNameById('PhotoEditor', subtaskByOwnership(t, 'PhotoEditor').assignee_id) }}
+                      </span>
+                      <button class="btn btn-sm text-light"
+                        :class="statusClass(subtaskByOwnership(t, 'PhotoEditor').status, !!subtaskByOwnership(t, 'PhotoEditor').assignee_id)"
+                        @click="openOffcanvas(t, 'PhotoEditor')"
+                        title="Открыть подзадачу: ФОТОРЕДАКТОР (Информация)">
+                        {{ statusLabel(subtaskByOwnership(t, 'PhotoEditor').status, !!subtaskByOwnership(t, 'PhotoEditor').assignee_id) }}
+                      </button>
+                    </template>
+                    <button class="btn btn-opacity-purple btn-sm" @click="openFilesOffcanvas(t, 'PhotoEditor')"
+                      title="Открыть подзадачу: ФОТОРЕДАКТОР (Файлы)">
+                      Файлы
                     </button>
                   </div>
                 </td>
@@ -665,16 +685,17 @@ function submitDelete() {
             <div class="mb-3 d-flex gap-2 align-items-end">
               <div class="flex-grow-1">
                 <label class="form-label">Исполнитель ({{ oc.ownership === 'Photographer' ? 'Фотограф' : 'Фоторедактор'
-                }})</label>
+                  }})</label>
                 <select class="form-select" v-model="selectedAssigneeId">
                   <option :value="null">— Не назначено —</option>
-                  <option v-for="u in assigneeOptions[oc.ownership]" :key="u.id" :value="u.id">{{ assigneeLabel(u) }}</option>
+                  <option v-for="u in assigneeOptions[oc.ownership]" :key="u.id" :value="u.id">{{ assigneeLabel(u) }}
+                  </option>
                 </select>
               </div>
               <div>
                 <button class="btn btn-primary" :disabled="!canSaveAssignee" @click="saveAssignee">{{
                   assigneeButtonLabel
-                }}</button>
+                  }}</button>
               </div>
             </div>
             <div v-if="commentsLoading" class="text-secondary">Загрузка комментариев…</div>
@@ -749,7 +770,8 @@ function submitDelete() {
               </div>
               <div class="modal-footer">
                 <button type="button" class="btn me-auto" @click="cancelRename">Отмена</button>
-                <button type="button" class="btn btn-primary" :disabled="!renameName.trim()" @click="submitRename">Сохранить</button>
+                <button type="button" class="btn btn-primary" :disabled="!renameName.trim()"
+                  @click="submitRename">Сохранить</button>
               </div>
             </div>
           </div>

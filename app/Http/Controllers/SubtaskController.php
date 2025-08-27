@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Brand;
 use App\Models\Task;
 use App\Models\Subtask;
+use App\Models\YandexToken;
+use App\Services\YandexDiskService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -79,7 +81,47 @@ class SubtaskController extends Controller
         if (array_key_exists('assignee_id', $data) && !array_key_exists('status', $data)) {
             $data['status'] = $data['assignee_id'] ? 'assigned' : 'unassigned';
         }
+
+        // Capture originals before change
+        $originalName = $subtask->name;
+        $originalOwnership = $subtask->ownership;
+
+        // Compute new values without persisting yet
+        $newName = array_key_exists('name', $data) ? $data['name'] : $subtask->name;
+        $newOwnership = array_key_exists('ownership', $data) ? $data['ownership'] : $subtask->ownership;
+
+        // Attempt Yandex Disk move when name/ownership changed and names are present
+        $fromPath = null; $toPath = null;
+        $brandRoot = $brand->name; // Root folder is the brand name
+
+        $prefix = function (?string $ownership): string {
+            return $ownership === 'Photographer' ? 'ф_' : ($ownership === 'PhotoEditor' ? 'д_' : '');
+        };
+
+        if (!empty($originalName) && !empty($newName)) {
+            $oldPrefix = $prefix($originalOwnership);
+            $newPrefix = $prefix($newOwnership);
+            $fromPath = $brandRoot.'/'.($oldPrefix.$originalName);
+            $toPath = $brandRoot.'/'.($newPrefix.$newName);
+        }
+
+        // Persist changes first; move does not depend on DB transaction here
         $subtask->fill($data)->save();
+
+        if ($fromPath && $toPath && $fromPath !== $toPath) {
+            try {
+                $token = YandexToken::orderByDesc('updated_at')->first();
+                if ($token) {
+                    $service = app(YandexDiskService::class);
+                    $token = $service->ensureValidToken($token);
+                    $service->moveResource($token->access_token, $fromPath, $toPath, false);
+                }
+                // If there is no token or move fails silently, we just continue; UI can refresh later
+            } catch (\Throwable $e) {
+                // Swallow Yandex errors for now to not block subtask update
+                // Consider logging: \Log::warning('Yandex move failed', [...]) if logger available
+            }
+        }
         return back()->with('status', 'subtask-updated');
     }
 

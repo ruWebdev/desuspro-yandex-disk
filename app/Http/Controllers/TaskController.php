@@ -170,7 +170,7 @@ class TaskController extends Controller
                 $sub->save();
             }
 
-            // Also rename corresponding Yandex.Disk folders
+            // Also rename corresponding Yandex.Disk folders (Brand/ф_|д_ without Task folder)
             try {
                 $token = YandexToken::orderByDesc('updated_at')->first();
                 if ($token) {
@@ -179,26 +179,18 @@ class TaskController extends Controller
                     $oldTaskName = $this->sanitizeName($originalName);
                     $newTaskName = $this->sanitizeName($newBase);
 
-                    $oldTaskPath = '/' . $brandName . '/' . $oldTaskName;
-                    $newTaskPath = '/' . $brandName . '/' . $newTaskName;
+                    // Old/new subtask names reflect suffixes we just applied above
+                    $oldPhotographerSub = $oldTaskName . '_Ф';
+                    $oldEditorSub = $oldTaskName . '_Р';
+                    $newPhotographerSub = $newTaskName . '_Ф';
+                    $newEditorSub = $newTaskName . '_Р';
 
-                    // Move the main task folder (if exists)
-                    try {
-                        $this->disk->moveResource($token->access_token, $oldTaskPath, $newTaskPath, true);
-                    } catch (\Throwable $e) {
-                        // Log but don't fail
-                        Log::warning('Yandex move main task folder failed', [
-                            'from' => $oldTaskPath,
-                            'to' => $newTaskPath,
-                            'message' => $e->getMessage(),
-                        ]);
-                    }
-
-                    // Rename subfolders inside the (new) task folder
-                    $oldPh = $newTaskPath . '/ф_' . $oldTaskName;
-                    $newPh = $newTaskPath . '/ф_' . $newTaskName;
-                    $oldEd = $newTaskPath . '/д_' . $oldTaskName;
-                    $newEd = $newTaskPath . '/д_' . $newTaskName;
+                    // Move Brand/ф_{oldPhotographerSub} -> Brand/ф_{newPhotographerSub}
+                    $oldPh = '/' . $brandName . '/ф_' . $oldPhotographerSub;
+                    $newPh = '/' . $brandName . '/ф_' . $newPhotographerSub;
+                    // Move Brand/д_{oldEditorSub} -> Brand/д_{newEditorSub}
+                    $oldEd = '/' . $brandName . '/д_' . $oldEditorSub;
+                    $newEd = '/' . $brandName . '/д_' . $newEditorSub;
 
                     foreach ([[$oldPh, $newPh], [$oldEd, $newEd]] as [$from, $to]) {
                         try {
@@ -293,8 +285,8 @@ class TaskController extends Controller
 
     /**
      * Create folder structure on Yandex.Disk:
-     * /{BrandName}/{TaskName}/ф_{TaskName} and /д_{TaskName}
-     * Silently logs and continues on errors (e.g., no token, already exists).
+     * /{BrandName}/ф_{SubtaskNamePhotographer} and /{BrandName}/д_{SubtaskNameEditor}
+     * No intermediate Task folder. Silently logs and continues on errors.
      */
     private function createYandexFolderStructure(Request $request, Brand $brand, Task $task): void
     {
@@ -310,20 +302,21 @@ class TaskController extends Controller
             $brandName = $this->sanitizeName($brand->name);
             $taskName = $this->sanitizeName($task->name);
 
-            $brandPath = '/'.$brandName;
-            $taskPath = $brandPath.'/'.$taskName;
-            $subPhotographer = $taskPath.'/'.'ф_'.$taskName;
-            $subEditor = $taskPath.'/'.'д_'.$taskName;
+            // Subtask names are created as TaskName_Ф and TaskName_Р
+            $photographerSubName = $taskName . '_Ф';
+            $editorSubName = $taskName . '_Р';
+
+            $brandPath = '/' . $brandName;
+            $subPhotographer = $brandPath . '/' . 'ф_' . $photographerSubName;
+            $subEditor = $brandPath . '/' . 'д_' . $editorSubName;
 
             Log::info('Creating Yandex.Disk folder structure', [
                 'brandPath' => $brandPath,
-                'taskPath' => $taskPath,
                 'subPhotographer' => $subPhotographer,
                 'subEditor' => $subEditor,
             ]);
 
             $this->ensureFolder($token->access_token, $brandPath);
-            $this->ensureFolder($token->access_token, $taskPath);
             $this->ensureFolder($token->access_token, $subPhotographer);
             $this->ensureFolder($token->access_token, $subEditor);
         } catch (\Throwable $e) {
