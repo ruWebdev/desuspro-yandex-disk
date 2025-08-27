@@ -23,6 +23,36 @@ const displayedTasks = computed(() => {
   });
 });
 
+// Subtask helpers and status mapping
+function subtaskByOwnership(task, ownership) {
+  return (task?.subtasks || []).find(s => s.ownership === ownership) || null;
+}
+
+function statusLabel(status, hasAssignee) {
+  // If explicit states
+  if (status === 'on_review') return 'На проверку';
+  if (status === 'accepted') return 'Принята';
+  if (status === 'rejected') return 'Не принята';
+  // Derive from assignee when status not in explicit terminal states
+  if (!hasAssignee) return 'Не назначено';
+  return 'Назначено';
+}
+
+function statusClass(status, hasAssignee) {
+  if (status === 'on_review') return 'bg-warning';
+  if (status === 'accepted') return 'bg-success';
+  if (status === 'rejected') return 'bg-danger';
+  return hasAssignee ? 'bg-primary' : 'bg-secondary';
+}
+
+function updateListSubtask(taskId, ownership, patch) {
+  const t = props.tasks.find(x => x.id === taskId);
+  if (!t || !Array.isArray(t.subtasks)) return;
+  const st = t.subtasks.find(s => s.ownership === ownership);
+  if (!st) return;
+  Object.assign(st, patch || {});
+}
+
 // Create task modal/form
 const modalOpen = ref(false);
 const createForm = ref({ name: '', brand_id: '', ownership: 'Photographer' });
@@ -118,23 +148,83 @@ const assigneeOptions = computed(() => ({
   Photographer: props.assignees?.Photographer || [],
   PhotoEditor: props.assignees?.PhotoEditor || [],
 }));
+function assigneeLabel(u) {
+  return u?.name + (u?.is_blocked ? ' — ЗАБЛОКИРОВАН' : '');
+}
 const selectedAssigneeId = ref(null);
 let lastAssigneeId = null;
 const canSaveAssignee = computed(() => (selectedAssigneeId.value ?? null) !== (lastAssigneeId ?? null));
 const assigneeButtonLabel = computed(() => lastAssigneeId ? 'Изменить' : 'Сохранить');
+
+// Reassign confirm modal state
+const showReassign = ref(false);
+const pendingAssigneeId = ref(null);
+function openReassignConfirm(newId) { pendingAssigneeId.value = newId; showReassign.value = true; }
+function cancelReassign() { showReassign.value = false; pendingAssigneeId.value = null; }
+function confirmReassign() {
+  if (pendingAssigneeId.value === undefined || pendingAssigneeId.value === null) return;
+  doSaveAssignee(pendingAssigneeId.value);
+  cancelReassign();
+}
 function saveAssignee() {
   const newId = selectedAssigneeId.value ? Number(selectedAssigneeId.value) : null;
   if (lastAssigneeId && lastAssigneeId !== newId) {
-    const ok = window.confirm('Переназначить исполнителя? Текущее назначение будет изменено.');
-    if (!ok) return;
+    openReassignConfirm(newId);
+    return;
   }
+  doSaveAssignee(newId);
+}
+function doSaveAssignee(newId) {
   if (!oc.value.taskId || !subtaskId.value) return;
   router.put(
     route('brands.tasks.subtasks.update', { brand: oc.value.brandId, task: oc.value.taskId, subtask: subtaskId.value }),
     { assignee_id: newId },
     {
       preserveScroll: true,
-      onSuccess: () => { lastAssigneeId = newId; },
+      onSuccess: () => {
+        lastAssigneeId = newId;
+        if (currentSubtask.value) {
+          currentSubtask.value.assignee_id = newId;
+          // reflect status change locally per backend auto-logic
+          currentSubtask.value.status = newId ? 'assigned' : 'unassigned';
+          updateListSubtask(oc.value.taskId, oc.value.ownership, { assignee_id: newId, status: currentSubtask.value.status });
+        }
+      },
+      onError: () => { selectedAssigneeId.value = lastAssigneeId; },
+    }
+  );
+}
+
+function acceptSubtask() {
+  if (!subtaskId.value) return;
+  router.put(
+    route('brands.tasks.subtasks.update', { brand: oc.value.brandId, task: oc.value.taskId, subtask: subtaskId.value }),
+    { status: 'accepted' },
+    {
+      preserveScroll: true,
+      onSuccess: () => {
+        if (currentSubtask.value) {
+          currentSubtask.value.status = 'accepted';
+          updateListSubtask(oc.value.taskId, oc.value.ownership, { status: 'accepted' });
+        }
+      },
+    }
+  );
+}
+
+function rejectSubtask() {
+  if (!subtaskId.value) return;
+  router.put(
+    route('brands.tasks.subtasks.update', { brand: oc.value.brandId, task: oc.value.taskId, subtask: subtaskId.value }),
+    { status: 'rejected' },
+    {
+      preserveScroll: true,
+      onSuccess: () => {
+        if (currentSubtask.value) {
+          currentSubtask.value.status = 'rejected';
+          updateListSubtask(oc.value.taskId, oc.value.ownership, { status: 'rejected' });
+        }
+      },
     }
   );
 }
@@ -174,7 +264,7 @@ async function copyFolderPath() {
 function yandexFolderPath() {
   if (!oc.value.brandName || !oc.value.taskName) return null;
   const base = `${oc.value.brandName}/${oc.value.taskName}`;
-  const suffix = oc.value.ownership === 'Photographer' ? `${oc.value.taskName}_Ф` : `${oc.value.taskName}_Р`;
+  const suffix = oc.value.ownership === 'Photographer' ? `ф_${oc.value.taskName}` : `д_${oc.value.taskName}`;
   return `disk:/${base}/${suffix}`;
 }
 
@@ -183,7 +273,7 @@ function yandexBrowserUrl() {
   const parts = [
     oc.value.brandName,
     oc.value.taskName,
-    oc.value.ownership === 'Photographer' ? `${oc.value.taskName}_Ф` : `${oc.value.taskName}_Р`,
+    oc.value.ownership === 'Photographer' ? `ф_${oc.value.taskName}` : `д_${oc.value.taskName}`,
   ];
   const encoded = parts.map(p => encodeURIComponent(p));
   return `https://disk.yandex.ru/client/disk/${encoded.join('/')}`;
@@ -332,10 +422,24 @@ function downloadTaskFiles() {
 }
 
 // Row actions: edit / delete
+// Rename modal state
+const showRename = ref(false);
+const renaming = ref(null);
+const renameName = ref('');
 function onEditTask(t) {
-  const name = window.prompt('Новое наименование задания', t.name || '');
+  renaming.value = t;
+  renameName.value = t?.name || '';
+  showRename.value = true;
+}
+function cancelRename() { showRename.value = false; renaming.value = null; renameName.value = ''; }
+function submitRename() {
+  if (!renaming.value) return;
+  const name = (renameName.value || '').trim();
   if (!name) return;
-  router.put(route('brands.tasks.update', { brand: t.brand_id, task: t.id }), { name });
+  router.put(route('brands.tasks.update', { brand: renaming.value.brand_id, task: renaming.value.id }), { name }, {
+    preserveScroll: true,
+    onSuccess: () => { cancelRename(); },
+  });
 }
 
 function onDeleteTask(t) {
@@ -390,8 +494,8 @@ function submitDelete() {
               <tr>
                 <th>Задание</th>
                 <th>Бренд</th>
-                <th>Статус</th>
-                <th class="w-1">ПОДЗАДАНИЯ</th>
+                <th class="w-1">Подзадание Ф</th>
+                <th class="w-1">Подзадание Д</th>
                 <th>Создан</th>
                 <th class="w-1">ДЕЙСТВИЯ</th>
               </tr>
@@ -403,22 +507,29 @@ function submitDelete() {
               <tr v-for="t in displayedTasks" :key="t.id">
                 <td>{{ t.name }}</td>
                 <td>{{t.brand?.name || (brands.find(b => b.id === t.brand_id)?.name)}}</td>
-                <td>
-                  <span class="badge" :class="{
-                    'bg-secondary': t.status === 'created' || !t.status,
-                    'bg-blue': t.status === 'assigned',
-                    'bg-green': t.status === 'done',
-                  }">{{ t.status || 'created' }}</span>
+                <td class="text-nowrap">
+                  <div class="btn-list d-flex flex-nowrap align-items-center gap-2" style="white-space: nowrap;">
+                    <span v-if="subtaskByOwnership(t, 'Photographer')" class="badge text-light"
+                      :class="statusClass(subtaskByOwnership(t, 'Photographer').status, !!subtaskByOwnership(t, 'Photographer').assignee_id)">{{
+                        statusLabel(subtaskByOwnership(t, 'Photographer').status, !!subtaskByOwnership(t,
+                          'Photographer').assignee_id)
+                      }}</span>
+                    <button class="btn btn-opacity-primary btn-sm" @click="openOffcanvas(t, 'Photographer')"
+                      title="Открыть подзадачу: ФОТОГРАФ">
+                      Детали
+                    </button>
+                  </div>
                 </td>
                 <td class="text-nowrap">
                   <div class="btn-list d-flex flex-nowrap align-items-center gap-2" style="white-space: nowrap;">
-                    <button class="btn btn-ghost-primary btn-sm" @click="openOffcanvas(t, 'Photographer')"
-                      title="Открыть подзадачу: ФОТОГРАФ">
-                      ФОТОГРАФ
-                    </button>
-                    <button class="btn btn-ghost-purple btn-sm" @click="openOffcanvas(t, 'PhotoEditor')"
+                    <span v-if="subtaskByOwnership(t, 'PhotoEditor')" class="badge text-light"
+                      :class="statusClass(subtaskByOwnership(t, 'PhotoEditor').status, !!subtaskByOwnership(t, 'PhotoEditor').assignee_id)">{{
+                        statusLabel(subtaskByOwnership(t, 'PhotoEditor').status, !!subtaskByOwnership(t,
+                          'PhotoEditor').assignee_id)
+                      }}</span>
+                    <button class="btn btn-opacity-purple btn-sm" @click="openOffcanvas(t, 'PhotoEditor')"
                       title="Открыть подзадачу: ФОТОРЕДАКТОР">
-                      ФОТОРЕДАКТОР
+                      Детали
                     </button>
                   </div>
                 </td>
@@ -536,17 +647,34 @@ function submitDelete() {
           </div>
 
           <div v-else>
+            <!-- Current subtask status and actions -->
+            <div class="mb-3" v-if="currentSubtask">
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="text-secondary">Статус:</span>
+                <span class="badge text-light"
+                  :class="statusClass(currentSubtask.status, !!currentSubtask.assignee_id)">
+                  {{ statusLabel(currentSubtask.status, !!currentSubtask.assignee_id) }}
+                </span>
+                <template v-if="currentSubtask.status === 'on_review'">
+                  <button class="btn btn-success btn-sm" @click="acceptSubtask">Принять</button>
+                  <button class="btn btn-danger btn-sm" @click="rejectSubtask">Отклонить</button>
+                </template>
+              </div>
+            </div>
             <!-- Executor dropdown + action button -->
             <div class="mb-3 d-flex gap-2 align-items-end">
               <div class="flex-grow-1">
-                <label class="form-label">Исполнитель ({{ oc.ownership === 'Photographer' ? 'Фотограф' : 'Фоторедактор' }})</label>
+                <label class="form-label">Исполнитель ({{ oc.ownership === 'Photographer' ? 'Фотограф' : 'Фоторедактор'
+                }})</label>
                 <select class="form-select" v-model="selectedAssigneeId">
                   <option :value="null">— Не назначено —</option>
-                  <option v-for="u in assigneeOptions[oc.ownership]" :key="u.id" :value="u.id">{{ u.name }}</option>
+                  <option v-for="u in assigneeOptions[oc.ownership]" :key="u.id" :value="u.id">{{ assigneeLabel(u) }}</option>
                 </select>
               </div>
               <div>
-                <button class="btn btn-primary" :disabled="!canSaveAssignee" @click="saveAssignee">{{ assigneeButtonLabel }}</button>
+                <button class="btn btn-primary" :disabled="!canSaveAssignee" @click="saveAssignee">{{
+                  assigneeButtonLabel
+                }}</button>
               </div>
             </div>
             <div v-if="commentsLoading" class="text-secondary">Загрузка комментариев…</div>
@@ -575,7 +703,59 @@ function submitDelete() {
         </div>
       </div>
       <!-- Fallback backdrop when Bootstrap Offcanvas is not available -->
-      <div v-if="offcanvasOpen && !hasOffcanvas" class="modal-backdrop fade show" style="z-index: 1040;" @click="closeOffcanvas"></div>
+      <div v-if="offcanvasOpen && !hasOffcanvas" class="modal-backdrop fade show" style="z-index: 1040;"
+        @click="closeOffcanvas"></div>
+    </teleport>
+
+    <!-- Reassign confirm Modal -->
+    <teleport to="body">
+      <div v-if="showReassign">
+        <div class="modal modal-blur fade show d-block" tabindex="-1" role="dialog" style="z-index: 1050;">
+          <div class="modal-dialog" role="document">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Переназначить исполнителя</h5>
+                <button type="button" class="btn-close" aria-label="Close" @click="cancelReassign"></button>
+              </div>
+              <div class="modal-body">
+                Переназначить исполнителя? Текущее назначение будет изменено.
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn me-auto" @click="cancelReassign">Отмена</button>
+                <button type="button" class="btn btn-primary" @click="confirmReassign">Переназначить</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-backdrop fade show" style="z-index: 1040;" @click="cancelReassign"></div>
+      </div>
+    </teleport>
+
+    <!-- Rename Task Modal -->
+    <teleport to="body">
+      <div v-if="showRename && renaming">
+        <div class="modal modal-blur fade show d-block" tabindex="-1" role="dialog" style="z-index: 1050;">
+          <div class="modal-dialog" role="document">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Переименовать задание</h5>
+                <button type="button" class="btn-close" aria-label="Close" @click="cancelRename"></button>
+              </div>
+              <div class="modal-body">
+                <div class="mb-2">
+                  <label class="form-label">Новое наименование</label>
+                  <input type="text" class="form-control" v-model="renameName" />
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn me-auto" @click="cancelRename">Отмена</button>
+                <button type="button" class="btn btn-primary" :disabled="!renameName.trim()" @click="submitRename">Сохранить</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-backdrop fade show" style="z-index: 1040;" @click="cancelRename"></div>
+      </div>
     </teleport>
 
     <!-- Create Task Modal -->

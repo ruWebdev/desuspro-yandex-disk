@@ -243,4 +243,24 @@ class YandexDiskService
 
         return ['success' => true, 'path' => $path];
     }
+
+    /**
+     * Move or rename a resource on Yandex.Disk.
+     * $from and $to are paths; set $overwrite to true to replace existing.
+     */
+    public function moveResource(string $accessToken, string $from, string $to, bool $overwrite = false): array
+    {
+        $res = Http::withHeaders($this->authHeaders($accessToken))
+            ->post($this->apiBase.'/resources/move', [
+                'from' => $this->normalizePath($from),
+                'path' => $this->normalizePath($to),
+                'overwrite' => $overwrite ? 'true' : 'false',
+            ])->throw();
+
+        // 201 Created or 202 Accepted are success for async moves
+        if (in_array($res->status(), [201, 202, 200])) {
+            return ['success' => true];
+        }
+        return $res->json();
+    }
 }

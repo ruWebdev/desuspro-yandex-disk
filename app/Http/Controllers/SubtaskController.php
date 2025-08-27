@@ -38,7 +38,8 @@ class SubtaskController extends Controller
         abort_unless($task->brand_id === $brand->id, 404);
         $data = $request->validate([
             'name' => ['nullable','string','max:255'],
-            'status' => ['nullable','in:created,accepted,rejected'],
+            // Support extended statuses
+            'status' => ['nullable','in:created,unassigned,assigned,on_review,accepted,rejected'],
             'ownership' => ['nullable','in:Photographer,PhotoEditor'],
             'assignee_id' => ['nullable','exists:users,id'],
             'comment' => ['nullable','string'],
@@ -48,7 +49,8 @@ class SubtaskController extends Controller
         Subtask::create([
             'task_id' => $task->id,
             'name' => $data['name'] ?? null,
-            'status' => $data['status'] ?? 'created',
+            // default to 'unassigned' if not provided
+            'status' => $data['status'] ?? 'unassigned',
             'ownership' => $data['ownership'] ?? null,
             'assignee_id' => $data['assignee_id'] ?? null,
             'comment' => $data['comment'] ?? null,
@@ -66,12 +68,17 @@ class SubtaskController extends Controller
         abort_unless($task->brand_id === $brand->id && $subtask->task_id === $task->id, 404);
         $data = $request->validate([
             'name' => ['sometimes','nullable','string','max:255'],
-            'status' => ['sometimes','required','in:created,accepted,rejected'],
+            // Support extended statuses
+            'status' => ['sometimes','required','in:created,unassigned,assigned,on_review,accepted,rejected'],
             'ownership' => ['sometimes','nullable','in:Photographer,PhotoEditor'],
             'assignee_id' => ['sometimes','nullable','exists:users,id'],
             'comment' => ['sometimes','nullable','string'],
             'highlighted' => ['sometimes','boolean'],
         ]);
+        // If assignee_id changes and status not explicitly provided, set status accordingly
+        if (array_key_exists('assignee_id', $data) && !array_key_exists('status', $data)) {
+            $data['status'] = $data['assignee_id'] ? 'assigned' : 'unassigned';
+        }
         $subtask->fill($data)->save();
         return back()->with('status', 'subtask-updated');
     }

@@ -99,6 +99,7 @@ function submitDelete() {
 </script>
 
 <template>
+
   <Head title="Бренды" />
   <TablerLayout>
     <template #header>Бренды</template>
@@ -117,12 +118,15 @@ function submitDelete() {
                   <div class="ms-auto d-flex flex-wrap btn-list">
                     <div class="input-group input-group-flat w-auto me-2">
                       <span class="input-group-text">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                          class="icon icon-1">
                           <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
                           <path d="M21 21l-6 -6" />
                         </svg>
                       </span>
-                      <input v-model="searchQuery" type="text" class="form-control" autocomplete="off" placeholder="Поиск по наименованию" />
+                      <input v-model="searchQuery" type="text" class="form-control" autocomplete="off"
+                        placeholder="Поиск по наименованию" />
                     </div>
                     <button class="btn btn-primary" @click="openCreate">Добавить</button>
                   </div>
@@ -151,17 +155,21 @@ function submitDelete() {
                     <td>
                       <div class="btn-list flex-nowrap">
                         <Link class="btn btn-outline-primary btn-sm" :href="route('brands.tasks.index', b.id)">
-                          Задачи
+                        Задания
                         </Link>
                         <button class="btn btn-ghost-primary btn-icon" aria-label="Редактировать" @click="startEdit(b)">
-                          <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24"
+                            viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
+                            stroke-linecap="round" stroke-linejoin="round">
                             <path stroke="none" d="M0 0h24v24H0z" fill="none" />
                             <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
                             <path d="M13.5 6.5l4 4" />
                           </svg>
                         </button>
                         <button class="btn btn-ghost-danger btn-icon" aria-label="Удалить" @click="startDelete(b)">
-                          <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24"
+                            viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
+                            stroke-linecap="round" stroke-linejoin="round">
                             <path stroke="none" d="M0 0h24v24H0z" fill="none" />
                             <path d="M4 7h16" />
                             <path d="M10 11v6" />
