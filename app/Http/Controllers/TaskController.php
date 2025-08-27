@@ -142,7 +142,9 @@ class TaskController extends Controller
     public function destroy(Brand $brand, Task $task): RedirectResponse
     {
         abort_unless($task->brand_id === $brand->id, 404);
-        // Remove files folder
+        // Remove Yandex.Disk folder (best-effort)
+        $this->deleteYandexFolderStructure($brand, $task);
+        // Remove local files folder
         Storage::disk('public')->deleteDirectory("tasks/{$task->id}");
         $task->delete();
         return back()->with('status', 'task-deleted');
@@ -278,6 +280,49 @@ class TaskController extends Controller
                 'body' => $body,
             ]);
             throw $ex; // rethrow other errors
+        }
+    }
+
+    /**
+     * Delete the task's folder on Yandex.Disk according to the current structure rules.
+     * Brand/TypePrefix_{Article}
+     */
+    private function deleteYandexFolderStructure(Brand $brand, Task $task): void
+    {
+        try {
+            $token = \App\Models\YandexToken::orderByDesc('updated_at')->first();
+            if (!$token) { return; }
+            $token = $this->disk->ensureValidToken($token);
+
+            $type = $task->type; // relation loaded lazily
+            $article = $task->article;
+
+            $brandName = $this->sanitizeName($brand->name);
+            $typeName = $this->sanitizeName(optional($type)->name ?? 'Тип');
+            $articleName = $this->sanitizeName(optional($article)->name ?? $task->name);
+
+            $brandPath = '/' . $brandName;
+            $typePath = $brandPath . '/' . $typeName;
+            $prefix = mb_substr($typeName, 0, 1);
+            $leaf = $typePath . '/' . $prefix . '_' . $articleName;
+
+            // Best-effort delete; ignore not found errors
+            try {
+                $this->disk->deleteResource($token->access_token, $leaf, true);
+            } catch (\Illuminate\Http\Client\RequestException $ex) {
+                $status = optional($ex->response)->status();
+                if ($status && in_array($status, [404, 202, 204])) {
+                    // ignore not found or accepted deletions
+                    return;
+                }
+                throw $ex;
+            }
+        } catch (\Throwable $e) {
+            Log::error('Failed to delete Yandex.Disk folders for task', [
+                'task_id' => $task->id,
+                'brand_id' => $brand->id,
+                'message' => $e->getMessage(),
+            ]);
         }
     }
 }

@@ -445,5 +445,48 @@ function submitDelete() {
         </div>
       </div>
     </teleport>
+
+    <!-- Rename Task Modal -->
+    <teleport to="body">
+      <div class="modal modal-blur fade" :class="{ show: showRename }" :style="showRename ? 'display: block;' : ''" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Переименовать задание</h5>
+              <button type="button" class="btn-close" @click="cancelRename" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <label class="form-label">Новое название</label>
+              <input type="text" class="form-control" v-model="renameName" @keyup.enter="submitRename" />
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn me-auto" @click="cancelRename">Отмена</button>
+              <button type="button" class="btn btn-primary" @click="submitRename">Сохранить</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
+    <!-- Delete Task Modal -->
+    <teleport to="body">
+      <div class="modal modal-blur fade" :class="{ show: showDelete }" :style="showDelete ? 'display: block;' : ''" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Удалить задание</h5>
+              <button type="button" class="btn-close" @click="cancelDelete" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <p>Действительно удалить задание «{{ deleting?.name || deleting?.article?.name }}»? Это действие необратимо.</p>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn me-auto" @click="cancelDelete">Отмена</button>
+              <button type="button" class="btn btn-danger" @click="submitDelete">Удалить</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </teleport>
   </TablerLayout>
 </template>
