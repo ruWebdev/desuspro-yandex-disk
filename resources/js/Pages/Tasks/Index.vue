@@ -29,6 +29,36 @@ const displayedTasks = computed(() => {
   });
 });
 
+// Bulk selection state
+const selectedIds = ref([]); // array<number>
+const isSelected = (id) => selectedIds.value.includes(id);
+function toggleRow(id) {
+  if (isSelected(id)) selectedIds.value = selectedIds.value.filter(x => x !== id);
+  else selectedIds.value = [...selectedIds.value, id];
+}
+const selectAllVisible = computed({
+  get() {
+    const ids = displayedTasks.value.map(t => t.id);
+    return ids.length > 0 && ids.every(id => selectedIds.value.includes(id));
+  },
+  set(val) {
+    const ids = displayedTasks.value.map(t => t.id);
+    if (val) {
+      // add all visible
+      const set = new Set(selectedIds.value);
+      ids.forEach(id => set.add(id));
+      selectedIds.value = Array.from(set);
+    } else {
+      // remove all visible
+      selectedIds.value = selectedIds.value.filter(id => !ids.includes(id));
+    }
+  }
+});
+const anySelected = computed(() => selectedIds.value.length > 0);
+const selectedTasks = computed(() => props.tasks.filter(t => selectedIds.value.includes(t.id)));
+
+function clearSelection() { selectedIds.value = []; }
+
 // Subtask helpers and status mapping (from All.vue)
 function subtaskByOwnership(task, ownership) {
   return (task?.subtasks || []).find(s => s.ownership === ownership) || null;
@@ -68,6 +98,81 @@ function updateListSubtask(taskId, ownership, patch) {
     t.subtasks.push(st);
   }
   Object.assign(st, patch || {});
+}
+
+// Bulk helpers for subtasks
+function subtaskStatusFor(task, ownership) {
+  const st = subtaskByOwnership(task, ownership);
+  return st?.status || null;
+}
+function subtaskIdFor(task, ownership) {
+  const st = subtaskByOwnership(task, ownership);
+  return st?.id || null;
+}
+
+// Bulk enable/disable conditions
+const canAcceptPhotographer = computed(() => {
+  if (!anySelected.value) return false;
+  const tasks = selectedTasks.value;
+  if (tasks.length === 0) return false;
+  return tasks.every(t => subtaskStatusFor(t, 'Photographer') === 'on_review');
+});
+const canRejectPhotographer = canAcceptPhotographer; // same condition
+const canAcceptDesigner = computed(() => {
+  if (!anySelected.value) return false;
+  const tasks = selectedTasks.value;
+  if (tasks.length === 0) return false;
+  return tasks.every(t => subtaskStatusFor(t, 'PhotoEditor') === 'on_review');
+});
+const canRejectDesigner = canAcceptDesigner;
+
+// Bulk modals and operations
+const showAssignModal = ref(false);
+const assignRole = ref('Photographer'); // 'Photographer' | 'PhotoEditor'
+const assignUserId = ref(null);
+const assignOptions = computed(() => assignRole.value === 'Photographer' ? (props.assignees?.Photographer || []) : (props.assignees?.PhotoEditor || []));
+function openAssign(role) { assignRole.value = role; assignUserId.value = null; showAssignModal.value = true; }
+function closeAssign() { showAssignModal.value = false; }
+
+async function bulkAssign() {
+  if (!assignRole.value) return;
+  const role = assignRole.value;
+  const userId = assignUserId.value ? Number(assignUserId.value) : null;
+  const tasks = selectedTasks.value;
+  for (const t of tasks) {
+    const sid = subtaskIdFor(t, role);
+    if (!sid) continue;
+    await router.put(route('brands.tasks.subtasks.update', { brand: t.brand_id, task: t.id, subtask: sid }), { assignee_id: userId }, { preserveScroll: true });
+    updateListSubtask(t.id, role, { assignee_id: userId, status: userId ? 'assigned' : 'unassigned' });
+  }
+  closeAssign();
+  clearSelection();
+}
+
+async function bulkUpdateStatus(role, status) {
+  const tasks = selectedTasks.value;
+  for (const t of tasks) {
+    const sid = subtaskIdFor(t, role);
+    if (!sid) continue;
+    await router.put(route('brands.tasks.subtasks.update', { brand: t.brand_id, task: t.id, subtask: sid }), { status }, { preserveScroll: true });
+    updateListSubtask(t.id, role, { status });
+  }
+  clearSelection();
+}
+
+// Bulk delete
+const showBulkDelete = ref(false);
+function openBulkDelete() { showBulkDelete.value = true; }
+function closeBulkDelete() { showBulkDelete.value = false; }
+async function confirmBulkDelete() {
+  const ids = [...selectedIds.value];
+  for (const id of ids) {
+    const t = props.tasks.find(x => x.id === id);
+    if (!t) continue;
+    await useForm({}).delete(route('brands.tasks.destroy', { brand: t.brand_id, task: t.id }), { preserveScroll: true });
+  }
+  closeBulkDelete();
+  clearSelection();
 }
 
 // Create Task modal (All.vue style)
@@ -528,12 +633,36 @@ function rejectSubtask() { updateSubtaskStatus('rejected'); }
       </div>
     </div>
 
+    <!-- Bulk actions toolbar -->
+    <div v-if="anySelected" class="card mb-3">
+      <div class="card-body d-flex flex-wrap gap-2 align-items-center">
+        <div class="me-auto">
+          Выбрано: <strong>{{ selectedIds.length }}</strong>
+          <button class="btn btn-link btn-sm" @click="clearSelection">Снять выделение</button>
+        </div>
+        <div class="btn-list">
+          <button class="btn btn-outline-primary" @click="openAssign('Photographer')">Назначить фотографа</button>
+          <button class="btn btn-outline-purple" @click="openAssign('PhotoEditor')">Назначить дизайнера</button>
+          <button class="btn btn-success" :disabled="!canAcceptPhotographer"
+            @click="bulkUpdateStatus('Photographer', 'accepted')">Принять фото</button>
+          <button class="btn btn-danger" :disabled="!canRejectPhotographer"
+            @click="bulkUpdateStatus('Photographer', 'rejected')">Отклонить фото</button>
+          <button class="btn btn-success" :disabled="!canAcceptDesigner"
+            @click="bulkUpdateStatus('PhotoEditor', 'accepted')">Принять дизайн</button>
+          <button class="btn btn-danger" :disabled="!canRejectDesigner"
+            @click="bulkUpdateStatus('PhotoEditor', 'rejected')">Отклонить дизайн</button>
+          <button class="btn btn-outline-danger" @click="openBulkDelete">Удалить</button>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-body p-0">
         <div class="table-responsive">
           <table class="table table-vcenter card-table">
             <thead>
               <tr>
+                <th class="w-1"><input type="checkbox" class="form-check-input" v-model="selectAllVisible" /></th>
                 <th>Задание</th>
                 <th>Бренд</th>
                 <th class="w-1">Фотограф</th>
@@ -544,9 +673,12 @@ function rejectSubtask() { updateSubtaskStatus('rejected'); }
             </thead>
             <tbody>
               <tr v-if="displayedTasks.length === 0">
-                <td colspan="6" class="text-center text-secondary py-4">Нет заданий</td>
+                <td colspan="7" class="text-center text-secondary py-4">Нет заданий</td>
               </tr>
               <tr v-for="t in displayedTasks" :key="t.id">
+                <td><input type="checkbox" class="form-check-input" :checked="isSelected(t.id)"
+                    @change="toggleRow(t.id)" />
+                </td>
                 <td>{{ t.name }}</td>
                 <td>{{t.brand?.name || (allBrands.find(b => b.id === t.brand_id)?.name)}}</td>
                 <td class="text-nowrap">
@@ -557,9 +689,9 @@ function rejectSubtask() { updateSubtaskStatus('rejected'); }
                       </span>
                       <button class="btn btn-sm text-light"
                         :class="statusClass(subtaskByOwnership(t, 'Photographer').status, !!subtaskByOwnership(t, 'Photographer').assignee_id)"
-                        @click="openOffcanvas(t, 'Photographer')"
-                        title="Открыть подзадачу: ФОТОГРАФ (Информация)">
-                        {{ statusLabel(subtaskByOwnership(t, 'Photographer').status, !!subtaskByOwnership(t, 'Photographer').assignee_id) }}
+                        @click="openOffcanvas(t, 'Photographer')" title="Открыть подзадачу: ФОТОГРАФ (Информация)">
+                        {{ statusLabel(subtaskByOwnership(t, 'Photographer').status, !!subtaskByOwnership(t,
+                          'Photographer').assignee_id) }}
                       </button>
                     </template>
                     <button class="btn btn-opacity-primary btn-sm" @click="openFilesOffcanvas(t, 'Photographer')"
@@ -576,9 +708,9 @@ function rejectSubtask() { updateSubtaskStatus('rejected'); }
                       </span>
                       <button class="btn btn-sm text-light"
                         :class="statusClass(subtaskByOwnership(t, 'PhotoEditor').status, !!subtaskByOwnership(t, 'PhotoEditor').assignee_id)"
-                        @click="openOffcanvas(t, 'PhotoEditor')"
-                        title="Открыть подзадачу: ФОТОРЕДАКТОР (Информация)">
-                        {{ statusLabel(subtaskByOwnership(t, 'PhotoEditor').status, !!subtaskByOwnership(t, 'PhotoEditor').assignee_id) }}
+                        @click="openOffcanvas(t, 'PhotoEditor')" title="Открыть подзадачу: ФОТОРЕДАКТОР (Информация)">
+                        {{ statusLabel(subtaskByOwnership(t, 'PhotoEditor').status, !!subtaskByOwnership(t,
+                          'PhotoEditor').assignee_id) }}
                       </button>
                     </template>
                     <button class="btn btn-opacity-purple btn-sm" @click="openFilesOffcanvas(t, 'PhotoEditor')"
@@ -761,6 +893,60 @@ function rejectSubtask() { updateSubtaskStatus('rejected'); }
       <!-- Fallback backdrop when Bootstrap Offcanvas is not available -->
       <div v-if="offcanvasOpen && !hasOffcanvas" class="modal-backdrop fade show" style="z-index: 1040;"
         @click="closeOffcanvas"></div>
+    </teleport>
+
+    <!-- Bulk Assign Modal -->
+    <teleport to="body">
+      <div v-if="showAssignModal">
+        <div class="modal modal-blur fade show d-block" tabindex="-1" role="dialog" style="z-index: 1050;">
+          <div class="modal-dialog" role="document">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Назначить {{ assignRole === 'Photographer' ? 'фотографа' : 'дизайнера' }}</h5>
+                <button type="button" class="btn-close" aria-label="Close" @click="closeAssign"></button>
+              </div>
+              <div class="modal-body">
+                <label class="form-label">Пользователь</label>
+                <select class="form-select" v-model="assignUserId">
+                  <option :value="null">— Не назначено —</option>
+                  <option v-for="u in assignOptions" :key="u.id" :value="u.id">{{ u.name }}<span v-if="u.is_blocked"> —
+                      ЗАБЛОКИРОВАН</span></option>
+                </select>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn me-auto" @click="closeAssign">Отмена</button>
+                <button type="button" class="btn btn-primary" @click="bulkAssign">Сохранить</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-backdrop fade show" style="z-index: 1040;" @click="closeAssign"></div>
+      </div>
+    </teleport>
+
+    <!-- Bulk Delete Modal -->
+    <teleport to="body">
+      <div v-if="showBulkDelete">
+        <div class="modal modal-blur fade show d-block" tabindex="-1" role="dialog" style="z-index: 1050;">
+          <div class="modal-dialog" role="document">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Удалить выбранные задания</h5>
+                <button type="button" class="btn-close" aria-label="Close" @click="closeBulkDelete"></button>
+              </div>
+              <div class="modal-body">
+                Вы уверены, что хотите удалить выбранные задания ({{ selectedIds.length }})? Это действие необратимо и
+                удалит все подзадачи.
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn me-auto" @click="closeBulkDelete">Отмена</button>
+                <button type="button" class="btn btn-danger" @click="confirmBulkDelete">Удалить</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-backdrop fade show" style="z-index: 1040;" @click="closeBulkDelete"></div>
+      </div>
     </teleport>
 
     <!-- Create Task Modal -->

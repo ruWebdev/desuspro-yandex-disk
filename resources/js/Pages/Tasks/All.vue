@@ -23,6 +23,33 @@ const displayedTasks = computed(() => {
   });
 });
 
+// Bulk selection state
+const selectedIds = ref([]);
+const isSelected = (id) => selectedIds.value.includes(id);
+function toggleRow(id) {
+  if (isSelected(id)) selectedIds.value = selectedIds.value.filter(x => x !== id);
+  else selectedIds.value = [...selectedIds.value, id];
+}
+const selectAllVisible = computed({
+  get() {
+    const ids = displayedTasks.value.map(t => t.id);
+    return ids.length > 0 && ids.every(id => selectedIds.value.includes(id));
+  },
+  set(val) {
+    const ids = displayedTasks.value.map(t => t.id);
+    if (val) {
+      const set = new Set(selectedIds.value);
+      ids.forEach(id => set.add(id));
+      selectedIds.value = Array.from(set);
+    } else {
+      selectedIds.value = selectedIds.value.filter(id => !ids.includes(id));
+    }
+  }
+});
+const anySelected = computed(() => selectedIds.value.length > 0);
+const selectedTasks = computed(() => props.tasks.filter(t => selectedIds.value.includes(t.id)));
+function clearSelection() { selectedIds.value = []; }
+
 // Subtask helpers and status mapping
 function subtaskByOwnership(task, ownership) {
   return (task?.subtasks || []).find(s => s.ownership === ownership) || null;
@@ -55,10 +82,73 @@ function assigneeNameById(ownership, id) {
 
 function updateListSubtask(taskId, ownership, patch) {
   const t = props.tasks.find(x => x.id === taskId);
-  if (!t || !Array.isArray(t.subtasks)) return;
-  const st = t.subtasks.find(s => s.ownership === ownership);
-  if (!st) return;
+  if (!t) return;
+  if (!Array.isArray(t.subtasks)) t.subtasks = [];
+  let st = t.subtasks.find(s => s.ownership === ownership);
+  if (!st) {
+    st = { ownership, id: patch?.id ?? null, status: patch?.status ?? null, assignee_id: patch?.assignee_id ?? null };
+    t.subtasks.push(st);
+  }
   Object.assign(st, patch || {});
+}
+
+// Bulk helpers and enable/disable logic
+function subtaskStatusFor(task, ownership) {
+  const st = subtaskByOwnership(task, ownership);
+  return st?.status || null;
+}
+function subtaskIdFor(task, ownership) {
+  const st = subtaskByOwnership(task, ownership);
+  return st?.id || null;
+}
+const canAcceptPhotographer = computed(() => anySelected.value && selectedTasks.value.length > 0 && selectedTasks.value.every(t => subtaskStatusFor(t, 'Photographer') === 'on_review'));
+const canRejectPhotographer = canAcceptPhotographer;
+const canAcceptDesigner = computed(() => anySelected.value && selectedTasks.value.length > 0 && selectedTasks.value.every(t => subtaskStatusFor(t, 'PhotoEditor') === 'on_review'));
+const canRejectDesigner = canAcceptDesigner;
+
+// Bulk assign modal
+const showAssignModal = ref(false);
+const assignRole = ref('Photographer');
+const assignUserId = ref(null);
+const assignOptions = computed(() => assignRole.value === 'Photographer' ? (props.assignees?.Photographer || []) : (props.assignees?.PhotoEditor || []));
+function openAssign(role) { assignRole.value = role; assignUserId.value = null; showAssignModal.value = true; }
+function closeAssign() { showAssignModal.value = false; }
+async function bulkAssign() {
+  const role = assignRole.value;
+  const userId = assignUserId.value ? Number(assignUserId.value) : null;
+  for (const t of selectedTasks.value) {
+    const sid = subtaskIdFor(t, role);
+    if (!sid) continue;
+    await router.put(route('brands.tasks.subtasks.update', { brand: t.brand_id, task: t.id, subtask: sid }), { assignee_id: userId }, { preserveScroll: true });
+    updateListSubtask(t.id, role, { assignee_id: userId, status: userId ? 'assigned' : 'unassigned' });
+  }
+  closeAssign();
+  clearSelection();
+}
+
+async function bulkUpdateStatus(role, status) {
+  for (const t of selectedTasks.value) {
+    const sid = subtaskIdFor(t, role);
+    if (!sid) continue;
+    await router.put(route('brands.tasks.subtasks.update', { brand: t.brand_id, task: t.id, subtask: sid }), { status }, { preserveScroll: true });
+    updateListSubtask(t.id, role, { status });
+  }
+  clearSelection();
+}
+
+// Bulk delete
+const showBulkDelete = ref(false);
+function openBulkDelete() { showBulkDelete.value = true; }
+function closeBulkDelete() { showBulkDelete.value = false; }
+async function confirmBulkDelete() {
+  const ids = [...selectedIds.value];
+  for (const id of ids) {
+    const t = props.tasks.find(x => x.id === id);
+    if (!t) continue;
+    await router.delete(route('brands.tasks.destroy', { brand: t.brand_id, task: t.id }), { preserveScroll: true });
+  }
+  closeBulkDelete();
+  clearSelection();
 }
 
 // Create task modal/form
@@ -494,12 +584,36 @@ function submitDelete() {
       </div>
     </div>
 
+    <!-- Bulk actions toolbar -->
+    <div v-if="anySelected" class="card mb-3">
+      <div class="card-body d-flex flex-wrap gap-2 align-items-center">
+        <div class="me-auto">
+          Выбрано: <strong>{{ selectedIds.length }}</strong>
+          <button class="btn btn-link btn-sm" @click="clearSelection">Снять выделение</button>
+        </div>
+        <div class="btn-list">
+          <button class="btn btn-outline-primary" @click="openAssign('Photographer')">Назначить фотографа</button>
+          <button class="btn btn-outline-purple" @click="openAssign('PhotoEditor')">Назначить дизайнера</button>
+          <button class="btn btn-success" :disabled="!canAcceptPhotographer"
+            @click="bulkUpdateStatus('Photographer', 'accepted')">Принять фото</button>
+          <button class="btn btn-danger" :disabled="!canRejectPhotographer"
+            @click="bulkUpdateStatus('Photographer', 'rejected')">Отклонить фото</button>
+          <button class="btn btn-success" :disabled="!canAcceptDesigner"
+            @click="bulkUpdateStatus('PhotoEditor', 'accepted')">Принять дизайн</button>
+          <button class="btn btn-danger" :disabled="!canRejectDesigner"
+            @click="bulkUpdateStatus('PhotoEditor', 'rejected')">Отклонить дизайн</button>
+          <button class="btn btn-outline-danger" @click="openBulkDelete">Удалить</button>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-body p-0">
         <div class="table-responsive">
           <table class="table table-vcenter card-table">
             <thead>
               <tr>
+                <th class="w-1"><input type="checkbox" class="form-check-input" v-model="selectAllVisible" /></th>
                 <th>Задание</th>
                 <th>Бренд</th>
                 <th class="w-1">Фотограф</th>
@@ -510,9 +624,12 @@ function submitDelete() {
             </thead>
             <tbody>
               <tr v-if="displayedTasks.length === 0">
-                <td colspan="6" class="text-center text-secondary py-4">Нет заданий</td>
+                <td colspan="7" class="text-center text-secondary py-4">Нет заданий</td>
               </tr>
               <tr v-for="t in displayedTasks" :key="t.id">
+                <td><input type="checkbox" class="form-check-input" :checked="isSelected(t.id)"
+                    @change="toggleRow(t.id)" />
+                </td>
                 <td>{{ t.name }}</td>
                 <td>{{t.brand?.name || (brands.find(b => b.id === t.brand_id)?.name)}}</td>
                 <td class="text-nowrap">
@@ -523,9 +640,9 @@ function submitDelete() {
                       </span>
                       <button class="btn btn-sm text-light"
                         :class="statusClass(subtaskByOwnership(t, 'Photographer').status, !!subtaskByOwnership(t, 'Photographer').assignee_id)"
-                        @click="openOffcanvas(t, 'Photographer')"
-                        title="Открыть подзадачу: ФОТОГРАФ (Информация)">
-                        {{ statusLabel(subtaskByOwnership(t, 'Photographer').status, !!subtaskByOwnership(t, 'Photographer').assignee_id) }}
+                        @click="openOffcanvas(t, 'Photographer')" title="Открыть подзадачу: ФОТОГРАФ (Информация)">
+                        {{ statusLabel(subtaskByOwnership(t, 'Photographer').status, !!subtaskByOwnership(t,
+                        'Photographer').assignee_id) }}
                       </button>
                     </template>
                     <button class="btn btn-opacity-primary btn-sm" @click="openFilesOffcanvas(t, 'Photographer')"
@@ -542,9 +659,9 @@ function submitDelete() {
                       </span>
                       <button class="btn btn-sm text-light"
                         :class="statusClass(subtaskByOwnership(t, 'PhotoEditor').status, !!subtaskByOwnership(t, 'PhotoEditor').assignee_id)"
-                        @click="openOffcanvas(t, 'PhotoEditor')"
-                        title="Открыть подзадачу: ФОТОРЕДАКТОР (Информация)">
-                        {{ statusLabel(subtaskByOwnership(t, 'PhotoEditor').status, !!subtaskByOwnership(t, 'PhotoEditor').assignee_id) }}
+                        @click="openOffcanvas(t, 'PhotoEditor')" title="Открыть подзадачу: ФОТОРЕДАКТОР (Информация)">
+                        {{ statusLabel(subtaskByOwnership(t, 'PhotoEditor').status, !!subtaskByOwnership(t,
+                        'PhotoEditor').assignee_id) }}
                       </button>
                     </template>
                     <button class="btn btn-opacity-purple btn-sm" @click="openFilesOffcanvas(t, 'PhotoEditor')"
@@ -685,7 +802,7 @@ function submitDelete() {
             <div class="mb-3 d-flex gap-2 align-items-end">
               <div class="flex-grow-1">
                 <label class="form-label">Исполнитель ({{ oc.ownership === 'Photographer' ? 'Фотограф' : 'Фоторедактор'
-                  }})</label>
+                }})</label>
                 <select class="form-select" v-model="selectedAssigneeId">
                   <option :value="null">— Не назначено —</option>
                   <option v-for="u in assigneeOptions[oc.ownership]" :key="u.id" :value="u.id">{{ assigneeLabel(u) }}
@@ -695,7 +812,7 @@ function submitDelete() {
               <div>
                 <button class="btn btn-primary" :disabled="!canSaveAssignee" @click="saveAssignee">{{
                   assigneeButtonLabel
-                  }}</button>
+                }}</button>
               </div>
             </div>
             <div v-if="commentsLoading" class="text-secondary">Загрузка комментариев…</div>
@@ -726,6 +843,60 @@ function submitDelete() {
       <!-- Fallback backdrop when Bootstrap Offcanvas is not available -->
       <div v-if="offcanvasOpen && !hasOffcanvas" class="modal-backdrop fade show" style="z-index: 1040;"
         @click="closeOffcanvas"></div>
+    </teleport>
+
+    <!-- Bulk Assign Modal -->
+    <teleport to="body">
+      <div v-if="showAssignModal">
+        <div class="modal modal-blur fade show d-block" tabindex="-1" role="dialog" style="z-index: 1050;">
+          <div class="modal-dialog" role="document">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Назначить {{ assignRole === 'Photographer' ? 'фотографа' : 'дизайнера' }}</h5>
+                <button type="button" class="btn-close" aria-label="Close" @click="closeAssign"></button>
+              </div>
+              <div class="modal-body">
+                <label class="form-label">Пользователь</label>
+                <select class="form-select" v-model="assignUserId">
+                  <option :value="null">— Не назначено —</option>
+                  <option v-for="u in assignOptions" :key="u.id" :value="u.id">{{ u.name }}<span v-if="u.is_blocked"> —
+                      ЗАБЛОКИРОВАН</span></option>
+                </select>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn me-auto" @click="closeAssign">Отмена</button>
+                <button type="button" class="btn btn-primary" @click="bulkAssign">Сохранить</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-backdrop fade show" style="z-index: 1040;" @click="closeAssign"></div>
+      </div>
+    </teleport>
+
+    <!-- Bulk Delete Modal -->
+    <teleport to="body">
+      <div v-if="showBulkDelete">
+        <div class="modal modal-blur fade show d-block" tabindex="-1" role="dialog" style="z-index: 1050;">
+          <div class="modal-dialog" role="document">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Удалить выбранные задания</h5>
+                <button type="button" class="btn-close" aria-label="Close" @click="closeBulkDelete"></button>
+              </div>
+              <div class="modal-body">
+                Вы уверены, что хотите удалить выбранные задания ({{ selectedIds.length }})? Это действие необратимо и
+                удалит все подзадачи.
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn me-auto" @click="closeBulkDelete">Отмена</button>
+                <button type="button" class="btn btn-danger" @click="confirmBulkDelete">Удалить</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-backdrop fade show" style="z-index: 1040;" @click="closeBulkDelete"></div>
+      </div>
     </teleport>
 
     <!-- Reassign confirm Modal -->
