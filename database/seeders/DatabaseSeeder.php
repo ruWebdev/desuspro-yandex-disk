@@ -14,11 +14,10 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // 1) Ensure roles exist
+        // 1) Ensure roles exist (Manager, Performer)
         $roles = [
             'Manager',
-            'PhotoEditor',
-            'Photographer',
+            'Performer',
         ];
 
         foreach ($roles as $roleName) {
@@ -32,36 +31,23 @@ class DatabaseSeeder extends Seeder
         ]);
         $manager->assignRole('Manager');
 
-        // 3) Create photographers and photo editors
-        $photographerA = User::factory()->create([
-            'name' => 'Photographer A',
-            'email' => 'photographer.a@example.com',
+        // 3) Create performers
+        $performerA = User::factory()->create([
+            'name' => 'Performer A',
+            'email' => 'performer.a@example.com',
         ]);
-        $photographerA->assignRole('Photographer');
+        $performerA->assignRole('Performer');
 
-        $photographerB = User::factory()->create([
-            'name' => 'Photographer B',
-            'email' => 'photographer.b@example.com',
+        $performerB = User::factory()->create([
+            'name' => 'Performer B',
+            'email' => 'performer.b@example.com',
         ]);
-        $photographerB->assignRole('Photographer');
-
-        $editorA = User::factory()->create([
-            'name' => 'Photo Editor A',
-            'email' => 'editor.a@example.com',
-        ]);
-        $editorA->assignRole('PhotoEditor');
-
-        $editorB = User::factory()->create([
-            'name' => 'Photo Editor B',
-            'email' => 'editor.b@example.com',
-        ]);
-        $editorB->assignRole('PhotoEditor');
+        $performerB->assignRole('Performer');
 
         // 4) Assign users to the manager (many-to-many, intersections allowed)
         $manager->managedUsers()->syncWithoutDetaching([
-            $photographerA->id,
-            $photographerB->id,
-            $editorA->id,
+            $performerA->id,
+            $performerB->id,
         ]);
 
         // 5) Demonstrate intersection: assign one user to another manager too
@@ -71,8 +57,7 @@ class DatabaseSeeder extends Seeder
         ]);
         $manager2->assignRole('Manager');
         $manager2->managedUsers()->syncWithoutDetaching([
-            $photographerA->id, // intersection with manager one
-            $editorB->id,
+            $performerA->id, // intersection with manager one
         ]);
     }
 }

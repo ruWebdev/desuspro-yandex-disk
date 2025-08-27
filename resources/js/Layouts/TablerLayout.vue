@@ -9,8 +9,7 @@ const user = computed(() => page.props?.auth?.user || null);
 // Roles from shared props (expects user.roles as array of role names)
 const roles = computed(() => (user.value?.roles || []).map(r => (typeof r === 'string' ? r : r.name)));
 const isManager = computed(() => roles.value.includes('Manager'));
-const isPhotographer = computed(() => roles.value.includes('Photographer'));
-const isPhotoEditor = computed(() => roles.value.includes('PhotoEditor'));
+const isPerformer = computed(() => roles.value.includes('Performer'));
 </script>
 
 <template>
@@ -55,8 +54,8 @@ const isPhotoEditor = computed(() => roles.value.includes('PhotoEditor'));
                 <ul class="navbar-nav">
                   <template v-if="isManager">
                     <li class="nav-item">
-                      <Link :href="route('dashboard')" class="nav-link" :class="{ active: route().current('dashboard') }">
-                        <span class="nav-link-title">Панель</span>
+                      <Link :href="route('tasks.all')" class="nav-link" :class="{ active: route().current('tasks.all') }">
+                        <span class="nav-link-title">Все задания</span>
                       </Link>
                     </li>
                     <li class="nav-item">
@@ -65,29 +64,21 @@ const isPhotoEditor = computed(() => roles.value.includes('PhotoEditor'));
                       </Link>
                     </li>
                     <li class="nav-item">
-                      <Link :href="route('tasks.all')" class="nav-link" :class="{ active: route().current('tasks.all') }">
-                        <span class="nav-link-title">Все задания</span>
+                      <Link :href="route('users.executors.index')" class="nav-link" :class="{ active: route().current('users.executors.*') }">
+                        <span class="nav-link-title">Исполнители</span>
                       </Link>
                     </li>
-                    <li class="nav-item dropdown" :class="{ active: route().current('users.photographers.index') || route().current('users.photo_editors.index') }">
-                      <a href="#navbar-users" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" role="button" aria-expanded="false">
-                        <span class="nav-link-title">Пользователи</span>
-                      </a>
-                      <div class="dropdown-menu">
-                        <Link :href="route('users.photographers.index')" class="dropdown-item" :class="{ active: route().current('users.photographers.index') }">
-                          Фотографы
-                        </Link>
-                        <Link :href="route('users.photo_editors.index')" class="dropdown-item" :class="{ active: route().current('users.photo_editors.index') }">
-                          Фоторедакторы
-                        </Link>
-                      </div>
+                    <li class="nav-item">
+                      <Link :href="route('task_types.index')" class="nav-link" :class="{ active: route().current('task_types.*') }">
+                        <span class="nav-link-title">Типы задач</span>
+                      </Link>
                     </li>
                   </template>
                   <template v-else>
+                    <!-- Performer menu (placeholder until performer landing is added) -->
                     <li class="nav-item">
-                      <Link :href="isPhotographer ? route('photographer.tasks') : route('photo_editor.tasks')" class="nav-link"
-                        :class="{ active: isPhotographer ? route().current('photographer.tasks') : route().current('photo_editor.tasks') }">
-                        <span class="nav-link-title">Задания</span>
+                      <Link :href="route('dashboard')" class="nav-link" :class="{ active: route().current('dashboard') }">
+                        <span class="nav-link-title">Главная</span>
                       </Link>
                     </li>
                   </template>

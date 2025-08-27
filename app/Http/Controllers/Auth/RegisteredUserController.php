@@ -51,9 +51,9 @@ class RegisteredUserController extends Controller
             'is_blocked' => (bool) $request->boolean('is_blocked', false),
         ]);
 
-        // Assign Manager role upon registration (only managers sign up via this form)
+        // Assign Performer role upon registration by default
         if (method_exists($user, 'assignRole')) {
-            $user->assignRole('Manager');
+            $user->assignRole('Performer');
         }
 
         event(new Registered($user));

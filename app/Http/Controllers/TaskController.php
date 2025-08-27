@@ -6,6 +6,8 @@ use App\Models\Brand;
 use App\Models\Task;
 use App\Models\User;
 use App\Models\Subtask;
+use App\Models\TaskType;
+use App\Models\Article;
 use App\Models\YandexToken;
 use App\Services\YandexDiskService;
 use Illuminate\Http\RedirectResponse;
@@ -31,26 +33,24 @@ class TaskController extends Controller
         $tasks = Task::query()
             ->with([
                 'brand:id,name',
+                'type:id,name',
+                'article:id,name',
                 'assignee:id,name',
-                // load minimal subtask info for badges
-                'subtasks:id,task_id,ownership,status,assignee_id',
             ])
             ->orderByDesc('created_at')
-            ->get(['id','brand_id','name','status','ownership','assignee_id','created_at']);
+            ->get(['id','brand_id','task_type_id','article_id','name','status','assignee_id','created_at']);
 
         $brands = Brand::query()->orderBy('name')->get(['id','name']);
 
-        // Assignee options by role for offcanvas executor dropdown
-        $photographers = User::role('Photographer')->get(['id','name','is_blocked']);
-        $editors = User::role('PhotoEditor')->get(['id','name','is_blocked']);
+        // Assignee options
+        $performers = User::role('Performer')->get(['id','name','is_blocked']);
+        $taskTypes = TaskType::query()->orderBy('name')->get(['id','name']);
 
         return Inertia::render('Tasks/All', [
             'tasks' => $tasks,
             'brands' => $brands,
-            'assignees' => [
-                'Photographer' => $photographers,
-                'PhotoEditor' => $editors,
-            ],
+            'performers' => $performers,
+            'taskTypes' => $taskTypes,
         ]);
     }
 
@@ -59,52 +59,42 @@ class TaskController extends Controller
         $tasks = Task::query()
             ->where('brand_id', $brand->id)
             ->with([
+                'type:id,name',
+                'article:id,name',
                 'assignee:id,name',
-                // load minimal subtask info for badges on page load
-                'subtasks:id,task_id,ownership,status,assignee_id',
             ])
             ->orderByDesc('created_at')
-            ->get([ 'id','brand_id','name','status','ownership','assignee_id','public_link','highlighted','comment','size','created_at' ]);
+            ->get([ 'id','brand_id','task_type_id','article_id','name','status','assignee_id','public_link','highlighted','comment','size','created_at' ]);
 
-        $photographers = User::role('Photographer')->get(['id','name','is_blocked']);
-        $editors = User::role('PhotoEditor')->get(['id','name','is_blocked']);
+        $performers = User::role('Performer')->get(['id','name','is_blocked']);
+        $taskTypes = TaskType::query()->orderBy('name')->get(['id','name']);
 
         return Inertia::render('Tasks/Index', [
             'brand' => $brand->only(['id','name']),
             'tasks' => $tasks,
-            'assignees' => [
-                'Photographer' => $photographers,
-                'PhotoEditor' => $editors,
-            ],
+            'performers' => $performers,
+            'taskTypes' => $taskTypes,
         ]);
     }
 
     public function store(Request $request, Brand $brand): RedirectResponse
     {
         $data = $request->validate([
-            'name' => ['required','string','max:255'],
-            'ownership' => ['required','in:Photographer,PhotoEditor'],
+            'task_type_id' => ['required','exists:task_types,id'],
+            'article_id' => ['required','exists:articles,id'],
+            'name' => ['nullable','string','max:255'],
         ]);
+
+        $article = Article::findOrFail($data['article_id']);
+        $type = TaskType::findOrFail($data['task_type_id']);
         $task = Task::create([
             'brand_id' => $brand->id,
-            'name' => $data['name'],
-            'ownership' => $data['ownership'],
+            'task_type_id' => $type->id,
+            'article_id' => $article->id,
+            'name' => $data['name'] ?? $article->name,
         ]);
-        // Auto-create two subtasks for Photographer and PhotoEditor with names based on task name
-        Subtask::create([
-            'task_id' => $task->id,
-            'name' => $task->name . '_Ф',
-            'status' => 'unassigned',
-            'ownership' => 'Photographer',
-        ]);
-        Subtask::create([
-            'task_id' => $task->id,
-            'name' => $task->name . '_Р',
-            'status' => 'unassigned',
-            'ownership' => 'PhotoEditor',
-        ]);
-        // Create Yandex.Disk folders: /BrandName/TaskName/{TaskName_Ф,TaskName_Р}
-        $this->createYandexFolderStructure($request, $brand, $task);
+        // Create Yandex.Disk folder
+        $this->createYandexFolderStructure($request, $brand, $task, $type, $article);
         return back()->with('status', 'task-created');
     }
 
@@ -114,35 +104,24 @@ class TaskController extends Controller
     public function storeGlobal(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'name' => ['required','string','max:255'],
             'brand_id' => ['required','exists:brands,id'],
-            'ownership' => ['nullable','in:Photographer,PhotoEditor'],
+            'task_type_id' => ['required','exists:task_types,id'],
+            'article_id' => ['required','exists:articles,id'],
+            'name' => ['nullable','string','max:255'],
         ]);
+
+        $brand = Brand::findOrFail($data['brand_id']);
+        $article = Article::findOrFail($data['article_id']);
+        $type = TaskType::findOrFail($data['task_type_id']);
 
         $task = Task::create([
-            'brand_id' => $data['brand_id'],
-            'name' => $data['name'],
-            'ownership' => $data['ownership'] ?? 'Photographer',
+            'brand_id' => $brand->id,
+            'task_type_id' => $type->id,
+            'article_id' => $article->id,
+            'name' => $data['name'] ?? $article->name,
         ]);
 
-        // Auto-create two subtasks for Photographer and PhotoEditor with names based on task name
-        Subtask::create([
-            'task_id' => $task->id,
-            'name' => $task->name . '_Ф',
-            'status' => 'unassigned',
-            'ownership' => 'Photographer',
-        ]);
-        Subtask::create([
-            'task_id' => $task->id,
-            'name' => $task->name . '_Р',
-            'status' => 'unassigned',
-            'ownership' => 'PhotoEditor',
-        ]);
-        // Create Yandex.Disk folders using the selected brand
-        $brand = Brand::find($data['brand_id']);
-        if ($brand) {
-            $this->createYandexFolderStructure($request, $brand, $task);
-        }
+        $this->createYandexFolderStructure($request, $brand, $task, $type, $article);
         return back()->with('status', 'task-created');
     }
 
@@ -152,66 +131,11 @@ class TaskController extends Controller
         $data = $request->validate([
             'name' => ['sometimes','required','string','max:255'],
             'status' => ['sometimes','required','in:created,assigned,done'],
-            'ownership' => ['sometimes','required','in:Photographer,PhotoEditor'],
             'assignee_id' => ['nullable','exists:users,id'],
             'highlighted' => ['sometimes','boolean'],
             'comment' => ['nullable','string'],
         ]);
-        $originalName = $task->name;
         $task->fill($data)->save();
-
-        // If the task name was updated, sync subtask names preserving suffix by ownership
-        if (array_key_exists('name', $data) && $data['name'] && $data['name'] !== $originalName) {
-            $newBase = $data['name'];
-            $subtasks = Subtask::where('task_id', $task->id)->get(['id','ownership','name']);
-            foreach ($subtasks as $sub) {
-                $suffix = $sub->ownership === 'Photographer' ? 'Ф' : 'Р';
-                $sub->name = $newBase . '_' . $suffix;
-                $sub->save();
-            }
-
-            // Also rename corresponding Yandex.Disk folders (Brand/ф_|д_ without Task folder)
-            try {
-                $token = YandexToken::orderByDesc('updated_at')->first();
-                if ($token) {
-                    $token = $this->disk->ensureValidToken($token);
-                    $brandName = $this->sanitizeName($brand->name);
-                    $oldTaskName = $this->sanitizeName($originalName);
-                    $newTaskName = $this->sanitizeName($newBase);
-
-                    // Old/new subtask names reflect suffixes we just applied above
-                    $oldPhotographerSub = $oldTaskName . '_Ф';
-                    $oldEditorSub = $oldTaskName . '_Р';
-                    $newPhotographerSub = $newTaskName . '_Ф';
-                    $newEditorSub = $newTaskName . '_Р';
-
-                    // Move Brand/ф_{oldPhotographerSub} -> Brand/ф_{newPhotographerSub}
-                    $oldPh = '/' . $brandName . '/ф_' . $oldPhotographerSub;
-                    $newPh = '/' . $brandName . '/ф_' . $newPhotographerSub;
-                    // Move Brand/д_{oldEditorSub} -> Brand/д_{newEditorSub}
-                    $oldEd = '/' . $brandName . '/д_' . $oldEditorSub;
-                    $newEd = '/' . $brandName . '/д_' . $newEditorSub;
-
-                    foreach ([[$oldPh, $newPh], [$oldEd, $newEd]] as [$from, $to]) {
-                        try {
-                            $this->disk->moveResource($token->access_token, $from, $to, true);
-                        } catch (\Throwable $e) {
-                            Log::warning('Yandex move subfolder failed', [
-                                'from' => $from,
-                                'to' => $to,
-                                'message' => $e->getMessage(),
-                            ]);
-                        }
-                    }
-                }
-            } catch (\Throwable $e) {
-                Log::error('Failed to rename Yandex.Disk folders on task rename', [
-                    'task_id' => $task->id,
-                    'brand_id' => $brand->id,
-                    'message' => $e->getMessage(),
-                ]);
-            }
-        }
         return back()->with('status', 'task-updated');
     }
 
@@ -288,7 +212,7 @@ class TaskController extends Controller
      * /{BrandName}/ф_{SubtaskNamePhotographer} and /{BrandName}/д_{SubtaskNameEditor}
      * No intermediate Task folder. Silently logs and continues on errors.
      */
-    private function createYandexFolderStructure(Request $request, Brand $brand, Task $task): void
+    private function createYandexFolderStructure(Request $request, Brand $brand, Task $task, ?TaskType $type = null, ?Article $article = null): void
     {
         try {
             // Use a shared/global token (most recently updated) for all users
@@ -300,25 +224,23 @@ class TaskController extends Controller
             $token = $this->disk->ensureValidToken($token);
 
             $brandName = $this->sanitizeName($brand->name);
-            $taskName = $this->sanitizeName($task->name);
-
-            // Subtask names are created as TaskName_Ф and TaskName_Р
-            $photographerSubName = $taskName . '_Ф';
-            $editorSubName = $taskName . '_Р';
+            $type = $type ?: $task->type; // lazy if not provided
+            $article = $article ?: $task->article;
+            $typeName = $this->sanitizeName(optional($type)->name ?? 'Тип');
+            $articleName = $this->sanitizeName(optional($article)->name ?? $task->name);
 
             $brandPath = '/' . $brandName;
-            $subPhotographer = $brandPath . '/' . 'ф_' . $photographerSubName;
-            $subEditor = $brandPath . '/' . 'д_' . $editorSubName;
+            $typePath = $brandPath . '/' . $typeName;
+            $prefix = mb_substr($typeName, 0, 1);
+            $leaf = $typePath . '/' . $prefix . '_' . $articleName;
 
             Log::info('Creating Yandex.Disk folder structure', [
-                'brandPath' => $brandPath,
-                'subPhotographer' => $subPhotographer,
-                'subEditor' => $subEditor,
+                'leaf' => $leaf,
             ]);
 
             $this->ensureFolder($token->access_token, $brandPath);
-            $this->ensureFolder($token->access_token, $subPhotographer);
-            $this->ensureFolder($token->access_token, $subEditor);
+            $this->ensureFolder($token->access_token, $typePath);
+            $this->ensureFolder($token->access_token, $leaf);
         } catch (\Throwable $e) {
             Log::error('Failed to create Yandex.Disk folders for task', [
                 'task_id' => $task->id,

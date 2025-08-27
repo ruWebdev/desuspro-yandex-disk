@@ -33,6 +33,15 @@ const showDelete = ref(false);
 const editingBrand = ref(null);
 const brandToDelete = ref(null);
 
+// Articles off-canvas state
+const articlesOpen = ref(false);
+const articlesBrand = ref(null);
+const articles = ref([]);
+const articlesLoading = ref(false);
+const articleName = ref('');
+const bulkFile = ref(null);
+const articlesErrors = ref({});
+
 const anyModalOpen = computed(() => showCreate.value || showEdit.value || showDelete.value);
 watch(anyModalOpen, (open) => {
   if (open) document.body.classList.add('modal-open');
@@ -96,6 +105,71 @@ function submitDelete() {
     },
   });
 }
+
+// Articles helpers
+function openArticles(brand) {
+  articlesBrand.value = brand;
+  articlesOpen.value = true;
+  loadArticles();
+}
+
+function closeArticles() {
+  articlesOpen.value = false;
+  articlesBrand.value = null;
+  articles.value = [];
+  articleName.value = '';
+  bulkFile.value = null;
+  articlesErrors.value = {};
+}
+
+async function loadArticles() {
+  if (!articlesBrand.value) return;
+  articlesLoading.value = true;
+  try {
+    const { data } = await window.axios.get(route('brands.articles.index', articlesBrand.value.id));
+    articles.value = data?.data || [];
+  } catch (e) {
+    console.error(e);
+  } finally {
+    articlesLoading.value = false;
+  }
+}
+
+async function addArticle() {
+  if (!articlesBrand.value || !articleName.value.trim()) return;
+  articlesErrors.value = {};
+  try {
+    await window.axios.post(route('brands.articles.store', articlesBrand.value.id), { name: articleName.value.trim() });
+    articleName.value = '';
+    await loadArticles();
+  } catch (e) {
+    if (e.response?.status === 422) articlesErrors.value = e.response.data.errors || {};
+  }
+}
+
+async function bulkUploadArticles(evt) {
+  if (!articlesBrand.value || !evt?.target?.files?.length) return;
+  const file = evt.target.files[0];
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    await window.axios.post(route('brands.articles.bulk_upload', articlesBrand.value.id), form, { headers: { 'Content-Type': 'multipart/form-data' } });
+    evt.target.value = '';
+    await loadArticles();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function deleteArticle(article) {
+  if (!articlesBrand.value) return;
+  try {
+    await window.axios.delete(route('brands.articles.destroy', { brand: articlesBrand.value.id, article: article.id }));
+    await loadArticles();
+  } catch (e) {
+    console.error(e);
+  }
+}
 </script>
 
 <template>
@@ -154,6 +228,9 @@ function submitDelete() {
                     <td>{{ new Date(b.created_at).toLocaleString('ru-RU') }}</td>
                     <td>
                       <div class="btn-list flex-nowrap">
+                        <button class="btn btn-outline-secondary btn-sm" @click="openArticles(b)">
+                          Артикулы
+                        </button>
                         <Link class="btn btn-outline-primary btn-sm" :href="route('brands.tasks.index', b.id)">
                         Задания
                         </Link>
@@ -189,6 +266,47 @@ function submitDelete() {
       </div>
     </div>
   </TablerLayout>
+
+  <!-- Articles Off-canvas (Артикулы) -->
+  <teleport to="body">
+    <div v-if="articlesOpen" class="offcanvas offcanvas-end show" tabindex="-1" style="visibility: visible; width: 520px; z-index: 1050;">
+      <div class="offcanvas-header">
+        <h5 class="offcanvas-title">Артикулы — {{ articlesBrand?.name }}</h5>
+        <button type="button" class="btn-close" aria-label="Close" @click="closeArticles"></button>
+      </div>
+      <div class="offcanvas-body">
+        <div class="mb-3">
+          <label class="form-label">Добавить артикул</label>
+          <div class="input-group">
+            <input v-model="articleName" type="text" class="form-control" placeholder="Наименование артикула" @keyup.enter="addArticle" />
+            <button class="btn btn-primary" @click="addArticle">Добавить</button>
+          </div>
+          <div v-if="Object.keys(articlesErrors).length" class="text-danger small mt-1">
+            <div v-for="(err, key) in articlesErrors" :key="key">{{ err }}</div>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Массовая загрузка (.txt, каждая строка — отдельный артикул)</label>
+          <input type="file" accept=".txt" class="form-control" @change="bulkUploadArticles" />
+        </div>
+
+        <div class="mb-2 d-flex align-items-center justify-content-between">
+          <h3 class="card-title m-0">Список артикулов</h3>
+          <span class="text-secondary" v-if="articlesLoading">Загрузка...</span>
+        </div>
+
+        <div class="list-group list-group-flush border-top">
+          <div v-if="!articlesLoading && articles.length === 0" class="text-secondary py-4 text-center">Нет артикулов</div>
+          <div v-for="a in articles" :key="a.id" class="list-group-item d-flex justify-content-between align-items-center">
+            <div class="text-truncate">{{ a.name }}</div>
+            <button class="btn btn-sm btn-link text-danger" @click="deleteArticle(a)">Удалить</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-if="articlesOpen" class="offcanvas-backdrop fade show" style="z-index: 1040;" @click="closeArticles"></div>
+  </teleport>
 
   <!-- Create Modal -->
   <teleport to="body">

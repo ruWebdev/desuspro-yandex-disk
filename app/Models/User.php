@@ -9,6 +9,14 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Spatie\Permission\Traits\HasRoles;
 
+/**
+ * @method bool hasRole(string|array $roles)
+ * @method \Spatie\Permission\Collection\PermissionCollection getAllPermissions()
+ * @method \Illuminate\Support\Collection getRoleNames()
+ * @method $this assignRole(string|array|\Spatie\Permission\Models\Role ...$roles)
+ * @method $this removeRole(string|\Spatie\Permission\Models\Role $role)
+ * @method bool hasAnyRole(string|array $roles)
+ */
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */

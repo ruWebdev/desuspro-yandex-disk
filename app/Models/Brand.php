@@ -18,4 +18,9 @@ class Brand extends Model
     {
         return $this->hasMany(Task::class);
     }
+
+    public function articles(): HasMany
+    {
+        return $this->hasMany(Article::class);
+    }
 }

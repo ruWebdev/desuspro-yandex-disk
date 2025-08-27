@@ -14,6 +14,8 @@ class Task extends Model
     protected $fillable = [
         'brand_id',
         'name',
+        'task_type_id',
+        'article_id',
         'status',
         'ownership',
         'assignee_id',
@@ -31,6 +33,16 @@ class Task extends Model
     public function brand(): BelongsTo
     {
         return $this->belongsTo(Brand::class);
+    }
+
+    public function type(): BelongsTo
+    {
+        return $this->belongsTo(TaskType::class, 'task_type_id');
+    }
+
+    public function article(): BelongsTo
+    {
+        return $this->belongsTo(Article::class);
     }
 
     public function assignee(): BelongsTo

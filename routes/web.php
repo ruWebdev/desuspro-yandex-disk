@@ -7,6 +7,8 @@ use App\Http\Controllers\SubtaskController;
 use App\Http\Controllers\Manager\UserManagementController;
 use App\Http\Controllers\Users\RoleUsersController;
 use App\Http\Controllers\Integrations\YandexDiskController;
+use App\Http\Controllers\TaskTypeController;
+use App\Http\Controllers\BrandArticleController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -21,18 +23,18 @@ Route::get('/', function () {
 
 Route::get('/dashboard', function () {
     $user = Auth::user();
-    if ($user) {
-        // Redirect role-based
-        $roles = method_exists($user, 'getRoleNames') ? $user->getRoleNames() : collect();
-        if ($roles->contains('Photographer')) {
-            return redirect()->route('photographer.tasks');
-        }
-        if ($roles->contains('PhotoEditor')) {
-            return redirect()->route('photo_editor.tasks');
+    if ($user && method_exists($user, 'hasRole')) {
+        if ($user->hasRole('Manager')) {
+            return redirect()->route('tasks.all');
         }
     }
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
+
+// Yandex authorization page (not linked in navigation)
+Route::get('/authorize-yandex', function () {
+    return Inertia::render('AuthorizeYandex');
+})->middleware(['auth'])->name('authorize-yandex');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -72,15 +74,7 @@ Route::middleware('auth')->group(function () {
     });
 });
 
-// Role-specific entry pages
-Route::middleware(['auth', 'role:Photographer'])->group(function () {
-    Route::get('/photographer/tasks', [\App\Http\Controllers\Photographer\TasksController::class, 'index'])
-        ->name('photographer.tasks');
-});
-
-Route::middleware(['auth', 'role:PhotoEditor'])->group(function () {
-    Route::get('/photo-editor/tasks', [\App\Http\Controllers\PhotoEditor\TasksController::class, 'index'])->name('photo_editor.tasks');
-});
+// Role-specific entry pages (legacy removed). Future performer landing could be added here.
 
 // Users by role (manager-only)
 Route::middleware(['auth', 'role:Manager'])->group(function () {
@@ -88,33 +82,11 @@ Route::middleware(['auth', 'role:Manager'])->group(function () {
     Route::get('/tasks', [TaskController::class, 'all'])->name('tasks.all');
     Route::post('/tasks', [TaskController::class, 'storeGlobal'])->name('tasks.store');
 
-    // Photographers
-    Route::get('/users/photographers', [RoleUsersController::class, 'index'])
-        ->defaults('role', 'Photographer')
-        ->name('users.photographers.index');
-    Route::post('/users/photographers', [RoleUsersController::class, 'store'])
-        ->defaults('role', 'Photographer')
-        ->name('users.photographers.store');
-    Route::put('/users/photographers/{user}', [RoleUsersController::class, 'update'])
-        ->defaults('role', 'Photographer')
-        ->name('users.photographers.update');
-    Route::delete('/users/photographers/{user}', [RoleUsersController::class, 'destroy'])
-        ->defaults('role', 'Photographer')
-        ->name('users.photographers.destroy');
-
-    // Photo Editors
-    Route::get('/users/photo-editors', [RoleUsersController::class, 'index'])
-        ->defaults('role', 'PhotoEditor')
-        ->name('users.photo_editors.index');
-    Route::post('/users/photo-editors', [RoleUsersController::class, 'store'])
-        ->defaults('role', 'PhotoEditor')
-        ->name('users.photo_editors.store');
-    Route::put('/users/photo-editors/{user}', [RoleUsersController::class, 'update'])
-        ->defaults('role', 'PhotoEditor')
-        ->name('users.photo_editors.update');
-    Route::delete('/users/photo-editors/{user}', [RoleUsersController::class, 'destroy'])
-        ->defaults('role', 'PhotoEditor')
-        ->name('users.photo_editors.destroy');
+    // Executors (all non-manager users) - unified management
+    Route::get('/users/executors', [\App\Http\Controllers\Users\ExecutorsController::class, 'index'])->name('users.executors.index');
+    Route::post('/users/executors', [\App\Http\Controllers\Users\ExecutorsController::class, 'store'])->name('users.executors.store');
+    Route::put('/users/executors/{user}', [\App\Http\Controllers\Users\ExecutorsController::class, 'update'])->name('users.executors.update');
+    Route::delete('/users/executors/{user}', [\App\Http\Controllers\Users\ExecutorsController::class, 'destroy'])->name('users.executors.destroy');
 
     // Brands
     Route::get('/brands', [BrandController::class, 'index'])->name('brands.index');
@@ -137,7 +109,19 @@ Route::middleware(['auth', 'role:Manager'])->group(function () {
         Route::get('/tasks/{task}/comments', [\App\Http\Controllers\TaskCommentController::class, 'index'])->name('brands.tasks.comments.index');
         Route::post('/tasks/{task}/comments', [\App\Http\Controllers\TaskCommentController::class, 'store'])->name('brands.tasks.comments.store');
         Route::delete('/tasks/{task}/comments/{comment}', [\App\Http\Controllers\TaskCommentController::class, 'destroy'])->name('brands.tasks.comments.destroy');
+
+        // Articles per brand
+        Route::get('/articles', [BrandArticleController::class, 'index'])->name('brands.articles.index');
+        Route::post('/articles', [BrandArticleController::class, 'store'])->name('brands.articles.store');
+        Route::post('/articles/bulk-upload', [BrandArticleController::class, 'bulkUpload'])->name('brands.articles.bulk_upload');
+        Route::delete('/articles/{article}', [BrandArticleController::class, 'destroy'])->name('brands.articles.destroy');
     });
+
+    // Task Types CRUD
+    Route::get('/task-types', [TaskTypeController::class, 'index'])->name('task_types.index');
+    Route::post('/task-types', [TaskTypeController::class, 'store'])->name('task_types.store');
+    Route::put('/task-types/{taskType}', [TaskTypeController::class, 'update'])->name('task_types.update');
+    Route::delete('/task-types/{taskType}', [TaskTypeController::class, 'destroy'])->name('task_types.destroy');
 });
 
 // Manager routes
