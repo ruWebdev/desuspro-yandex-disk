@@ -287,6 +287,50 @@ const createForm = ref({ name: '', brand_id: '', task_type_id: '', article_id: '
 const brandArticles = ref([]);
 const creating = ref(false);
 
+// Article search for create modal
+const articleSearch = ref('');
+const showArticleDropdown = ref(false);
+
+const selectedArticle = computed(() => {
+  if (!createForm.value.article_id) return null;
+  return brandArticles.value.find(a => a.id == createForm.value.article_id);
+});
+
+const filteredArticles = computed(() => {
+  if (!articleSearch.value.trim()) return brandArticles.value;
+  const q = articleSearch.value.toLowerCase();
+  return brandArticles.value.filter(a => a.name.toLowerCase().includes(q));
+});
+
+function onArticleSearchInput() {
+  showArticleDropdown.value = true;
+}
+
+function hideDropdown() {
+  setTimeout(() => showArticleDropdown.value = false, 200);
+}
+
+function selectArticle(article) {
+  createForm.value.article_id = article.id;
+  articleSearch.value = article.name;
+  showArticleDropdown.value = false;
+}
+
+// Watch for selected article changes
+watch(selectedArticle, (newVal) => {
+  if (newVal) {
+    articleSearch.value = newVal.name;
+  } else {
+    articleSearch.value = '';
+  }
+});
+
+// Watch for brand changes to reset article
+watch(() => createForm.value.brand_id, () => {
+  createForm.value.article_id = '';
+  articleSearch.value = '';
+});
+
 async function loadArticlesForBrand(brandId) {
   brandArticles.value = [];
   if (!brandId) return;
@@ -328,6 +372,100 @@ async function submitCreate() {
   });
 }
 
+// Edit task modal
+const showEdit = ref(false);
+const editingTask = ref(null);
+const editForm = ref({ name: '', brand_id: '', task_type_id: '', article_id: '', assignee_id: '' });
+const editBrandArticles = ref([]);
+const editArticleSearch = ref('');
+const showEditArticleDropdown = ref(false);
+
+const editSelectedArticle = computed(() => {
+  if (!editForm.value.article_id) return null;
+  return editBrandArticles.value.find(a => a.id == editForm.value.article_id);
+});
+
+const editFilteredArticles = computed(() => {
+  if (!editArticleSearch.value.trim()) return editBrandArticles.value;
+  const q = editArticleSearch.value.toLowerCase();
+  return editBrandArticles.value.filter(a => a.name.toLowerCase().includes(q));
+});
+
+async function loadEditArticlesForBrand(brandId) {
+  editBrandArticles.value = [];
+  if (!brandId) return;
+  try {
+    const url = route('brands.articles.index', { brand: Number(brandId) });
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    const data = await res.json();
+    editBrandArticles.value = Array.isArray(data?.data) ? data.data : [];
+  } catch (e) { console.error(e); }
+}
+
+function openEdit(task) {
+  editingTask.value = task;
+  editForm.value = {
+    name: task.name || '',
+    brand_id: task.brand_id || '',
+    task_type_id: task.type?.id || '',
+    article_id: task.article_id || '',
+    assignee_id: task.assignee_id || ''
+  };
+  editArticleSearch.value = task.article?.name || '';
+  loadEditArticlesForBrand(task.brand_id);
+  showEdit.value = true;
+}
+
+function closeEdit() {
+  showEdit.value = false;
+  editingTask.value = null;
+  editForm.value = { name: '', brand_id: '', task_type_id: '', article_id: '', assignee_id: '' };
+  editArticleSearch.value = '';
+}
+
+async function submitEdit() {
+  if (!editingTask.value) return;
+  const payload = {
+    brand_id: editForm.value.brand_id ? Number(editForm.value.brand_id) : null,
+    task_type_id: editForm.value.task_type_id ? Number(editForm.value.task_type_id) : null,
+    article_id: editForm.value.article_id ? Number(editForm.value.article_id) : null,
+    name: editForm.value.name?.trim() || undefined,
+    assignee_id: editForm.value.assignee_id ? Number(editForm.value.assignee_id) : null,
+  };
+  if (!payload.brand_id || !payload.task_type_id || !payload.article_id) return;
+  router.put(route('brands.tasks.update', { brand: editingTask.value.brand_id, task: editingTask.value.id }), payload, { preserveScroll: true });
+  closeEdit();
+}
+
+function onEditArticleSearchInput() {
+  showEditArticleDropdown.value = true;
+}
+
+function hideEditDropdown() {
+  setTimeout(() => showEditArticleDropdown.value = false, 200);
+}
+
+function selectEditArticle(article) {
+  editForm.value.article_id = article.id;
+  editArticleSearch.value = article.name;
+  showEditArticleDropdown.value = false;
+}
+
+// Watch for edit selected article changes
+watch(editSelectedArticle, (newVal) => {
+  if (newVal) {
+    editArticleSearch.value = newVal.name;
+  } else {
+    editArticleSearch.value = '';
+  }
+});
+
+// Watch for edit brand changes to reset article
+watch(() => editForm.value.brand_id, () => {
+  editForm.value.article_id = '';
+  editArticleSearch.value = '';
+});
+
 // Removed offcanvas, comments, and Yandex files for simplified single-assignment flow
 
 // Row actions: edit / delete
@@ -336,9 +474,7 @@ const showRename = ref(false);
 const renaming = ref(null);
 const renameName = ref('');
 function onEditTask(t) {
-  renaming.value = t;
-  renameName.value = t?.name || '';
-  showRename.value = true;
+  openEdit(t);
 }
 function cancelRename() { showRename.value = false; renaming.value = null; renameName.value = ''; }
 function submitRename() {
@@ -1038,10 +1174,20 @@ async function deleteSourceComment(c) {
                 </div>
                 <div class="col-md-6">
                   <label class="form-label">Артикул</label>
-                  <select class="form-select" v-model="createForm.article_id" :disabled="!createForm.brand_id">
-                    <option value="">Выберите артикул</option>
-                    <option v-for="a in brandArticles" :key="a.id" :value="a.id">{{ a.name }}</option>
-                  </select>
+                  <div class="position-relative">
+                    <input type="text" class="form-control" v-model="articleSearch" @input="onArticleSearchInput"
+                      @focus="showArticleDropdown = true" @blur="hideDropdown"
+                      :placeholder="selectedArticle ? selectedArticle.name : 'Выберите артикул'"
+                      :disabled="!createForm.brand_id" />
+                    <div v-show="showArticleDropdown && filteredArticles.length"
+                      class="position-absolute top-100 start-0 w-100 bg-white border rounded shadow"
+                      style="z-index: 1000; max-height: 200px; overflow-y: auto;">
+                      <div v-for="a in filteredArticles" :key="a.id" class="p-2 cursor-pointer hover-bg-light"
+                        @click="selectArticle(a)">
+                        {{ a.name }}
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div class="col-md-6">
                   <label class="form-label">Название (необязательно)</label>
@@ -1066,6 +1212,77 @@ async function deleteSourceComment(c) {
                 @click="submitCreate">
                 <span v-if="creating" class="spinner-border spinner-border-sm me-2"></span>
                 Создать
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
+    <!-- Edit Task Modal -->
+    <teleport to="body">
+      <div class="modal modal-blur fade" :class="{ show: showEdit }" :style="showEdit ? 'display: block;' : ''"
+        tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Редактировать задание</h5>
+              <button type="button" class="btn-close" @click="closeEdit" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label">Бренд</label>
+                  <select class="form-select" v-model="editForm.brand_id"
+                    @change="loadEditArticlesForBrand(editForm.brand_id)">
+                    <option value="">Выберите бренд</option>
+                    <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.name }}</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Тип задачи</label>
+                  <select class="form-select" v-model="editForm.task_type_id">
+                    <option value="">Выберите тип</option>
+                    <option v-for="tt in taskTypes" :key="tt.id" :value="tt.id">{{ tt.name }}</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Артикул</label>
+                  <div class="position-relative">
+                    <input type="text" class="form-control" v-model="editArticleSearch"
+                      @input="onEditArticleSearchInput" @focus="showEditArticleDropdown = true" @blur="hideEditDropdown"
+                      :placeholder="editSelectedArticle ? editSelectedArticle.name : 'Выберите артикул'"
+                      :disabled="!editForm.brand_id" />
+                    <div v-show="showEditArticleDropdown && editFilteredArticles.length"
+                      class="position-absolute top-100 start-0 w-100 bg-white border rounded shadow"
+                      style="z-index: 1000; max-height: 200px; overflow-y: auto;">
+                      <div v-for="a in editFilteredArticles" :key="a.id" class="p-2 cursor-pointer hover-bg-light"
+                        @click="selectEditArticle(a)">
+                        {{ a.name }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Название</label>
+                  <input type="text" class="form-control" v-model="editForm.name" placeholder="Название задания" />
+                </div>
+                <div class="col-md-12">
+                  <label class="form-label">Исполнитель</label>
+                  <select class="form-select" v-model="editForm.assignee_id">
+                    <option value="">Не назначен</option>
+                    <option v-for="u in performers" :key="u.id" :value="u.id">
+                      {{ u.name }}<span v-if="u.is_blocked"> — ЗАБЛОКИРОВАН</span>
+                    </option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn me-auto" @click="closeEdit">Отмена</button>
+              <button type="button" class="btn btn-primary"
+                :disabled="!editForm.brand_id || !editForm.task_type_id || !editForm.article_id" @click="submitEdit">
+                Сохранить
               </button>
             </div>
           </div>
@@ -1344,3 +1561,13 @@ async function deleteSourceComment(c) {
     </teleport>
   </TablerLayout>
 </template>
+
+<style scoped>
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.hover-bg-light:hover {
+  background-color: #f8f9fa;
+}
+</style>
