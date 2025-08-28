@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import TablerLayout from '@/Layouts/TablerLayout.vue';
 
 const props = defineProps({
@@ -8,11 +8,13 @@ const props = defineProps({
   brands: { type: Array, required: true },
   performers: { type: Array, default: () => [] },
   taskTypes: { type: Array, default: () => [] },
+  initialBrandId: { type: [Number, String], default: null },
 });
 
 // Filters
 const search = ref('');
 const brandFilter = ref(''); // brand id as string for select
+if (props.initialBrandId) brandFilter.value = String(props.initialBrandId);
 
 const displayedTasks = computed(() => {
   const q = search.value.trim().toLowerCase();
@@ -50,6 +52,36 @@ const selectAllVisible = computed({
 const anySelected = computed(() => selectedIds.value.length > 0);
 const selectedTasks = computed(() => props.tasks.filter(t => selectedIds.value.includes(t.id)));
 function clearSelection() { selectedIds.value = []; }
+
+// Public link helpers
+async function ensurePublicLink(task) {
+  if (task.public_link) return true;
+  try {
+    await useForm({}).post(route('brands.tasks.public_link', { brand: task.brand_id, task: task.id }), { preserveScroll: true });
+    return true;
+  } catch (e) { console.error(e); return false; }
+}
+async function copyTaskPublicLink(task) {
+  if (!task) return;
+  if (!task.public_link) {
+    const ok = await ensurePublicLink(task);
+    if (!ok) return;
+    alert('Публичная ссылка создана. Повторите копирование.');
+    return;
+  }
+  try {
+    await navigator.clipboard?.writeText(task.public_link);
+  } catch (e) { console.error('Copy failed', e); }
+}
+function openTaskPublicLink(task) {
+  if (!task) return;
+  if (task.public_link) {
+    window.open(task.public_link, '_blank');
+  } else {
+    // create and ask user to click again
+    useForm({}).post(route('brands.tasks.public_link', { brand: task.brand_id, task: task.id }), { preserveScroll: true });
+  }
+}
 
 // Status helpers
 function statusLabel(status) {
@@ -765,6 +797,22 @@ async function deleteSourceComment(c) {
                     </td>
                     <td class="text-nowrap">
                       <div class="btn-list d-flex flex-nowrap align-items-center gap-2">
+                        <button class="btn btn-icon btn-ghost-secondary" @click="copyTaskPublicLink(t)" title="Копировать ссылку">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                            <path d="M9 15l6 -6" />
+                            <path d="M11 6l-1.5 1.5a3.5 3.5 0 0 0 0 5l1 1" />
+                            <path d="M13 18l1.5 -1.5a3.5 3.5 0 0 0 0 -5l-1 -1" />
+                          </svg>
+                        </button>
+                        <button class="btn btn-icon btn-ghost-secondary" @click="openTaskPublicLink(t)" title="Открыть ссылку">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                            <path d="M10 14l11 -11" />
+                            <path d="M15 3h6v6" />
+                            <path d="M21 10v10a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h10" />
+                          </svg>
+                        </button>
                         <button class="btn btn-icon btn-ghost-primary" @click="onEditTask(t)" title="Редактировать">
                           <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24"
                             viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"

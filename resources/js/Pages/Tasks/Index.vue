@@ -2,6 +2,7 @@
 import TablerLayout from '@/Layouts/TablerLayout.vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import { computed, ref, onMounted } from 'vue';
+import AllTasks from '@/Pages/Tasks/All.vue';
 
 const props = defineProps({
   brand: { type: Object, required: true },
@@ -9,6 +10,11 @@ const props = defineProps({
   assignees: { type: Object, default: () => ({ Photographer: [], PhotoEditor: [] }) },
   brands: { type: Array, default: () => [] },
 });
+
+// Map props for All.vue
+const brandsToPass = computed(() => (props.brands && props.brands.length ? props.brands : (props.brand ? [props.brand] : [])));
+const performersToPass = computed(() => []);
+const taskTypesToPass = computed(() => []);
 
 // Search / filter (page-level)
 const search = ref('');
@@ -58,6 +64,35 @@ const anySelected = computed(() => selectedIds.value.length > 0);
 const selectedTasks = computed(() => props.tasks.filter(t => selectedIds.value.includes(t.id)));
 
 function clearSelection() { selectedIds.value = []; }
+
+// Public link helpers (per task)
+async function ensureTaskPublicLink(task) {
+  if (task.public_link) return true;
+  try {
+    await useForm({}).post(route('brands.tasks.public_link', { brand: task.brand_id, task: task.id }), { preserveScroll: true });
+    return true;
+  } catch (e) { console.error(e); return false; }
+}
+async function copyTaskPublicLink(task) {
+  if (!task) return;
+  if (!task.public_link) {
+    const ok = await ensureTaskPublicLink(task);
+    if (!ok) return;
+    alert('Публичная ссылка создана. Повторите копирование.');
+    return;
+  }
+  try {
+    await navigator.clipboard?.writeText(task.public_link);
+  } catch (e) { console.error('Copy failed', e); }
+}
+function openTaskPublicLink(task) {
+  if (!task) return;
+  if (task.public_link) {
+    window.open(task.public_link, '_blank');
+  } else {
+    useForm({}).post(route('brands.tasks.public_link', { brand: task.brand_id, task: task.id }), { preserveScroll: true });
+  }
+}
 
 // Subtask helpers and status mapping (from All.vue)
 function subtaskByOwnership(task, ownership) {
@@ -611,7 +646,9 @@ function rejectSubtask() { updateSubtaskStatus('rejected'); }
 </script>
 
 <template>
-  <TablerLayout>
+  <!-- Render All.vue clone with brand preselected -->
+  <AllTasks :tasks="tasks" :brands="brandsToPass" :performers="performersToPass" :taskTypes="taskTypesToPass" :initialBrandId="props.brand?.id" />
+  <TablerLayout v-if="false">
 
     <Head title="Все задания" />
     <template #header>Все задания</template>
@@ -722,6 +759,22 @@ function rejectSubtask() { updateSubtaskStatus('rejected'); }
                 <td>{{ new Date(t.created_at).toLocaleString('ru-RU') }}</td>
                 <td class="text-nowrap">
                   <div class="btn-list d-flex flex-nowrap align-items-center gap-2">
+                    <button class="btn btn-icon btn-ghost-secondary" @click="copyTaskPublicLink(t)" title="Копировать ссылку">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                        <path d="M9 15l6 -6" />
+                        <path d="M11 6l-1.5 1.5a3.5 3.5 0 0 0 0 5l1 1" />
+                        <path d="M13 18l1.5 -1.5a3.5 3.5 0 0 0 0 -5l-1 -1" />
+                      </svg>
+                    </button>
+                    <button class="btn btn-icon btn-ghost-secondary" @click="openTaskPublicLink(t)" title="Открыть ссылку">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                        <path d="M10 14l11 -11" />
+                        <path d="M15 3h6v6" />
+                        <path d="M21 10v10a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h10" />
+                      </svg>
+                    </button>
                     <button class="btn btn-icon btn-ghost-primary" @click="onEditTask(t)" title="Редактировать">
                       <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24"
                         stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round"
