@@ -55,6 +55,7 @@ Route::middleware('auth')->group(function () {
         Route::delete('/delete', [YandexDiskController::class, 'delete'])->name('delete');
         Route::get('/download-url', [YandexDiskController::class, 'downloadUrl'])->name('download_url');
         Route::post('/upload', [YandexDiskController::class, 'upload'])->name('upload');
+        Route::post('/publish-folder', [YandexDiskController::class, 'publishFolder'])->name('publish_folder');
     });
 
     // Subtasks and comments should be available to authenticated users (Photographer/PhotoEditor/Manager)
@@ -81,6 +82,7 @@ Route::middleware(['auth', 'role:Manager'])->group(function () {
     // All Tasks (global)
     Route::get('/tasks', [TaskController::class, 'all'])->name('tasks.all');
     Route::post('/tasks', [TaskController::class, 'storeGlobal'])->name('tasks.store');
+    Route::put('/tasks/{task}/public-link', [TaskController::class, 'updatePublicLink'])->name('tasks.update_public_link');
 
     // Executors (all non-manager users) - unified management
     Route::get('/users/executors', [\App\Http\Controllers\Users\ExecutorsController::class, 'index'])->name('users.executors.index');

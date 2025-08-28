@@ -14,6 +14,12 @@ class TaskComment extends Model
         'task_id',
         'user_id',
         'content',
+        'image_path',
+    ];
+
+    protected $casts = [
+        'content' => 'string',
+        'image_path' => 'string',
     ];
 
     public function task(): BelongsTo

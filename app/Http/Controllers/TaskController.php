@@ -209,6 +209,14 @@ class TaskController extends Controller
         return back()->with('status', 'public-link-removed');
     }
 
+    public function updatePublicLink(Request $request, Task $task)
+    {
+        $request->validate(['public_link' => 'required|string']);
+        $task->public_link = $request->string('public_link');
+        $task->save();
+        return response()->json(['success' => true, 'task' => $task]);
+    }
+
     /**
      * Create folder structure on Yandex.Disk:
      * /{BrandName}/ф_{SubtaskNamePhotographer} and /{BrandName}/д_{SubtaskNameEditor}

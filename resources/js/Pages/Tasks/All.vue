@@ -201,6 +201,10 @@ const comments = ref([]);
 const newComment = ref('');
 const submitting = ref(false);
 
+// Comment image upload
+const commentImageInput = ref(null);
+const selectedCommentImage = ref(null);
+
 // Bootstrap Offcanvas integration
 const offcanvasEl = ref(null);
 let offcanvasInstance = null;
@@ -236,7 +240,7 @@ function openCommentsOffcanvas(task) {
   if (offcanvasInstance) offcanvasInstance.show();
 }
 
-function openFilesOffcanvas(task) {
+async function openFilesOffcanvas(task) {
   const brandName = task.brand?.name || (props.brands.find(b => b.id === task.brand_id)?.name) || '';
   oc.value = {
     brandId: task.brand_id,
@@ -244,6 +248,49 @@ function openFilesOffcanvas(task) {
     taskId: task.id,
     taskName: task.name || task.article?.name || '',
   };
+
+  // Check if public_link exists, if not, publish the folder and update the task
+  if (!task.public_link) {
+    try {
+      const brandNameSanitized = sanitizeName(brandName);
+      const typeName = sanitizeName(task.type?.name || 'Type');
+      const articleName = sanitizeName(task.article?.name || task.name || 'Article');
+      const prefix = typeName.charAt(0);
+      const path = `/${brandNameSanitized}/${typeName}/${prefix}_${articleName}`;
+
+      const response = await fetch(route('integrations.yandex.publish_folder'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+        },
+        body: JSON.stringify({ path }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.href) {
+          // Update the task's public_link in the database
+          const updateResponse = await fetch(route('tasks.update_public_link', { task: task.id }), {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            },
+            body: JSON.stringify({ public_link: data.href }),
+          });
+
+          if (updateResponse.ok) {
+            // Update the task data on the client side
+            task.public_link = data.href;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error publishing folder:', error);
+    }
+  }
+
   offcanvasOpen.value = true;
   activeOcTab.value = 'files';
   loadYandexFiles();
@@ -258,20 +305,67 @@ async function loadComments() {
 }
 
 async function addComment() {
-  if (!oc.value.taskId || !newComment.value.trim()) return;
+  if (!oc.value.taskId || (!newComment.value.trim() && !selectedCommentImage.value)) return;
   submitting.value = true;
   try {
     const url = route('brands.tasks.comments.store', { brand: oc.value.brandId, task: oc.value.taskId });
+
+    let body;
+    let headers = {
+      'Accept': 'application/json',
+      'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+    };
+
+    if (selectedCommentImage.value) {
+      // Use FormData for file upload
+      const formData = new FormData();
+      formData.append('content', newComment.value.trim() || ''); // Allow empty content
+      formData.append('image', selectedCommentImage.value);
+      body = formData;
+    } else {
+      // Use JSON for text-only comments
+      headers['Content-Type'] = 'application/json';
+      body = JSON.stringify({ content: newComment.value.trim() });
+    }
+
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') },
-      body: JSON.stringify({ content: newComment.value.trim() }),
+      headers,
+      body,
     });
+
+    if (!res.ok) {
+      const errorData = await res.json();
+      if (errorData.errors && errorData.errors.content) {
+        alert(errorData.errors.content[0]);
+        return;
+      }
+      throw new Error(`HTTP ${res.status}`);
+    }
+
     const data = await res.json();
     if (data && data.comment) comments.value.push(data.comment);
-    newComment.value = '';
-  } catch (e) { console.error(e); }
+    clearCommentForm();
+  } catch (e) {
+    console.error(e);
+    alert('Ошибка при добавлении комментария. Попробуйте ещё раз.');
+  }
   finally { submitting.value = false; }
+}
+
+function onCommentImageSelected(event) {
+  const file = event.target.files[0];
+  if (file) {
+    selectedCommentImage.value = file;
+  }
+}
+
+function clearCommentForm() {
+  newComment.value = '';
+  selectedCommentImage.value = null;
+  if (commentImageInput.value) {
+    commentImageInput.value.value = null;
+  }
 }
 
 async function deleteComment(c) {
@@ -784,22 +878,39 @@ async function uploadFiles(files) {
             <div v-else>
               <div v-if="comments.length === 0" class="text-secondary mb-2">Комментариев пока нет.</div>
               <ul class="list-unstyled">
-                <li v-for="c in comments" :key="c.id" class="mb-2 d-flex justify-content-between align-items-start">
-                  <div>
+                <li v-for="c in comments" :key="c.id" class="mb-3 d-flex justify-content-between align-items-start">
+                  <div class="flex-grow-1">
                     <div class="fw-bold">{{ c.user?.name || '—' }} <span class="text-secondary small">{{ new
                       Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
-                    <div style="white-space: pre-wrap;">{{ c.content }}</div>
+                    <div v-if="c.content" style="white-space: pre-wrap;">{{ c.content }}</div>
+                    <div v-if="c.image_path" class="mt-2">
+                      <img :src="'/storage/' + c.image_path" class="img-fluid rounded"
+                        style="max-width: 300px; max-height: 200px;" />
+                    </div>
                   </div>
-                  <button class="btn btn-ghost-danger btn-sm" title="Удалить" @click="deleteComment(c)">Удалить</button>
+                  <button class="btn btn-ghost-danger btn-sm ms-2" title="Удалить"
+                    @click="deleteComment(c)">Удалить</button>
                 </li>
               </ul>
-              <div class="mt-2">
-                <textarea v-model="newComment" rows="2" class="form-control"
-                  placeholder="Новый комментарий…"></textarea>
-                <div class="mt-2 d-flex justify-content-end">
-                  <button class="btn btn-primary" :disabled="!newComment.trim() || submitting"
-                    @click="addComment">Добавить</button>
-                </div>
+              <div class="mt-3">
+                <form @submit.prevent="addComment">
+                  <div class="mb-2">
+                    <textarea v-model="newComment" rows="2" class="form-control"
+                      placeholder="Новый комментарий…"></textarea>
+                  </div>
+                  <div class="mb-2">
+                    <input type="file" ref="commentImageInput" accept="image/*" class="form-control"
+                      @change="onCommentImageSelected" />
+                    <small class="text-secondary">Максимальный размер: 5MB</small>
+                  </div>
+                  <div class="d-flex justify-content-end">
+                    <button type="button" class="btn btn-secondary me-2" @click="clearCommentForm">Очистить</button>
+                    <button type="submit" class="btn btn-primary"
+                      :disabled="!newComment.trim() && !selectedCommentImage || submitting">
+                      Добавить
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
           </div>
