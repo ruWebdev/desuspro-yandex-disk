@@ -124,24 +124,19 @@ function submitDelete() {
 
     <div class="card">
       <div class="card-header">
-        <div class="row w-full">
-          <div class="col">
-            <h3 class="card-title mb-0">Список исполнителей</h3>
-            <p class="text-secondary m-0">Поиск, создание и редактирование исполнителей.</p>
+        <div>
+          <div class="card-title">Исполнители</div>
+          <div class="card-subtitle">Создание, редактирование и удаление исполнителей.</div>
+        </div>
+        <div class="card-actions d-flex flex-wrap">
+          <div class="input-group input-group-flat w-auto me-2">
+            <span class="input-group-text"><i class="ti ti-search"></i></span>
+            <input v-model="search" type="text" class="form-control" autocomplete="off" placeholder="Поиск по имени или e-mail..." @keyup.enter="onSearch" />
           </div>
-          <div class="col-md-auto col-sm-12">
-            <div class="ms-auto d-flex flex-wrap align-items-center btn-list">
-              <div class="input-group input-group-flat w-auto me-2">
-                <span class="input-group-text"><i class="ti ti-search"></i></span>
-                <input v-model="search" type="text" class="form-control" placeholder="Поиск по имени или e-mail..."
-                  autocomplete="off" @keyup.enter="onSearch" />
-              </div>
-              <button class="btn btn-primary" @click="openCreate">
-                <i class="ti ti-plus"></i>
-                Новый исполнитель
-              </button>
-            </div>
-          </div>
+          <button class="btn btn-primary" @click="openCreate">
+            <i class="ti ti-plus"></i>
+            Новый исполнитель
+          </button>
         </div>
       </div>
 

@@ -73,19 +73,15 @@ onMounted(load)
       <div class="col-12">
         <div class="card">
           <div class="card-header">
-            <div class="row w-full">
-              <div class="col">
-                <h3 class="card-title mb-0">Справочник типов задач</h3>
-                <p class="text-secondary m-0">Создание, редактирование и удаление типов задач.</p>
-              </div>
-              <div class="col-md-auto col-sm-12">
-                <div class="ms-auto d-flex flex-wrap align-items-center btn-list">
-                  <button class="btn btn-primary" @click="showCreate = true">
-                    <i class="ti ti-plus"></i>
-                    Новый тип задачи
-                  </button>
-                </div>
-              </div>
+            <div>
+              <div class="card-title">Справочник типов задач</div>
+              <div class="card-subtitle">Создание, редактирование и удаление типов задач.</div>
+            </div>
+            <div class="card-actions d-flex flex-wrap">
+              <button class="btn btn-primary" @click="showCreate = true">
+                <i class="ti ti-plus"></i>
+                Новый тип задачи
+              </button>
             </div>
           </div>
 

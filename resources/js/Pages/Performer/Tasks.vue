@@ -306,33 +306,27 @@ async function sendForReview() {
 
         <div class="card">
             <div class="card-header">
-                <div class="row w-full">
-                    <div class="col">
-                        <h3 class="card-title mb-0">Назначенные мне задания</h3>
-                        <p class="text-secondary m-0">Список заданий, назначенных вам.</p>
+                <div>
+                    <div class="card-title">Назначенные мне задания</div>
+                    <div class="card-subtitle">Список заданий, назначенных вам.</div>
+                </div>
+                <div class="card-actions d-flex flex-wrap">
+                    <div class="input-group input-group-flat w-auto me-2">
+                        <span class="input-group-text">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-1">
+                                <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
+                                <path d="M21 21l-6 -6" />
+                            </svg>
+                        </span>
+                        <input v-model="search" type="text" class="form-control" placeholder="Поиск..." />
                     </div>
-                    <div class="col-md-auto col-sm-12">
-                        <div class="ms-auto d-flex flex-wrap btn-list">
-                            <div class="input-group input-group-flat w-auto me-2">
-                                <span class="input-group-text">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                        stroke-linejoin="round" class="icon icon-1">
-                                        <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
-                                        <path d="M21 21l-6 -6" />
-                                    </svg>
-                                </span>
-                                <input v-model="search" type="text" class="form-control" placeholder="Поиск..." />
-                            </div>
-                            <select v-model="statusFilter" class="form-select w-auto me-2">
-                                <option value="all">Все статусы</option>
-                                <option value="assigned">Назначено</option>
-                                <option value="on_review">На проверке</option>
-                                <option value="rejected">Не принято</option>
-                                <option value="accepted">Принято</option>
-                            </select>
-                        </div>
-                    </div>
+                    <select v-model="statusFilter" class="form-select w-auto me-2">
+                        <option value="all">Все статусы</option>
+                        <option value="assigned">Назначено</option>
+                        <option value="on_review">На проверке</option>
+                        <option value="rejected">Не принято</option>
+                        <option value="accepted">Принято</option>
+                    </select>
                 </div>
             </div>
 

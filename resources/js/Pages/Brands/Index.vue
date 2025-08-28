@@ -182,28 +182,21 @@ async function deleteArticle(article) {
         <div class="card">
           <div class="card-table">
             <div class="card-header">
-              <div class="row w-full">
-                <div class="col">
-                  <h3 class="card-title mb-0">Справочник брендов</h3>
-                  <p class="text-secondary m-0">Создание, редактирование и удаление брендов.</p>
+              <div>
+                <div class="card-title">Справочник брендов</div>
+                <div class="card-subtitle">Создание, редактирование и удаление брендов.</div>
+              </div>
+              <div class="card-actions d-flex flex-wrap">
+                <div class="input-group input-group-flat w-auto me-2">
+                  <span class="input-group-text">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-1">
+                      <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
+                      <path d="M21 21l-6 -6" />
+                    </svg>
+                  </span>
+                  <input v-model="searchQuery" type="text" class="form-control" autocomplete="off" placeholder="Поиск по наименованию" />
                 </div>
-                <div class="col-md-auto col-sm-12">
-                  <div class="ms-auto d-flex flex-wrap btn-list">
-                    <div class="input-group input-group-flat w-auto me-2">
-                      <span class="input-group-text">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                          class="icon icon-1">
-                          <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
-                          <path d="M21 21l-6 -6" />
-                        </svg>
-                      </span>
-                      <input v-model="searchQuery" type="text" class="form-control" autocomplete="off"
-                        placeholder="Поиск по наименованию" />
-                    </div>
-                    <button class="btn btn-primary" @click="openCreate">Добавить</button>
-                  </div>
-                </div>
+                <button class="btn btn-primary" @click="openCreate">Добавить</button>
               </div>
             </div>
 

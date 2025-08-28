@@ -568,10 +568,7 @@ async function uploadFiles(files) {
               </div>
             </div>
           </div>
-        </div>
-      </div>
-      <div class="col-12">
-        <div class="card">
+
           <div class="card-table">
 
             <!-- Table -->
