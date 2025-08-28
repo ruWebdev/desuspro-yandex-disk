@@ -53,8 +53,7 @@ const editInvalid = computed(() => !(
   isFilled(editForm.last_name) &&
   isFilled(editForm.first_name) &&
   isFilled(editForm.middle_name) &&
-  isFilled(editForm.email) &&
-  isFilled(editForm.password)
+  isFilled(editForm.email)
 ))
 
 function openCreate() {
@@ -97,8 +96,18 @@ function submitCreate() {
 function submitEdit() {
   if (!selected.value) return
   // derive display name from FIO
-  editForm.name = [editForm.last_name, editForm.first_name, editForm.middle_name].filter(Boolean).join(' ').trim()
-  editForm.put(route('users.executors.update', selected.value.id), {
+  const name = [editForm.last_name, editForm.first_name, editForm.middle_name].filter(Boolean).join(' ').trim()
+  const payload = {
+    name,
+    email: editForm.email,
+    last_name: editForm.last_name,
+    first_name: editForm.first_name,
+    middle_name: editForm.middle_name,
+    is_blocked: editForm.is_blocked,
+  }
+  const pwd = (editForm.password || '').trim()
+  if (pwd.length > 0) payload.password = pwd
+  router.put(route('users.executors.update', selected.value.id), payload, {
     onSuccess: () => { showEdit.value = false },
   })
 }

@@ -63,13 +63,31 @@ async function ensurePublicLink(task) {
 }
 async function copyTaskPublicLink(task) {
     if (!task) return;
+    // Ensure link exists
     if (!task.public_link) {
         const ok = await ensurePublicLink(task);
         if (!ok) return;
-        alert('Публичная ссылка создана. Повторите копирование.');
-        return;
+        // After server creates link, try to use the updated value if available
+        if (!task.public_link) {
+            alert('Публичная ссылка создана. Нажмите «Скопировать» ещё раз.');
+            return;
+        }
     }
-    try { await navigator.clipboard?.writeText(task.public_link); } catch (e) { console.error('Copy failed', e); }
+    const text = task.public_link;
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+        }
+    } catch (e) {
+        console.error('Copy failed', e);
+    }
 }
 function openTaskPublicLink(task) {
     if (!task) return;
