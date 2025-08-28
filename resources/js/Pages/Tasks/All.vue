@@ -53,14 +53,39 @@ function clearSelection() { selectedIds.value = []; }
 
 // Status helpers
 function statusLabel(status) {
-  if (status === 'assigned') return 'Назначено';
-  if (status === 'done') return 'Готово';
-  return 'Создано';
+  switch (status) {
+    case 'created': return 'Создано';
+    case 'assigned': return 'Назначено';
+    case 'review': return 'На проверку';
+    case 'rework': return 'На доработку';
+    case 'accepted': return 'Принято';
+    case 'done': return 'Принято'; // backward compatibility
+    default: return 'Создано';
+  }
 }
 function statusClass(status) {
-  if (status === 'assigned') return 'bg-primary';
-  if (status === 'done') return 'bg-success';
-  return 'bg-secondary';
+  switch (status) {
+    case 'created': return 'bg-secondary';
+    case 'assigned': return 'bg-primary';
+    case 'review': return 'bg-warning';
+    case 'rework': return 'bg-danger';
+    case 'accepted': return 'bg-success';
+    case 'done': return 'bg-success'; // backward compatibility
+    default: return 'bg-secondary';
+  }
+}
+
+const statusOptions = [
+  { value: 'created', label: 'Создано' },
+  { value: 'assigned', label: 'Назначено' },
+  { value: 'review', label: 'На проверку' },
+  { value: 'rework', label: 'На доработку' },
+  { value: 'accepted', label: 'Принято' },
+];
+
+function updateTaskStatus(task, status) {
+  if (!task || !status) return;
+  router.put(route('brands.tasks.update', { brand: task.brand_id, task: task.id }), { status }, { preserveScroll: true });
 }
 
 function updateListSubtask(taskId, ownership, patch) {
@@ -105,7 +130,7 @@ async function confirmBulkDelete() {
 
 // Create task modal/form
 const modalOpen = ref(false);
-const createForm = ref({ name: '', brand_id: '', task_type_id: '', article_id: '' });
+const createForm = ref({ name: '', brand_id: '', task_type_id: '', article_id: '', assignee_id: '' });
 const brandArticles = ref([]);
 const creating = ref(false);
 
@@ -121,7 +146,7 @@ async function loadArticlesForBrand(brandId) {
 }
 
 function openCreate() {
-  createForm.value = { name: '', brand_id: '', task_type_id: '', article_id: '' };
+  createForm.value = { name: '', brand_id: '', task_type_id: '', article_id: '', assignee_id: '' };
   brandArticles.value = [];
   modalOpen.value = true;
 }
@@ -140,6 +165,7 @@ async function submitCreate() {
     task_type_id: createForm.value.task_type_id ? Number(createForm.value.task_type_id) : null,
     article_id: createForm.value.article_id ? Number(createForm.value.article_id) : null,
     name: createForm.value.name?.trim() || undefined,
+    assignee_id: createForm.value.assignee_id ? Number(createForm.value.assignee_id) : null,
   };
   if (!payload.brand_id || !payload.task_type_id || !payload.article_id) return;
   creating.value = true;
@@ -192,7 +218,7 @@ function submitDelete() {
   });
 }
 
-// Offcanvas state and opener
+// Offcanvas state and opener (RESULT: comments/files)
 const offcanvasOpen = ref(false);
 const oc = ref({ brandId: null, brandName: '', taskId: null, taskName: '' });
 const activeOcTab = ref('comments'); // comments|files
@@ -517,6 +543,110 @@ async function uploadFiles(files) {
     uploadError.value = 'Ошибка загрузки файлов. Попробуйте ещё раз.';
   } finally { uploading.value = false; }
 }
+
+// Source Offcanvas (BRAND / Исходник) with only Comments tab
+const sourceOffcanvasOpen = ref(false);
+const sourceOc = ref({ brandId: null, brandName: '', taskId: null, taskName: '' });
+const sourceComments = ref([]);
+const newSourceComment = ref('');
+const sourceSubmitting = ref(false);
+const sourceOffcanvasEl = ref(null);
+let sourceOffcanvasInstance = null;
+const hasSourceOffcanvas = ref(false);
+onMounted(() => {
+  const Ctor = window.bootstrap?.Offcanvas;
+  if (Ctor && sourceOffcanvasEl.value) {
+    sourceOffcanvasInstance = new Ctor(sourceOffcanvasEl.value, { backdrop: true, keyboard: true, scroll: true });
+    hasSourceOffcanvas.value = true;
+    sourceOffcanvasEl.value.addEventListener('show.bs.offcanvas', () => { sourceOffcanvasOpen.value = true; });
+    sourceOffcanvasEl.value.addEventListener('hidden.bs.offcanvas', () => { sourceOffcanvasOpen.value = false; });
+  }
+});
+
+function closeSourceOffcanvas() {
+  if (sourceOffcanvasInstance) sourceOffcanvasInstance.hide();
+  else sourceOffcanvasOpen.value = false;
+}
+
+function openSourceCommentsOffcanvas(task) {
+  const brandName = task.brand?.name || (props.brands.find(b => b.id === task.brand_id)?.name) || '';
+  sourceOc.value = {
+    brandId: task.brand_id,
+    brandName,
+    taskId: task.id,
+    taskName: task.name || task.article?.name || '',
+  };
+  sourceComments.value = [];
+  newSourceComment.value = '';
+  sourceOffcanvasOpen.value = true;
+  loadSourceComments();
+  if (sourceOffcanvasInstance) sourceOffcanvasInstance.show();
+}
+
+async function loadSourceComments() {
+  if (!sourceOc.value.taskId) { sourceComments.value = []; return; }
+  const url = route('brands.tasks.source_comments.index', { brand: sourceOc.value.brandId, task: sourceOc.value.taskId });
+  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  sourceComments.value = await res.json();
+}
+
+async function addSourceComment() {
+  if (!sourceOc.value.taskId || (!newSourceComment.value.trim() && !selectedCommentImage.value)) return;
+  sourceSubmitting.value = true;
+  try {
+    const url = route('brands.tasks.source_comments.store', { brand: sourceOc.value.brandId, task: sourceOc.value.taskId });
+
+    let body;
+    let headers = {
+      'Accept': 'application/json',
+      'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+    };
+
+    if (selectedCommentImage.value) {
+      const formData = new FormData();
+      formData.append('content', newSourceComment.value.trim() || '');
+      formData.append('image', selectedCommentImage.value);
+      body = formData;
+    } else {
+      headers['Content-Type'] = 'application/json';
+      body = JSON.stringify({ content: newSourceComment.value.trim() });
+    }
+
+    const res = await fetch(url, { method: 'POST', headers, body });
+    if (!res.ok) {
+      const errorData = await res.json();
+      if (errorData.errors && errorData.errors.content) {
+        alert(errorData.errors.content[0]);
+        return;
+      }
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    if (data && data.comment) sourceComments.value.push(data.comment);
+    clearSourceCommentForm();
+  } catch (e) {
+    console.error(e);
+    alert('Ошибка при добавлении комментария. Попробуйте ещё раз.');
+  } finally { sourceSubmitting.value = false; }
+}
+
+function clearSourceCommentForm() {
+  newSourceComment.value = '';
+  selectedCommentImage.value = null;
+  if (commentImageInput.value) {
+    commentImageInput.value.value = null;
+  }
+}
+
+async function deleteSourceComment(c) {
+  if (!sourceOc.value.taskId) return;
+  const url = route('brands.tasks.source_comments.destroy', { brand: sourceOc.value.brandId, task: sourceOc.value.taskId, comment: c.id });
+  try {
+    await fetch(url, { method: 'DELETE', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') } });
+    sourceComments.value = sourceComments.value.filter(x => x.id !== c.id);
+  } catch (e) { console.error(e); }
+}
 </script>
 
 <template>
@@ -577,26 +707,31 @@ async function uploadFiles(files) {
                 <thead>
                   <tr>
                     <th class="w-1"><input type="checkbox" class="form-check-input" v-model="selectAllVisible" /></th>
-                    <th>Бренд</th>
+                    <th>Создан</th>
+                    <th>Название</th>
                     <th>Артикул</th>
-                    <th>Тип задачи</th>
+                    <th>Бренд</th>
+                    <th>Тип</th>
                     <th>Исполнитель</th>
-                    <th>Яндекс.Диск</th>
+                    <th>Исходник</th>
+                    <th>Результат</th>
                     <th>Статус</th>
                     <th class="w-1">Действия</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="displayedTasks.length === 0">
-                    <td colspan="8" class="text-center text-secondary py-4">Нет заданий</td>
+                    <td colspan="11" class="text-center text-secondary py-4">Нет заданий</td>
                   </tr>
                   <tr v-for="t in displayedTasks" :key="t.id">
                     <td>
                       <input type="checkbox" class="form-check-input" :checked="isSelected(t.id)"
                         @change="toggleRow(t.id)" />
                     </td>
-                    <td>{{t.brand?.name || (brands.find(b => b.id === t.brand_id)?.name)}}</td>
+                    <td>{{ new Date(t.created_at).toLocaleString('ru-RU') }}</td>
+                    <td>{{ t.name || t.article?.name || '' }}</td>
                     <td>{{ t.article?.name || '' }}</td>
+                    <td>{{t.brand?.name || (brands.find(b => b.id === t.brand_id)?.name)}}</td>
                     <td>{{ t.type?.name || '' }}</td>
                     <td>
                       <div class="d-flex align-items-center gap-2">
@@ -608,25 +743,28 @@ async function uploadFiles(files) {
                     </td>
                     <td>
                       <div class="d-flex gap-1">
-                        <button class="btn btn-sm btn-outline-primary" @click="openFolder(t)">ПАПКА</button>
-                        <button class="btn btn-sm btn-outline-secondary" @click="openFilesOffcanvas(t)">ФАЙЛЫ</button>
+                        <button class="btn btn-sm btn-outline-secondary"
+                          @click="openSourceCommentsOffcanvas(t)">КОММЕНТАРИЙ</button>
+                        <!-- <button class="btn btn-sm btn-outline-primary" @click="openFolder(t)">ФАЙЛЫ (скрыто)</button> -->
                       </div>
                     </td>
                     <td>
-                      <span class="badge text-light" :class="statusClass(t.status)">{{ statusLabel(t.status) }}</span>
+                      <div class="d-flex gap-1">
+                        <button class="btn btn-sm btn-outline-secondary"
+                          @click="openCommentsOffcanvas(t)">КОММЕНТАРИЙ</button>
+                        <button class="btn btn-sm btn-outline-primary" @click="openFilesOffcanvas(t)">ФАЙЛЫ</button>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="d-flex align-items-center gap-2">
+                        <select class="form-select form-select-sm w-auto" :value="t.status"
+                          @change="(e) => updateTaskStatus(t, e.target.value)">
+                          <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
+                        </select>
+                      </div>
                     </td>
                     <td class="text-nowrap">
                       <div class="btn-list d-flex flex-nowrap align-items-center gap-2">
-                        <button class="btn btn-icon btn-ghost-secondary" @click="openCommentsOffcanvas(t)"
-                          title="Комментарии">
-                          <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24"
-                            viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
-                            stroke-linecap="round" stroke-linejoin="round">
-                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                            <path
-                              d="M21 15a2 2 0 0 1 -2 2h-6l-4 4v-4h-6a2 2 0 0 1 -2 -2v-6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2z" />
-                          </svg>
-                        </button>
                         <button class="btn btn-icon btn-ghost-primary" @click="onEditTask(t)" title="Редактировать">
                           <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24"
                             viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
@@ -698,6 +836,15 @@ async function uploadFiles(files) {
                   <label class="form-label">Название (необязательно)</label>
                   <input type="text" class="form-control" v-model="createForm.name"
                     placeholder="По умолчанию — название статьи" />
+                </div>
+                <div class="col-md-12">
+                  <label class="form-label">Исполнитель</label>
+                  <select class="form-select" v-model="createForm.assignee_id">
+                    <option value="">Не назначен</option>
+                    <option v-for="u in performers" :key="u.id" :value="u.id">
+                      {{ u.name }}<span v-if="u.is_blocked"> — ЗАБЛОКИРОВАН</span>
+                    </option>
+                  </select>
                 </div>
               </div>
             </div>
@@ -911,6 +1058,78 @@ async function uploadFiles(files) {
       <!-- Fallback backdrop when Bootstrap Offcanvas is not available -->
       <div v-if="offcanvasOpen && !hasOffcanvas" class="modal-backdrop fade show" style="z-index: 1040;"
         @click="closeOffcanvas"></div>
+    </teleport>
+
+    <!-- Source Offcanvas: BRAND / Исходник (COMMENTS only) -->
+    <teleport to="body">
+      <div class="offcanvas offcanvas-end w-50" id="task-source-offcanvas" ref="sourceOffcanvasEl" tabindex="-1"
+        role="dialog" aria-hidden="true" :aria-labelledby="'task-source-offcanvas-title'"
+        :class="{ show: sourceOffcanvasOpen && !hasSourceOffcanvas }"
+        :style="sourceOffcanvasOpen && !hasSourceOffcanvas ? 'visibility: visible; z-index: 1045;' : ''">
+        <div class="offcanvas-header">
+          <h5 class="offcanvas-title" :id="'task-source-offcanvas-title'">
+            {{ sourceOc.brandName }} / Исходник
+          </h5>
+          <button type="button" class="btn-close text-reset" aria-label="Close" @click="closeSourceOffcanvas"></button>
+        </div>
+        <div class="offcanvas-body">
+          <div class="mb-3">
+            <ul class="nav nav-pills">
+              <li class="nav-item">
+                <button type="button" class="nav-link active" disabled>
+                  Комментарий
+                </button>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <div v-if="commentsLoading" class="text-secondary">Загрузка комментариев…</div>
+            <div v-else>
+              <div v-if="sourceComments.length === 0" class="text-secondary mb-2">Комментариев пока нет.</div>
+              <ul class="list-unstyled">
+                <li v-for="c in sourceComments" :key="c.id"
+                  class="mb-3 d-flex justify-content-between align-items-start">
+                  <div class="flex-grow-1">
+                    <div class="fw-bold">{{ c.user?.name || '—' }} <span class="text-secondary small">{{ new
+                      Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
+                    <div v-if="c.content" style="white-space: pre-wrap;">{{ c.content }}</div>
+                    <div v-if="c.image_path" class="mt-2">
+                      <img :src="'/storage/' + c.image_path" class="img-fluid rounded"
+                        style="max-width: 300px; max-height: 200px;" />
+                    </div>
+                  </div>
+                  <button class="btn btn-ghost-danger btn-sm ms-2" title="Удалить"
+                    @click="deleteSourceComment(c)">Удалить</button>
+                </li>
+              </ul>
+              <div class="mt-3">
+                <form @submit.prevent="addSourceComment">
+                  <div class="mb-2">
+                    <textarea v-model="newSourceComment" rows="2" class="form-control"
+                      placeholder="Новый комментарий…"></textarea>
+                  </div>
+                  <div class="mb-2">
+                    <input type="file" ref="commentImageInput" accept="image/*" class="form-control"
+                      @change="onCommentImageSelected" />
+                    <small class="text-secondary">Максимальный размер: 5MB</small>
+                  </div>
+                  <div class="d-flex justify-content-end">
+                    <button type="button" class="btn btn-secondary me-2"
+                      @click="clearSourceCommentForm">Очистить</button>
+                    <button type="submit" class="btn btn-primary"
+                      :disabled="!newSourceComment.trim() && !selectedCommentImage || sourceSubmitting">
+                      Добавить
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-if="sourceOffcanvasOpen && !hasSourceOffcanvas" class="modal-backdrop fade show" style="z-index: 1040;"
+        @click="closeSourceOffcanvas"></div>
     </teleport>
   </TablerLayout>
 </template>

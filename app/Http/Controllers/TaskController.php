@@ -92,6 +92,8 @@ class TaskController extends Controller
             'task_type_id' => $type->id,
             'article_id' => $article->id,
             'name' => $data['name'] ?? $article->name,
+            'assignee_id' => $data['assignee_id'] ?? null,
+            'status' => isset($data['assignee_id']) ? 'assigned' : 'created',
         ]);
         // Create Yandex.Disk folder
         $this->createYandexFolderStructure($request, $brand, $task, $type, $article);
@@ -108,6 +110,7 @@ class TaskController extends Controller
             'task_type_id' => ['required','exists:task_types,id'],
             'article_id' => ['required','exists:articles,id'],
             'name' => ['nullable','string','max:255'],
+            'assignee_id' => ['nullable','exists:users,id'],
         ]);
 
         $brand = Brand::findOrFail($data['brand_id']);
@@ -119,6 +122,8 @@ class TaskController extends Controller
             'task_type_id' => $type->id,
             'article_id' => $article->id,
             'name' => $data['name'] ?? $article->name,
+            'assignee_id' => $data['assignee_id'] ?? null,
+            'status' => isset($data['assignee_id']) ? 'assigned' : 'created',
         ]);
 
         $this->createYandexFolderStructure($request, $brand, $task, $type, $article);
@@ -130,7 +135,7 @@ class TaskController extends Controller
         abort_unless($task->brand_id === $brand->id, 404);
         $data = $request->validate([
             'name' => ['sometimes','required','string','max:255'],
-            'status' => ['sometimes','required','in:created,assigned,done'],
+            'status' => ['sometimes','required','in:created,assigned,review,rework,accepted'],
             'assignee_id' => ['nullable','exists:users,id'],
             'highlighted' => ['sometimes','boolean'],
             'comment' => ['nullable','string'],

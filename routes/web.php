@@ -80,6 +80,11 @@ Route::middleware('auth')->group(function () {
         Route::get('/comments', [\App\Http\Controllers\TaskCommentController::class, 'index'])->name('brands.tasks.comments.index');
         Route::post('/comments', [\App\Http\Controllers\TaskCommentController::class, 'store'])->name('brands.tasks.comments.store');
         Route::delete('/comments/{comment}', [\App\Http\Controllers\TaskCommentController::class, 'destroy'])->name('brands.tasks.comments.destroy');
+
+        // Task SOURCE comments (clone of task comments but separate storage)
+        Route::get('/source-comments', [\App\Http\Controllers\TaskSourceCommentController::class, 'index'])->name('brands.tasks.source_comments.index');
+        Route::post('/source-comments', [\App\Http\Controllers\TaskSourceCommentController::class, 'store'])->name('brands.tasks.source_comments.store');
+        Route::delete('/source-comments/{comment}', [\App\Http\Controllers\TaskSourceCommentController::class, 'destroy'])->name('brands.tasks.source_comments.destroy');
     });
 });
 
