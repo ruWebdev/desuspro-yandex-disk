@@ -211,7 +211,6 @@ const priorityOptions = [
   { value: 'low', label: 'Низкий' },
   { value: 'medium', label: 'Средний' },
   { value: 'high', label: 'Высокий' },
-  { value: 'urgent', label: 'Срочный' },
 ];
 
 function priorityLabel(priority) {
@@ -219,7 +218,6 @@ function priorityLabel(priority) {
     case 'low': return 'Низкий';
     case 'medium': return 'Средний';
     case 'high': return 'Высокий';
-    case 'urgent': return 'Срочный';
     default: return 'Средний';
   }
 }
@@ -228,8 +226,7 @@ function priorityClass(priority) {
   switch (priority) {
     case 'low': return 'bg-secondary';
     case 'medium': return 'bg-info';
-    case 'high': return 'bg-warning';
-    case 'urgent': return 'bg-danger';
+    case 'high': return 'bg-danger';
     default: return 'bg-info';
   }
 }

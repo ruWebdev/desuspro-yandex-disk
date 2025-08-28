@@ -53,6 +53,27 @@ function statusClass(status, hasAssignee) {
     return hasAssignee ? 'bg-primary' : 'bg-secondary';
 }
 
+// Priority helpers
+function priorityLabel(priority) {
+    switch (priority) {
+        case 'low': return 'Низкий';
+        case 'medium': return 'Средний';
+        case 'high': return 'Высокий';
+        case 'urgent': return 'Срочный';
+        default: return 'Средний';
+    }
+}
+
+function priorityClass(priority) {
+    switch (priority) {
+        case 'low': return 'bg-secondary';
+        case 'medium': return 'bg-info';
+        case 'high': return 'bg-warning';
+        case 'urgent': return 'bg-danger';
+        default: return 'bg-info';
+    }
+}
+
 // Public link helpers (copy/open) similar to All.vue
 async function ensurePublicLink(task) {
     if (task.public_link) return true;
@@ -484,12 +505,13 @@ async function sendRowForReview(t) {
                             <th>Исходник</th>
                             <th>Результат</th>
                             <th>Статус</th>
+                            <th>Приоритет</th>
                             <th class="w-1">ДЕЙСТВИЯ</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr v-if="displayed.length === 0">
-                            <td colspan="9" class="text-center text-secondary py-4">Назначенных заданий нет</td>
+                            <td colspan="10" class="text-center text-secondary py-4">Назначенных заданий нет</td>
                         </tr>
                         <tr v-for="t in displayed" :key="t.id">
                             <td>{{ new Date(t.created_at).toLocaleString('ru-RU') }}</td>
@@ -514,6 +536,11 @@ async function sendRowForReview(t) {
                             <td>
                                 <span class="badge text-light" :class="statusClass(t.status, !!t.assignee_id)">{{
                                     statusLabel(t.status, !!t.assignee_id) }}</span>
+                            </td>
+                            <td>
+                                <span class="badge text-light" :class="priorityClass(t.priority)">{{
+                                    priorityLabel(t.priority)
+                                }}</span>
                             </td>
                             <td class="text-nowrap">
                                 <div class="btn-list d-flex flex-nowrap align-items-center gap-2">
