@@ -176,7 +176,6 @@ async function deleteArticle(article) {
 
   <Head title="Бренды" />
   <TablerLayout>
-    <template #header>Бренды</template>
 
     <div class="row row-deck">
       <div class="col-12">
@@ -269,7 +268,8 @@ async function deleteArticle(article) {
 
   <!-- Articles Off-canvas (Артикулы) -->
   <teleport to="body">
-    <div v-if="articlesOpen" class="offcanvas offcanvas-end show" tabindex="-1" style="visibility: visible; width: 520px; z-index: 1050;">
+    <div v-if="articlesOpen" class="offcanvas offcanvas-end show" tabindex="-1"
+      style="visibility: visible; width: 520px; z-index: 1050;">
       <div class="offcanvas-header">
         <h5 class="offcanvas-title">Артикулы — {{ articlesBrand?.name }}</h5>
         <button type="button" class="btn-close" aria-label="Close" @click="closeArticles"></button>
@@ -278,7 +278,8 @@ async function deleteArticle(article) {
         <div class="mb-3">
           <label class="form-label">Добавить артикул</label>
           <div class="input-group">
-            <input v-model="articleName" type="text" class="form-control" placeholder="Наименование артикула" @keyup.enter="addArticle" />
+            <input v-model="articleName" type="text" class="form-control" placeholder="Наименование артикула"
+              @keyup.enter="addArticle" />
             <button class="btn btn-primary" @click="addArticle">Добавить</button>
           </div>
           <div v-if="Object.keys(articlesErrors).length" class="text-danger small mt-1">
@@ -297,8 +298,10 @@ async function deleteArticle(article) {
         </div>
 
         <div class="list-group list-group-flush border-top">
-          <div v-if="!articlesLoading && articles.length === 0" class="text-secondary py-4 text-center">Нет артикулов</div>
-          <div v-for="a in articles" :key="a.id" class="list-group-item d-flex justify-content-between align-items-center">
+          <div v-if="!articlesLoading && articles.length === 0" class="text-secondary py-4 text-center">Нет артикулов
+          </div>
+          <div v-for="a in articles" :key="a.id"
+            class="list-group-item d-flex justify-content-between align-items-center">
             <div class="text-truncate">{{ a.name }}</div>
             <button class="btn btn-sm btn-link text-danger" @click="deleteArticle(a)">Удалить</button>
           </div>

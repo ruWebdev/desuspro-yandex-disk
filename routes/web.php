@@ -27,6 +27,9 @@ Route::get('/dashboard', function () {
         if ($user->hasRole('Manager')) {
             return redirect()->route('tasks.all');
         }
+        if ($user->hasRole('Performer')) {
+            return redirect()->route('performer.tasks');
+        }
     }
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
@@ -72,10 +75,21 @@ Route::middleware('auth')->group(function () {
         Route::get('/subtasks/{subtask}/comments', [\App\Http\Controllers\SubtaskCommentController::class, 'index'])->name('brands.tasks.subtasks.comments.index');
         Route::post('/subtasks/{subtask}/comments', [\App\Http\Controllers\SubtaskCommentController::class, 'store'])->name('brands.tasks.subtasks.comments.store');
         Route::delete('/subtasks/{subtask}/comments/{comment}', [\App\Http\Controllers\SubtaskCommentController::class, 'destroy'])->name('brands.tasks.subtasks.comments.destroy');
+
+        // Task comments (accessible to authenticated users, including performers)
+        Route::get('/comments', [\App\Http\Controllers\TaskCommentController::class, 'index'])->name('brands.tasks.comments.index');
+        Route::post('/comments', [\App\Http\Controllers\TaskCommentController::class, 'store'])->name('brands.tasks.comments.store');
+        Route::delete('/comments/{comment}', [\App\Http\Controllers\TaskCommentController::class, 'destroy'])->name('brands.tasks.comments.destroy');
     });
 });
 
 // Role-specific entry pages (legacy removed). Future performer landing could be added here.
+
+// Performer routes
+Route::middleware(['auth', 'role:Performer'])->group(function () {
+    Route::get('/my-tasks', [\App\Http\Controllers\Performer\TasksController::class, 'index'])->name('performer.tasks');
+    Route::put('/performer/tasks/{task}/status', [\App\Http\Controllers\Performer\TasksController::class, 'updateStatus'])->name('performer.tasks.update_status');
+});
 
 // Users by role (manager-only)
 Route::middleware(['auth', 'role:Manager'])->group(function () {
@@ -107,10 +121,7 @@ Route::middleware(['auth', 'role:Manager'])->group(function () {
         Route::post('/tasks/{task}/public-link', [\App\Http\Controllers\TaskController::class, 'generatePublicLink'])->name('brands.tasks.public_link');
         Route::delete('/tasks/{task}/public-link', [\App\Http\Controllers\TaskController::class, 'removePublicLink'])->name('brands.tasks.public_link.delete');
 
-        // Task comments
-        Route::get('/tasks/{task}/comments', [\App\Http\Controllers\TaskCommentController::class, 'index'])->name('brands.tasks.comments.index');
-        Route::post('/tasks/{task}/comments', [\App\Http\Controllers\TaskCommentController::class, 'store'])->name('brands.tasks.comments.store');
-        Route::delete('/tasks/{task}/comments/{comment}', [\App\Http\Controllers\TaskCommentController::class, 'destroy'])->name('brands.tasks.comments.destroy');
+        // Task comments (manager duplication removed; exposed above for all auth users)
 
         // Articles per brand
         Route::get('/articles', [BrandArticleController::class, 'index'])->name('brands.articles.index');

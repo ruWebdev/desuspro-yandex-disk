@@ -522,62 +522,57 @@ async function uploadFiles(files) {
 <template>
   <TablerLayout>
 
-    <Head title="Все задания" />
-    <template #header>Все задания</template>
-
     <div class="row row-deck">
       <div class="col-12">
-        <div class="card">
-          <div class="card-table">
-            <!-- Card Header with Filters -->
-            <div class="card-header">
-              <div class="row w-full">
-                <div class="col">
-                  <h3 class="card-title mb-0">Список заданий</h3>
-                  <p class="text-secondary m-0">Просмотр и управление всеми заданиями.</p>
-                </div>
-                <div class="col-md-auto col-sm-12">
-                  <div class="ms-auto d-flex flex-wrap btn-list">
-                    <!-- Search input -->
-                    <div class="input-group input-group-flat w-auto me-2">
-                      <span class="input-group-text">
-                        <i class="ti ti-search"></i>
-                      </span>
-                      <input type="text" class="form-control" v-model="search" placeholder="Поиск по названию..."
-                        autocomplete="off" />
-                    </div>
-
-                    <!-- Brand filter -->
-                    <select class="form-select w-auto me-2" v-model="brandFilter">
-                      <option value="">Все бренды</option>
-                      <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.name }}</option>
-                    </select>
-
-                    <!-- Action buttons -->
-                    <button class="btn btn-primary" @click="openCreate">
-                      <i class="ti ti-plus"></i> Новое задание
-                    </button>
-                  </div>
-                </div>
+        <div class="card mb-3">
+          <!-- Card Header with Filters -->
+          <div class="card-header">
+            <div>
+              <div class="card-title">Список заданий</div>
+              <div class="card-subtitle">Просмотр и управление всеми заданиями.</div>
+            </div>
+            <div class="card-actions d-flex flex-wrap">
+              <div class="input-group input-group-flat w-auto me-2">
+                <span class="input-group-text">
+                  <i class="ti ti-search"></i>
+                </span>
+                <input type="text" class="form-control" v-model="search" placeholder="Поиск по названию..."
+                  autocomplete="off" />
               </div>
-
-              <!-- Bulk actions (only delete now) -->
-              <div v-if="anySelected" class="row mt-3">
-                <div class="col-12 d-flex align-items-center">
-                  <div class="me-3">
-                    <i class="ti ti-selector me-1"></i> Выбрано: {{ selectedIds.length }}
-                  </div>
-                  <div class="ms-auto">
-                    <button class="btn btn-sm btn-outline-secondary me-2" @click="clearSelection">
-                      <i class="ti ti-x me-1"></i> Снять выделение
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger" @click="openBulkDelete">
-                      <i class="ti ti-trash me-1"></i> Удалить
-                    </button>
-                  </div>
+              <!-- Brand filter -->
+              <select class="form-select w-auto me-2" v-model="brandFilter">
+                <option value="">Все бренды</option>
+                <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.name }}</option>
+              </select>
+              <!-- Action buttons -->
+              <button class="btn btn-primary" @click="openCreate">
+                <i class="ti ti-plus"></i> Новое задание
+              </button>
+            </div>
+          </div>
+          <div class="card-header" v-if="anySelected">
+            <!-- Bulk actions (only delete now) -->
+            <div class="row">
+              <div class="col-12 d-flex align-items-center">
+                <div class="me-3">
+                  <i class="ti ti-selector me-1"></i> Выбрано: {{ selectedIds.length }}
+                </div>
+                <div class="ms-auto">
+                  <button class="btn btn-sm btn-outline-secondary me-2" @click="clearSelection">
+                    <i class="ti ti-x me-1"></i> Снять выделение
+                  </button>
+                  <button class="btn btn-sm btn-outline-danger" @click="openBulkDelete">
+                    <i class="ti ti-trash me-1"></i> Удалить
+                  </button>
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12">
+        <div class="card">
+          <div class="card-table">
 
             <!-- Table -->
             <div class="table-responsive">
@@ -799,11 +794,11 @@ async function uploadFiles(files) {
 
     <!-- Right offcanvas -->
     <teleport to="body">
-      <div class="offcanvas offcanvas-end w-50" ref="offcanvasEl" tabindex="-1" role="dialog"
-        :class="{ show: offcanvasOpen && !hasOffcanvas }"
+      <div class="offcanvas offcanvas-end w-50" id="task-offcanvas" ref="offcanvasEl" tabindex="-1" role="dialog"
+        aria-hidden="true" :aria-labelledby="'task-offcanvas-title'" :class="{ show: offcanvasOpen && !hasOffcanvas }"
         :style="offcanvasOpen && !hasOffcanvas ? 'visibility: visible; z-index: 1045;' : ''">
         <div class="offcanvas-header">
-          <h5 class="offcanvas-title">
+          <h5 class="offcanvas-title" :id="'task-offcanvas-title'">
             {{ oc.brandName }} / {{ oc.taskName }}
           </h5>
           <button type="button" class="btn-close text-reset" aria-label="Close" @click="closeOffcanvas"></button>

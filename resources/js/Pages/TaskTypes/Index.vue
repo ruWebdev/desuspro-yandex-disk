@@ -68,7 +68,6 @@ onMounted(load)
 
   <Head title="Типы задач" />
   <TablerLayout>
-    <template #header>Типы задач</template>
 
     <div class="row row-deck">
       <div class="col-12">

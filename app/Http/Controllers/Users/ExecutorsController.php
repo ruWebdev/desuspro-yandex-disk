@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Users;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Task;
+use App\Models\Subtask;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -45,8 +47,8 @@ class ExecutorsController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|lowercase|email|max:255|unique:users,email',
             'password' => 'required|string|min:8',
-            'last_name' => 'nullable|string|max:255',
-            'first_name' => 'nullable|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
             'is_blocked' => 'sometimes|boolean',
         ]);
@@ -74,9 +76,9 @@ class ExecutorsController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|lowercase|email|max:255|unique:users,email,' . $user->id,
-            'password' => 'nullable|string|min:8',
-            'last_name' => 'nullable|string|max:255',
-            'first_name' => 'nullable|string|max:255',
+            'password' => 'required|string|min:8',
+            'last_name' => 'required|string|max:255',
+            'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
             'is_blocked' => 'sometimes|boolean',
         ]);
@@ -100,6 +102,17 @@ class ExecutorsController extends Controller
         if ($user->hasRole('Manager')) {
             abort(403);
         }
+
+        // Check if user has assigned tasks or subtasks
+        $hasTasks = Task::where('assignee_id', $user->id)->exists();
+        $hasSubtasks = Subtask::where('assignee_id', $user->id)->exists();
+
+        if ($hasTasks || $hasSubtasks) {
+            return back()->withErrors([
+                'delete' => 'Невозможно удалить пользователя, так как ему назначены задания.'
+            ]);
+        }
+
         $user->delete();
         return back()->with('status', 'executor-deleted');
     }

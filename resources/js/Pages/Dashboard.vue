@@ -5,10 +5,14 @@ import { usePage } from '@inertiajs/vue3';
 
 const page = usePage();
 const isManager = page.props.auth?.user?.roles?.includes('Manager');
+const isPerformer = page.props.auth?.user?.roles?.includes('Performer');
 
 onMounted(() => {
     if (isManager) {
         router.visit(route('tasks.all'), { replace: true });
+    }
+    if (isPerformer) {
+        router.visit(route('performer.tasks'), { replace: true });
     }
 });
 </script>

@@ -17,6 +17,7 @@ function onSearch() {
 const showCreate = ref(false)
 const showEdit = ref(false)
 const showDelete = ref(false)
+const showDeleteRestricted = ref(false)
 const selected = ref(null)
 
 const createForm = useForm({
@@ -38,6 +39,23 @@ const editForm = useForm({
   middle_name: '',
   is_blocked: false,
 })
+
+// Validation: all fields must be filled
+const isFilled = (v) => typeof v === 'string' ? v.trim().length > 0 : !!v
+const createInvalid = computed(() => !(
+  isFilled(createForm.last_name) &&
+  isFilled(createForm.first_name) &&
+  isFilled(createForm.middle_name) &&
+  isFilled(createForm.email) &&
+  isFilled(createForm.password)
+))
+const editInvalid = computed(() => !(
+  isFilled(editForm.last_name) &&
+  isFilled(editForm.first_name) &&
+  isFilled(editForm.middle_name) &&
+  isFilled(editForm.email) &&
+  isFilled(editForm.password)
+))
 
 function openCreate() {
   createForm.reset()
@@ -89,6 +107,12 @@ function submitDelete() {
   if (!selected.value) return
   router.delete(route('users.executors.destroy', selected.value.id), {
     onSuccess: () => { showDelete.value = false },
+    onError: (errors) => {
+      if (errors.delete) {
+        showDelete.value = false
+        showDeleteRestricted.value = true
+      }
+    },
   })
 }
 </script>
@@ -97,7 +121,6 @@ function submitDelete() {
 
   <Head title="Исполнители" />
   <TablerLayout>
-    <template #header>Исполнители</template>
 
     <div class="card">
       <div class="card-header">
@@ -164,7 +187,8 @@ function submitDelete() {
   </TablerLayout>
 
   <!-- Create Modal -->
-  <div class="modal modal-blur fade" :class="{ show: showCreate }" style="display: block" v-if="showCreate">
+  <div class="modal modal-blur fade" :class="{ show: showCreate }" :style="showCreate ? 'display: block;' : ''"
+    tabindex="-1" role="dialog" aria-hidden="true" id="modal-create-executor" v-if="showCreate">
     <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
       <div class="modal-content">
         <div class="modal-header">
@@ -206,14 +230,17 @@ function submitDelete() {
         </div>
         <div class="modal-footer">
           <button class="btn me-auto" @click="showCreate = false">Отмена</button>
-          <button class="btn btn-primary" @click="submitCreate" :disabled="createForm.processing">Создать</button>
+          <button class="btn btn-primary" @click="submitCreate" :disabled="createForm.processing || createInvalid">
+            Создать
+          </button>
         </div>
       </div>
     </div>
   </div>
 
   <!-- Edit Modal -->
-  <div class="modal modal-blur fade" :class="{ show: showEdit }" style="display: block" v-if="showEdit">
+  <div class="modal modal-blur fade" :class="{ show: showEdit }" :style="showEdit ? 'display: block;' : ''"
+    tabindex="-1" role="dialog" aria-hidden="true" id="modal-edit-executor" v-if="showEdit">
     <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
       <div class="modal-content">
         <div class="modal-header">
@@ -239,7 +266,7 @@ function submitDelete() {
               <input v-model="editForm.email" type="email" class="form-control" />
             </div>
             <div class="col-md-6">
-              <label class="form-label">Пароль (если менять)</label>
+              <label class="form-label">Пароль</label>
               <div class="input-group">
                 <input v-model="editForm.password" type="text" class="form-control" />
                 <button class="btn btn-outline" @click="generatePassword('edit')">Сгенерировать</button>
@@ -255,14 +282,16 @@ function submitDelete() {
         </div>
         <div class="modal-footer">
           <button class="btn me-auto" @click="showEdit = false">Отмена</button>
-          <button class="btn btn-primary" @click="submitEdit" :disabled="editForm.processing">Сохранить</button>
+          <button class="btn btn-primary" @click="submitEdit"
+            :disabled="editForm.processing || editInvalid">Сохранить</button>
         </div>
       </div>
     </div>
   </div>
 
   <!-- Delete Modal -->
-  <div class="modal modal-blur fade" :class="{ show: showDelete }" style="display: block" v-if="showDelete">
+  <div class="modal modal-blur fade" :class="{ show: showDelete }" :style="showDelete ? 'display: block;' : ''"
+    tabindex="-1" role="dialog" aria-hidden="true" id="modal-delete-executor" v-if="showDelete">
     <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
       <div class="modal-content">
         <div class="modal-body text-center py-4">
@@ -272,6 +301,22 @@ function submitDelete() {
         <div class="modal-footer">
           <button class="btn me-auto" @click="showDelete = false">Отмена</button>
           <button class="btn btn-danger" @click="submitDelete">Удалить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Restricted Modal -->
+  <div class="modal modal-blur fade" :class="{ show: showDeleteRestricted }" style="display: block"
+    v-if="showDeleteRestricted">
+    <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+      <div class="modal-content">
+        <div class="modal-body text-center py-4">
+          <i class="ti ti-alert-triangle icon mb-2 text-danger" style="font-size: 2rem"></i>
+          <p>Невозможно удалить пользователя «{{ selected?.name }}», так как ему назначены задания.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" @click="showDeleteRestricted = false">Закрыть</button>
         </div>
       </div>
     </div>
