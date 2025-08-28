@@ -207,9 +207,41 @@ const statusOptions = [
   { value: 'accepted', label: 'Принято' },
 ];
 
+const priorityOptions = [
+  { value: 'low', label: 'Низкий' },
+  { value: 'medium', label: 'Средний' },
+  { value: 'high', label: 'Высокий' },
+  { value: 'urgent', label: 'Срочный' },
+];
+
+function priorityLabel(priority) {
+  switch (priority) {
+    case 'low': return 'Низкий';
+    case 'medium': return 'Средний';
+    case 'high': return 'Высокий';
+    case 'urgent': return 'Срочный';
+    default: return 'Средний';
+  }
+}
+
+function priorityClass(priority) {
+  switch (priority) {
+    case 'low': return 'bg-secondary';
+    case 'medium': return 'bg-info';
+    case 'high': return 'bg-warning';
+    case 'urgent': return 'bg-danger';
+    default: return 'bg-info';
+  }
+}
+
 function updateTaskStatus(task, status) {
   if (!task || !status) return;
   router.put(route('brands.tasks.update', { brand: task.brand_id, task: task.id }), { status }, { preserveScroll: true });
+}
+
+function updateTaskPriority(task, priority) {
+  if (!task || !priority) return;
+  router.put(route('brands.tasks.update', { brand: task.brand_id, task: task.id }), { priority }, { preserveScroll: true });
 }
 
 function updateListSubtask(taskId, ownership, patch) {
@@ -803,7 +835,8 @@ async function deleteSourceComment(c) {
                 <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.name }}</option>
               </select>
               <!-- Article filter (dependent on brand) -->
-              <select class="form-select w-auto me-2" v-model="articleFilter" :disabled="!brandFilter">
+              <select class="form-select w-auto me-2" v-model="articleFilter" :disabled="!brandFilter"
+                style="display:none;">
                 <option value="">Все артикулы</option>
                 <option v-for="a in filterArticles" :key="a.id" :value="a.id">{{ a.name }}</option>
               </select>
@@ -864,12 +897,13 @@ async function deleteSourceComment(c) {
                     <th>Исходник</th>
                     <th>Результат</th>
                     <th>Статус</th>
+                    <th>Приоритет</th>
                     <th class="w-1">Действия</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="displayedTasks.length === 0">
-                    <td colspan="11" class="text-center text-secondary py-4">Нет заданий</td>
+                    <td colspan="12" class="text-center text-secondary py-4">Нет заданий</td>
                   </tr>
                   <tr v-for="t in displayedTasks" :key="t.id">
                     <td>
@@ -908,6 +942,14 @@ async function deleteSourceComment(c) {
                         <select class="form-select form-select-sm w-auto" :value="t.status"
                           @change="(e) => updateTaskStatus(t, e.target.value)">
                           <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
+                        </select>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="d-flex align-items-center gap-2">
+                        <select class="form-select form-select-sm w-auto" :value="t.priority || 'medium'"
+                          @change="(e) => updateTaskPriority(t, e.target.value)">
+                          <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{ p.label }}</option>
                         </select>
                       </div>
                     </td>

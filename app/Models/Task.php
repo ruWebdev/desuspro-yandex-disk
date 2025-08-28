@@ -17,6 +17,7 @@ class Task extends Model
         'task_type_id',
         'article_id',
         'status',
+        'priority',
         'ownership',
         'assignee_id',
         'public_link',

@@ -38,7 +38,7 @@ class TaskController extends Controller
                 'assignee:id,name',
             ])
             ->orderByDesc('created_at')
-            ->get(['id','brand_id','task_type_id','article_id','name','status','assignee_id','public_link','created_at']);
+            ->get(['id','brand_id','task_type_id','article_id','name','status','priority','assignee_id','public_link','created_at']);
 
         $brands = Brand::query()->orderBy('name')->get(['id','name']);
 
@@ -136,6 +136,7 @@ class TaskController extends Controller
         $data = $request->validate([
             'name' => ['sometimes','required','string','max:255'],
             'status' => ['sometimes','required','in:created,assigned,review,rework,accepted'],
+            'priority' => ['sometimes','required','in:low,medium,high,urgent'],
             'assignee_id' => ['nullable','exists:users,id'],
             'highlighted' => ['sometimes','boolean'],
             'comment' => ['nullable','string'],

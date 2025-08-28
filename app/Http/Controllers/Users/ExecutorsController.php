@@ -76,7 +76,7 @@ class ExecutorsController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|lowercase|email|max:255|unique:users,email,' . $user->id,
-            'password' => 'required|string|min:8',
+            'password' => 'nullable|string|min:8',
             'last_name' => 'required|string|max:255',
             'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
