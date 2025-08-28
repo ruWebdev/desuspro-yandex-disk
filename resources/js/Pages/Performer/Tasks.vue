@@ -1,6 +1,6 @@
 <script setup>
 import TablerLayout from '@/Layouts/TablerLayout.vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import { ref, computed, onMounted } from 'vue';
 
 const props = defineProps({
@@ -43,14 +43,41 @@ const displayed = computed(() => [...filtered.value].sort((a, b) => new Date(b.c
 function statusLabel(status, hasAssignee) {
     if (status === 'on_review') return 'На проверке';
     if (status === 'accepted') return 'Принято';
-    if (status === 'rejected') return 'Не принято';
+    if (status === 'rework') return 'Не принято';
     return hasAssignee ? 'Назначено' : '—';
 }
 function statusClass(status, hasAssignee) {
     if (status === 'on_review') return 'bg-warning';
     if (status === 'accepted') return 'bg-success';
-    if (status === 'rejected') return 'bg-danger';
+    if (status === 'rework') return 'bg-danger';
     return hasAssignee ? 'bg-primary' : 'bg-secondary';
+}
+
+// Public link helpers (copy/open) similar to All.vue
+async function ensurePublicLink(task) {
+    if (task.public_link) return true;
+    try {
+        await useForm({}).post(route('brands.tasks.public_link', { brand: task.brand_id, task: task.id }), { preserveScroll: true });
+        return true;
+    } catch (e) { console.error(e); return false; }
+}
+async function copyTaskPublicLink(task) {
+    if (!task) return;
+    if (!task.public_link) {
+        const ok = await ensurePublicLink(task);
+        if (!ok) return;
+        alert('Публичная ссылка создана. Повторите копирование.');
+        return;
+    }
+    try { await navigator.clipboard?.writeText(task.public_link); } catch (e) { console.error('Copy failed', e); }
+}
+function openTaskPublicLink(task) {
+    if (!task) return;
+    if (task.public_link) {
+        window.open(task.public_link, '_blank');
+    } else {
+        useForm({}).post(route('brands.tasks.public_link', { brand: task.brand_id, task: task.id }), { preserveScroll: true });
+    }
 }
 
 // Offcanvas state and logic
@@ -136,6 +163,76 @@ async function deleteComment(c) {
     try {
         await fetch(url, { method: 'DELETE', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') } });
         comments.value = comments.value.filter(x => x.id !== c.id);
+    } catch (e) { console.error(e); }
+}
+
+// Source Offcanvas (brand/source comments)
+const sourceOffcanvasOpen = ref(false);
+const sourceOc = ref({ brandId: null, brandName: '', taskId: null, taskName: '' });
+const sourceComments = ref([]);
+const newSourceComment = ref('');
+const sourceSubmitting = ref(false);
+const sourceOffcanvasEl = ref(null);
+let sourceOffcanvasInstance = null;
+const hasSourceOffcanvas = ref(false);
+onMounted(() => {
+    const Ctor = window.bootstrap?.Offcanvas;
+    if (Ctor && sourceOffcanvasEl.value) {
+        sourceOffcanvasInstance = new Ctor(sourceOffcanvasEl.value, { backdrop: true, keyboard: true, scroll: true });
+        hasSourceOffcanvas.value = true;
+        sourceOffcanvasEl.value.addEventListener('show.bs.offcanvas', () => { sourceOffcanvasOpen.value = true; });
+        sourceOffcanvasEl.value.addEventListener('hidden.bs.offcanvas', () => { sourceOffcanvasOpen.value = false; });
+    }
+});
+
+function closeSourceOffcanvas() { if (sourceOffcanvasInstance) sourceOffcanvasInstance.hide(); else sourceOffcanvasOpen.value = false; }
+
+function openSourceCommentsOffcanvas(task) {
+    const brandName = task.brand?.name || '';
+    sourceOc.value = {
+        brandId: task.brand_id,
+        brandName,
+        taskId: task.id,
+        taskName: task.name || task.article?.name || '',
+    };
+    sourceComments.value = [];
+    newSourceComment.value = '';
+    sourceOffcanvasOpen.value = true;
+    loadSourceComments();
+    if (sourceOffcanvasInstance) sourceOffcanvasInstance.show();
+}
+
+async function loadSourceComments() {
+    if (!sourceOc.value.taskId) { sourceComments.value = []; return; }
+    const url = route('brands.tasks.source_comments.index', { brand: sourceOc.value.brandId, task: sourceOc.value.taskId });
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    sourceComments.value = await res.json();
+}
+
+async function addSourceComment() {
+    if (!sourceOc.value.taskId || !newSourceComment.value.trim()) return;
+    sourceSubmitting.value = true;
+    try {
+        const url = route('brands.tasks.source_comments.store', { brand: sourceOc.value.brandId, task: sourceOc.value.taskId });
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') },
+            body: JSON.stringify({ content: newSourceComment.value.trim() }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (data && data.comment) sourceComments.value.push(data.comment);
+        newSourceComment.value = '';
+    } catch (e) { console.error(e); }
+    finally { sourceSubmitting.value = false; }
+}
+
+async function deleteSourceComment(c) {
+    if (!sourceOc.value.taskId) return;
+    const url = route('brands.tasks.source_comments.destroy', { brand: sourceOc.value.brandId, task: sourceOc.value.taskId, comment: c.id });
+    try {
+        await fetch(url, { method: 'DELETE', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') } });
+        sourceComments.value = sourceComments.value.filter(x => x.id !== c.id);
     } catch (e) { console.error(e); }
 }
 
@@ -277,7 +374,11 @@ async function deleteYandexItem(item) {
 
 // Status transition: send for review
 const sending = ref(false);
-const canSendForReview = computed(() => currentTask.value && currentTask.value.status !== 'accepted' && currentTask.value.status !== 'on_review');
+const canSendForReview = computed(() => {
+    // Only allow from assigned or rework/rejected
+    const st = currentTask.value?.status;
+    return st === 'assigned' || st === 'rejected' || st === 'rework';
+});
 const sendLabel = computed(() => currentTask.value?.status === 'rejected' ? 'Отправить на повторную проверку' : 'Отправить на проверку');
 
 async function sendForReview() {
@@ -299,6 +400,27 @@ async function sendForReview() {
         );
     } finally { sending.value = false; }
 }
+
+function canSendForReviewRow(t) {
+    // Only active for statuses: assigned (назначено) or rework/rejected (на доработку)
+    return !!t && (t.status === 'assigned' || t.status === 'rejected' || t.status === 'rework');
+}
+async function sendRowForReview(t) {
+    if (!t || !t.id || !canSendForReviewRow(t)) return;
+    sending.value = true;
+    try {
+        await router.put(
+            route('performer.tasks.update_status', { task: t.id }),
+            { status: 'on_review' },
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    t.status = 'on_review';
+                },
+            }
+        );
+    } finally { sending.value = false; }
+}
 </script>
 
 <template>
@@ -313,7 +435,9 @@ async function sendForReview() {
                 <div class="card-actions d-flex flex-wrap">
                     <div class="input-group input-group-flat w-auto me-2">
                         <span class="input-group-text">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round" class="icon icon-1">
                                 <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
                                 <path d="M21 21l-6 -6" />
                             </svg>
@@ -334,33 +458,77 @@ async function sendForReview() {
                 <table class="table table-vcenter card-table">
                     <thead>
                         <tr>
-                            <th>Задание</th>
+                            <th>Создан</th>
+                            <th>Название</th>
+                            <th>Артикул</th>
                             <th>Бренд</th>
-                            <th>Роль</th>
+                            <th>Тип</th>
+                            <th>Исходник</th>
+                            <th>Результат</th>
                             <th>Статус</th>
-                            <th>Создано</th>
-                            <th class="w-1">Действия</th>
+                            <th class="w-1">ДЕЙСТВИЯ</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr v-if="displayed.length === 0">
-                            <td colspan="6" class="text-center text-secondary py-4">Назначенных заданий нет</td>
+                            <td colspan="9" class="text-center text-secondary py-4">Назначенных заданий нет</td>
                         </tr>
                         <tr v-for="t in displayed" :key="t.id">
-                            <td>{{ t.name || '—' }}</td>
+                            <td>{{ new Date(t.created_at).toLocaleString('ru-RU') }}</td>
+                            <td>{{ t.name || t.article?.name || t.article_name || '' }}</td>
+                            <td>{{ t.article?.name || t.article_name || t.article || '—' }}</td>
                             <td>{{ t.brand?.name || '—' }}</td>
+                            <td>{{ t.type?.name || t.task_type?.name || t.type_name || '—' }}</td>
                             <td>
-                                <span class="badge bg-secondary text-light">{{ t.ownership === 'PhotoEditor' ?
-                                    'Фоторедактор' :
-                                    'Фотограф' }}</span>
+                                <div class="d-flex gap-1">
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                        @click="openSourceCommentsOffcanvas(t)">КОММЕНТАРИЙ</button>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                        @click="openOffcanvas(t)">КОММЕНТАРИЙ</button>
+                                    <button class="btn btn-sm btn-outline-primary"
+                                        @click="() => { openOffcanvas(t); activeOcTab = 'files'; }">ФАЙЛЫ</button>
+                                </div>
                             </td>
                             <td>
                                 <span class="badge text-light" :class="statusClass(t.status, !!t.assignee_id)">{{
                                     statusLabel(t.status, !!t.assignee_id) }}</span>
                             </td>
-                            <td>{{ new Date(t.created_at).toLocaleString('ru-RU') }}</td>
                             <td class="text-nowrap">
-                                <button class="btn btn-sm btn-primary" @click="openOffcanvas(t)">Детали</button>
+                                <div class="btn-list d-flex flex-nowrap align-items-center gap-2">
+                                    <button class="btn btn-icon btn-ghost-secondary" @click="copyTaskPublicLink(t)"
+                                        title="Копировать ссылку">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round"
+                                            class="icon icon-tabler icons-tabler-outline icon-tabler-copy">
+                                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                            <path
+                                                d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
+                                            <path
+                                                d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
+                                        </svg>
+                                    </button>
+                                    <button class="btn btn-icon btn-ghost-secondary" @click="openTaskPublicLink(t)"
+                                        title="Открыть ссылку">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round"
+                                            class="icon icon-tabler icons-tabler-outline icon-tabler-link">
+                                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                            <path d="M9 15l6 -6" />
+                                            <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />
+                                            <path
+                                                d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463" />
+                                        </svg>
+                                    </button>
+                                    <button class="btn btn-warning btn-sm"
+                                        :disabled="!canSendForReviewRow(t) || sending" @click="sendRowForReview(t)">НА
+                                        ПРОВЕРКУ</button>
+                                </div>
                             </td>
                         </tr>
                     </tbody>
@@ -431,8 +599,8 @@ async function sendForReview() {
                         <div class="mt-3 d-flex align-items-center gap-2">
                             <input type="file" accept="image/*" multiple ref="fileInputRef" class="d-none"
                                 @change="onFilesChosen" />
-                            <button class="btn btn-primary"
-                                :disabled="uploading || currentTask?.status === 'accepted'" @click="openUploader">
+                            <button class="btn btn-primary" :disabled="uploading || currentTask?.status === 'accepted'"
+                                @click="openUploader">
                                 <span v-if="!uploading">Загрузить фото</span>
                                 <span v-else>Загрузка…</span>
                             </button>
@@ -495,6 +663,49 @@ async function sendForReview() {
             </div>
             <div v-if="offcanvasOpen && !hasOffcanvas" class="modal-backdrop fade show" style="z-index: 1040;"
                 @click="closeOffcanvas"></div>
+        </teleport>
+
+        <!-- Source Offcanvas (БРЕНД / Исходник) -->
+        <teleport to="body">
+            <div class="offcanvas offcanvas-end w-50" ref="sourceOffcanvasEl" tabindex="-1" role="dialog"
+                :class="{ show: sourceOffcanvasOpen && !hasSourceOffcanvas }"
+                :style="sourceOffcanvasOpen && !hasSourceOffcanvas ? 'visibility: visible; z-index: 1045;' : ''">
+                <div class="offcanvas-header">
+                    <h5 class="offcanvas-title">
+                        {{ sourceOc.brandName }} / {{ sourceOc.taskName }} — Исходник
+                    </h5>
+                    <button type="button" class="btn-close text-reset" aria-label="Close"
+                        @click="closeSourceOffcanvas"></button>
+                </div>
+                <div class="offcanvas-body">
+                    <div v-if="commentsLoading" class="text-secondary">Загрузка комментариев…</div>
+                    <div v-else>
+                        <div v-if="sourceComments.length === 0" class="text-secondary mb-2">Комментариев пока нет.</div>
+                        <ul class="list-unstyled">
+                            <li v-for="c in sourceComments" :key="c.id"
+                                class="mb-2 d-flex justify-content-between align-items-start">
+                                <div>
+                                    <div class="fw-bold">{{ c.user?.name || '—' }} <span class="text-secondary small">{{
+                                        new Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
+                                    <div style="white-space: pre-wrap;">{{ c.content }}</div>
+                                </div>
+                                <button class="btn btn-ghost-danger btn-sm" title="Удалить"
+                                    @click="deleteSourceComment(c)">Удалить</button>
+                            </li>
+                        </ul>
+                        <div class="mt-2">
+                            <textarea v-model="newSourceComment" rows="2" class="form-control"
+                                placeholder="Новый комментарий…"></textarea>
+                            <div class="mt-2 d-flex justify-content-end">
+                                <button class="btn btn-primary" :disabled="!newSourceComment.trim() || sourceSubmitting"
+                                    @click="addSourceComment">Добавить</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div v-if="sourceOffcanvasOpen && !hasSourceOffcanvas" class="modal-backdrop fade show"
+                style="z-index: 1040;" @click="closeSourceOffcanvas"></div>
         </teleport>
     </TablerLayout>
 </template>

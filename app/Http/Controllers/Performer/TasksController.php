@@ -17,9 +17,27 @@ class TasksController extends Controller
         $tasks = Task::query()
             ->where('assignee_id', $user->id)
             ->whereIn('ownership', ['Photographer','PhotoEditor'])
-            ->with(['brand:id,name'])
+            ->with([
+                'brand:id,name',
+                'article:id,name',
+                'type:id,name',
+            ])
             ->orderByDesc('created_at')
-            ->get(['id','brand_id','name','status','ownership','assignee_id','public_link','highlighted','comment','size','created_at']);
+            ->get([
+                'id',
+                'brand_id',
+                'article_id',
+                'task_type_id',
+                'name',
+                'status',
+                'ownership',
+                'assignee_id',
+                'public_link',
+                'highlighted',
+                'comment',
+                'size',
+                'created_at',
+            ]);
 
         return Inertia::render('Performer/Tasks', [
             'tasks' => $tasks,

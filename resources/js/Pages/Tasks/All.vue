@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import TablerLayout from '@/Layouts/TablerLayout.vue';
 
@@ -12,18 +12,97 @@ const props = defineProps({
 });
 
 // Filters
+// Name search (existing)
 const search = ref('');
+// Global search across fields
+const globalSearch = ref('');
+// Brand and dependent Article
 const brandFilter = ref(''); // brand id as string for select
+const articleFilter = ref(''); // article id as string for select
+const filterArticles = ref([]); // options based on brandFilter
+// Executor
+const performerFilter = ref(''); // user id as string
+// Created date filter
+// createdFilter: '' | 'today' | 'yesterday' | 'date'
+const createdFilter = ref('');
+const createdDate = ref(''); // yyyy-mm-dd
 if (props.initialBrandId) brandFilter.value = String(props.initialBrandId);
 
+// Load articles for filter when brand changes
+watch(brandFilter, async (val) => {
+  articleFilter.value = '';
+  filterArticles.value = [];
+  if (!val) return;
+  try {
+    const url = route('brands.articles.index', { brand: Number(val) });
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    const data = await res.json();
+    filterArticles.value = Array.isArray(data?.data) ? data.data : [];
+  } catch (e) { console.error(e); }
+});
+
 const displayedTasks = computed(() => {
-  const q = search.value.trim().toLowerCase();
+  const nameQ = search.value.trim().toLowerCase();
+  const gq = globalSearch.value.trim().toLowerCase();
   const brandId = brandFilter.value ? Number(brandFilter.value) : null;
-  return props.tasks.filter(t => {
-    const byBrand = brandId ? t.brand_id === brandId : true;
-    const byQuery = q ? String(t.name || '').toLowerCase().includes(q) : true;
-    return byBrand && byQuery;
+  const artId = articleFilter.value ? Number(articleFilter.value) : null;
+  const perfId = performerFilter.value ? Number(performerFilter.value) : null;
+
+  // Build date boundaries
+  let byDateFn = () => true;
+  if (createdFilter.value === 'today' || createdFilter.value === 'yesterday' || (createdFilter.value === 'date' && createdDate.value)) {
+    const now = new Date();
+    let start, end;
+    if (createdFilter.value === 'today') {
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    } else if (createdFilter.value === 'yesterday') {
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    } else {
+      // specific date
+      const [y, m, d] = createdDate.value.split('-').map(Number);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+        start = new Date(y, m - 1, d);
+        end = new Date(y, m - 1, d + 1);
+      }
+    }
+    if (start && end) {
+      byDateFn = (t) => {
+        const dt = new Date(t.created_at);
+        return dt >= start && dt < end;
+      };
+    }
+  }
+
+  const filtered = props.tasks.filter(t => {
+    // Brand
+    if (brandId && t.brand_id !== brandId) return false;
+    // Article (only applies if brand selected)
+    if (brandId && artId && t.article_id !== artId) return false;
+    // Executor
+    if (perfId && t.assignee_id !== perfId) return false;
+    // Date
+    if (!byDateFn(t)) return false;
+    // Name search
+    if (nameQ && !String(t.name || '').toLowerCase().includes(nameQ)) return false;
+    // Global search across fields
+    if (gq) {
+      const blob = [
+        t.name,
+        t.article?.name,
+        t.brand?.name,
+        t.type?.name,
+        t.assignee?.name,
+        t.public_link,
+      ].map(x => String(x || '').toLowerCase());
+      const gmatch = blob.some(val => val.includes(gq));
+      if (!gmatch) return false;
+    }
+    return true;
   });
+  // Sort newest first
+  return filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 });
 
 // Bulk selection state
@@ -88,7 +167,7 @@ function statusLabel(status) {
   switch (status) {
     case 'created': return 'Создано';
     case 'assigned': return 'Назначено';
-    case 'review': return 'На проверку';
+    case 'on_review': return 'На проверке';
     case 'rework': return 'На доработку';
     case 'accepted': return 'Принято';
     case 'done': return 'Принято'; // backward compatibility
@@ -99,7 +178,7 @@ function statusClass(status) {
   switch (status) {
     case 'created': return 'bg-secondary';
     case 'assigned': return 'bg-primary';
-    case 'review': return 'bg-warning';
+    case 'on_review': return 'bg-warning';
     case 'rework': return 'bg-danger';
     case 'accepted': return 'bg-success';
     case 'done': return 'bg-success'; // backward compatibility
@@ -110,7 +189,7 @@ function statusClass(status) {
 const statusOptions = [
   { value: 'created', label: 'Создано' },
   { value: 'assigned', label: 'Назначено' },
-  { value: 'review', label: 'На проверку' },
+  { value: 'on_review', label: 'На проверке' },
   { value: 'rework', label: 'На доработку' },
   { value: 'accepted', label: 'Принято' },
 ];
@@ -693,19 +772,43 @@ async function deleteSourceComment(c) {
               <div class="card-title">Список заданий</div>
               <div class="card-subtitle">Просмотр и управление всеми заданиями.</div>
             </div>
-            <div class="card-actions d-flex flex-wrap">
+            <div class="card-actions d-flex flex-wrap align-items-center">
+              <!-- Global search -->
               <div class="input-group input-group-flat w-auto me-2">
-                <span class="input-group-text">
-                  <i class="ti ti-search"></i>
-                </span>
-                <input type="text" class="form-control" v-model="search" placeholder="Поиск по названию..."
+                <span class="input-group-text"><i class="ti ti-search"></i></span>
+                <input type="text" class="form-control" v-model="globalSearch" placeholder="Общий поиск..."
                   autocomplete="off" />
+              </div>
+              <!-- Name search -->
+              <div class="input-group input-group-flat w-auto me-2">
+                <span class="input-group-text"><i class="ti ti-letter-case"></i></span>
+                <input type="text" class="form-control" v-model="search" placeholder="Название..." autocomplete="off" />
               </div>
               <!-- Brand filter -->
               <select class="form-select w-auto me-2" v-model="brandFilter">
                 <option value="">Все бренды</option>
                 <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.name }}</option>
               </select>
+              <!-- Article filter (dependent on brand) -->
+              <select class="form-select w-auto me-2" v-model="articleFilter" :disabled="!brandFilter">
+                <option value="">Все артикулы</option>
+                <option v-for="a in filterArticles" :key="a.id" :value="a.id">{{ a.name }}</option>
+              </select>
+              <!-- Executor filter -->
+              <select class="form-select w-auto me-2" v-model="performerFilter">
+                <option value="">Все исполнители</option>
+                <option v-for="u in performers" :key="u.id" :value="u.id">{{ u.name }}</option>
+              </select>
+              <!-- Created date filter -->
+              <select class="form-select w-auto me-2" v-model="createdFilter">
+                <option value="">Все даты</option>
+                <option value="today">Сегодня</option>
+                <option value="yesterday">Вчера</option>
+                <option value="date">Дата…</option>
+              </select>
+              <input v-if="createdFilter === 'date'" type="date" class="form-control w-auto me-2"
+                v-model="createdDate" />
+
               <!-- Action buttons -->
               <button class="btn btn-primary" @click="openCreate">
                 <i class="ti ti-plus"></i> Новое задание
@@ -797,20 +900,28 @@ async function deleteSourceComment(c) {
                     </td>
                     <td class="text-nowrap">
                       <div class="btn-list d-flex flex-nowrap align-items-center gap-2">
-                        <button class="btn btn-icon btn-ghost-secondary" @click="copyTaskPublicLink(t)" title="Копировать ссылку">
-                          <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                            <path d="M9 15l6 -6" />
-                            <path d="M11 6l-1.5 1.5a3.5 3.5 0 0 0 0 5l1 1" />
-                            <path d="M13 18l1.5 -1.5a3.5 3.5 0 0 0 0 -5l-1 -1" />
+                        <button class="btn btn-icon btn-ghost-secondary" @click="copyTaskPublicLink(t)"
+                          title="Копировать ссылку">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                            class="icon icon-tabler icons-tabler-outline icon-tabler-copy">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                            <path
+                              d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
+                            <path
+                              d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
                           </svg>
                         </button>
-                        <button class="btn btn-icon btn-ghost-secondary" @click="openTaskPublicLink(t)" title="Открыть ссылку">
-                          <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                            <path d="M10 14l11 -11" />
-                            <path d="M15 3h6v6" />
-                            <path d="M21 10v10a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h10" />
+                        <button class="btn btn-icon btn-ghost-secondary" @click="openTaskPublicLink(t)"
+                          title="Открыть ссылку">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                            class="icon icon-tabler icons-tabler-outline icon-tabler-link">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                            <path d="M9 15l6 -6" />
+                            <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />
+                            <path
+                              d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463" />
                           </svg>
                         </button>
                         <button class="btn btn-icon btn-ghost-primary" @click="onEditTask(t)" title="Редактировать">
