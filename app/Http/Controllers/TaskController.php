@@ -38,7 +38,7 @@ class TaskController extends Controller
                 'assignee:id,name',
             ])
             ->orderByDesc('created_at')
-            ->get(['id','brand_id','task_type_id','article_id','name','status','assignee_id','created_at']);
+            ->get(['id','brand_id','task_type_id','article_id','name','status','assignee_id','public_link','created_at']);
 
         $brands = Brand::query()->orderBy('name')->get(['id','name']);
 
@@ -242,7 +242,13 @@ class TaskController extends Controller
 
             $this->ensureFolder($token->access_token, $brandPath);
             $this->ensureFolder($token->access_token, $typePath);
-            $this->ensureFolder($token->access_token, $leaf);
+            $folderData = $this->disk->createFolderPublic($token->access_token, $leaf);
+
+            // Store the public URL in the task
+            if (isset($folderData['public_url'])) {
+                $task->public_link = $folderData['public_url'];
+                $task->save();
+            }
         } catch (\Throwable $e) {
             Log::error('Failed to create Yandex.Disk folders for task', [
                 'task_id' => $task->id,

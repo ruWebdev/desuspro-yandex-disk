@@ -126,52 +126,13 @@ function openCreate() {
   modalOpen.value = true;
 }
 
-function openUploader() {
-  uploadError.value = '';
-  if (fileInputRef.value) fileInputRef.value.value = null; // reset
-  fileInputRef.value?.click();
-}
 
-async function onFilesChosen(e) {
-  const files = e.target?.files;
-  if (!files || !files.length) return;
-  await uploadFiles(Array.from(files));
-}
 
-async function uploadFiles(files) {
-  const folder = yandexFolderPath();
-  if (!folder) return;
-  uploading.value = true;
-  uploadError.value = '';
-  try {
-    for (const f of files) {
-      const fd = new FormData();
-      fd.append('path', `${folder}/${f.name}`);
-      fd.append('file', f, f.name);
-      const res = await fetch(route('integrations.yandex.upload'), {
-        method: 'POST',
-        headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') },
-        body: fd,
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Upload failed (${res.status}): ${text}`);
-      }
-    }
-    await loadYandexFiles();
-  } catch (e) {
-    console.error(e);
-    uploadError.value = 'Ошибка загрузки файлов. Попробуйте ещё раз.';
-  } finally {
-    uploading.value = false;
-  }
-}
 
-function openFolderUrl() {
-  const url = folderPath.value;
-  if (!url) return;
-  window.open(url, '_blank');
-}
+
+
+
+
 
 async function submitCreate() {
   const payload = {
@@ -229,6 +190,238 @@ function submitDelete() {
     onSuccess: () => { cancelDelete(); },
     preserveScroll: true,
   });
+}
+
+// Offcanvas state and opener
+const offcanvasOpen = ref(false);
+const oc = ref({ brandId: null, brandName: '', taskId: null, taskName: '' });
+const activeOcTab = ref('comments'); // comments|files
+const commentsLoading = ref(false);
+const comments = ref([]);
+const newComment = ref('');
+const submitting = ref(false);
+
+// Bootstrap Offcanvas integration
+const offcanvasEl = ref(null);
+let offcanvasInstance = null;
+const hasOffcanvas = ref(false);
+onMounted(() => {
+  const Ctor = window.bootstrap?.Offcanvas;
+  if (Ctor && offcanvasEl.value) {
+    offcanvasInstance = new Ctor(offcanvasEl.value, { backdrop: true, keyboard: true, scroll: true });
+    hasOffcanvas.value = true;
+    offcanvasEl.value.addEventListener('show.bs.offcanvas', () => { offcanvasOpen.value = true; });
+    offcanvasEl.value.addEventListener('hidden.bs.offcanvas', () => { offcanvasOpen.value = false; });
+  }
+});
+
+function closeOffcanvas() {
+  if (offcanvasInstance) offcanvasInstance.hide();
+  else offcanvasOpen.value = false;
+}
+
+function openCommentsOffcanvas(task) {
+  const brandName = task.brand?.name || (props.brands.find(b => b.id === task.brand_id)?.name) || '';
+  oc.value = {
+    brandId: task.brand_id,
+    brandName,
+    taskId: task.id,
+    taskName: task.name || task.article?.name || '',
+  };
+  offcanvasOpen.value = true;
+  activeOcTab.value = 'comments';
+  comments.value = [];
+  newComment.value = '';
+  loadComments();
+  if (offcanvasInstance) offcanvasInstance.show();
+}
+
+function openFilesOffcanvas(task) {
+  const brandName = task.brand?.name || (props.brands.find(b => b.id === task.brand_id)?.name) || '';
+  oc.value = {
+    brandId: task.brand_id,
+    brandName,
+    taskId: task.id,
+    taskName: task.name || task.article?.name || '',
+  };
+  offcanvasOpen.value = true;
+  activeOcTab.value = 'files';
+  loadYandexFiles();
+  if (offcanvasInstance) offcanvasInstance.show();
+}
+
+async function loadComments() {
+  if (!oc.value.taskId) { comments.value = []; return; }
+  const url = route('brands.tasks.comments.index', { brand: oc.value.brandId, task: oc.value.taskId });
+  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  comments.value = await res.json();
+}
+
+async function addComment() {
+  if (!oc.value.taskId || !newComment.value.trim()) return;
+  submitting.value = true;
+  try {
+    const url = route('brands.tasks.comments.store', { brand: oc.value.brandId, task: oc.value.taskId });
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') },
+      body: JSON.stringify({ content: newComment.value.trim() }),
+    });
+    const data = await res.json();
+    if (data && data.comment) comments.value.push(data.comment);
+    newComment.value = '';
+  } catch (e) { console.error(e); }
+  finally { submitting.value = false; }
+}
+
+async function deleteComment(c) {
+  if (!oc.value.taskId) return;
+  const url = route('brands.tasks.comments.destroy', { brand: oc.value.brandId, task: oc.value.taskId, comment: c.id });
+  try {
+    await fetch(url, { method: 'DELETE', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') } });
+    comments.value = comments.value.filter(x => x.id !== c.id);
+  } catch (e) { console.error(e); }
+}
+
+// Yandex Disk functions
+function openFolder(task) {
+  if (task.public_link) {
+    window.open(task.public_link, '_blank');
+  } else {
+    alert('Ссылка на папку не найдена.');
+  }
+}
+
+// Yandex files state
+const filesLoading = ref(false);
+const filesError = ref('');
+const yandexItems = ref([]);
+const publicFolderUrl = ref('');
+
+// Upload state
+const fileInputRef = ref(null);
+const uploading = ref(false);
+const uploadError = ref('');
+
+async function copyFolderPath() {
+  const text = publicFolderUrl.value;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+  } catch (e) { console.error('Copy failed', e); }
+}
+
+function openFolderUrl() {
+  const url = publicFolderUrl.value;
+  if (!url) return;
+  window.open(url, '_blank');
+}
+
+function yandexFolderPath() {
+  if (!oc.value.brandName || !oc.value.taskName) return null;
+  // Use task name as folder identifier
+  return `disk:/${oc.value.brandName}/${oc.value.taskName}`;
+}
+
+async function loadYandexFiles() {
+  const path = yandexFolderPath();
+  if (!path) return;
+  filesLoading.value = true;
+  filesError.value = '';
+  try {
+    // Ensure folder exists and is published, capture public_url
+    try {
+      const resCreate = await fetch(route('integrations.yandex.create_folder'), {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ path }),
+      });
+      if (resCreate.ok) {
+        const created = await resCreate.json();
+        publicFolderUrl.value = created?.public_url || '';
+      }
+    } catch (e) { /* ignore publish errors to still show listing */ }
+
+    const url = route('integrations.yandex.list') + `?path=${encodeURIComponent(path)}&limit=100`;
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    yandexItems.value = (data && data._embedded && Array.isArray(data._embedded.items)) ? data._embedded.items : [];
+  } catch (e) {
+    console.error(e);
+    filesError.value = 'Не удалось загрузить список файлов.';
+    yandexItems.value = [];
+  } finally {
+    filesLoading.value = false;
+  }
+}
+
+async function downloadYandexItem(item) {
+  if (!item || item.type !== 'file') return;
+  let reqPath = item.path;
+  if (!reqPath) {
+    const folder = yandexFolderPath();
+    if (!folder) return;
+    reqPath = `${folder}/${item.name}`;
+  }
+  const url = route('integrations.yandex.download_url') + `?path=${encodeURIComponent(reqPath)}`;
+  try {
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data && data.href) window.open(data.href, '_blank');
+  } catch (e) { console.error(e); }
+}
+
+function openUploader() {
+  uploadError.value = '';
+  if (fileInputRef.value) fileInputRef.value.value = null;
+  fileInputRef.value?.click();
+}
+
+async function onFilesChosen(e) {
+  const files = e.target?.files;
+  if (!files || !files.length) return;
+  await uploadFiles(Array.from(files));
+}
+
+async function uploadFiles(files) {
+  const folder = yandexFolderPath();
+  if (!folder) return;
+  uploading.value = true;
+  uploadError.value = '';
+  try {
+    for (const f of files) {
+      const fd = new FormData();
+      fd.append('path', `${folder}/${f.name}`);
+      fd.append('file', f, f.name);
+      const res = await fetch(route('integrations.yandex.upload'), {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') },
+        body: fd,
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Upload failed (${res.status}): ${text}`);
+      }
+    }
+    await loadYandexFiles();
+  } catch (e) {
+    console.error(e);
+    uploadError.value = 'Ошибка загрузки файлов. Попробуйте ещё раз.';
+  } finally { uploading.value = false; }
 }
 </script>
 
@@ -302,13 +495,14 @@ function submitDelete() {
                     <th>Артикул</th>
                     <th>Тип задачи</th>
                     <th>Исполнитель</th>
+                    <th>Яндекс.Диск</th>
                     <th>Статус</th>
                     <th class="w-1">Действия</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="displayedTasks.length === 0">
-                    <td colspan="7" class="text-center text-secondary py-4">Нет заданий</td>
+                    <td colspan="8" class="text-center text-secondary py-4">Нет заданий</td>
                   </tr>
                   <tr v-for="t in displayedTasks" :key="t.id">
                     <td>
@@ -327,10 +521,26 @@ function submitDelete() {
                       </div>
                     </td>
                     <td>
-                      <span class="badge" :class="statusClass(t.status)">{{ statusLabel(t.status) }}</span>
+                      <div class="d-flex gap-1">
+                        <button class="btn btn-sm btn-outline-primary" @click="openFolder(t)">ПАПКА</button>
+                        <button class="btn btn-sm btn-outline-secondary" @click="openFilesOffcanvas(t)">ФАЙЛЫ</button>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="badge text-light" :class="statusClass(t.status)">{{ statusLabel(t.status) }}</span>
                     </td>
                     <td class="text-nowrap">
                       <div class="btn-list d-flex flex-nowrap align-items-center gap-2">
+                        <button class="btn btn-icon btn-ghost-secondary" @click="openCommentsOffcanvas(t)"
+                          title="Комментарии">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24"
+                            viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                            <path
+                              d="M21 15a2 2 0 0 1 -2 2h-6l-4 4v-4h-6a2 2 0 0 1 -2 -2v-6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2z" />
+                          </svg>
+                        </button>
                         <button class="btn btn-icon btn-ghost-primary" @click="onEditTask(t)" title="Редактировать">
                           <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24"
                             viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
@@ -448,7 +658,8 @@ function submitDelete() {
 
     <!-- Rename Task Modal -->
     <teleport to="body">
-      <div class="modal modal-blur fade" :class="{ show: showRename }" :style="showRename ? 'display: block;' : ''" tabindex="-1" role="dialog">
+      <div class="modal modal-blur fade" :class="{ show: showRename }" :style="showRename ? 'display: block;' : ''"
+        tabindex="-1" role="dialog">
         <div class="modal-dialog" role="document">
           <div class="modal-content">
             <div class="modal-header">
@@ -470,7 +681,8 @@ function submitDelete() {
 
     <!-- Delete Task Modal -->
     <teleport to="body">
-      <div class="modal modal-blur fade" :class="{ show: showDelete }" :style="showDelete ? 'display: block;' : ''" tabindex="-1" role="dialog">
+      <div class="modal modal-blur fade" :class="{ show: showDelete }" :style="showDelete ? 'display: block;' : ''"
+        tabindex="-1" role="dialog">
         <div class="modal-dialog" role="document">
           <div class="modal-content">
             <div class="modal-header">
@@ -478,7 +690,9 @@ function submitDelete() {
               <button type="button" class="btn-close" @click="cancelDelete" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-              <p>Действительно удалить задание «{{ deleting?.name || deleting?.article?.name }}»? Это действие необратимо.</p>
+              <p>Действительно удалить задание «{{ deleting?.name || deleting?.article?.name }}»? Это действие
+                необратимо.
+              </p>
             </div>
             <div class="modal-footer">
               <button type="button" class="btn me-auto" @click="cancelDelete">Отмена</button>
@@ -487,6 +701,113 @@ function submitDelete() {
           </div>
         </div>
       </div>
+    </teleport>
+
+    <!-- Right offcanvas -->
+    <teleport to="body">
+      <div class="offcanvas offcanvas-end w-50" ref="offcanvasEl" tabindex="-1" role="dialog"
+        :class="{ show: offcanvasOpen && !hasOffcanvas }"
+        :style="offcanvasOpen && !hasOffcanvas ? 'visibility: visible; z-index: 1045;' : ''">
+        <div class="offcanvas-header">
+          <h5 class="offcanvas-title">
+            {{ oc.brandName }} / {{ oc.taskName }}
+          </h5>
+          <button type="button" class="btn-close text-reset" aria-label="Close" @click="closeOffcanvas"></button>
+        </div>
+        <div class="offcanvas-body">
+          <div class="mb-3">
+            <ul class="nav nav-pills">
+              <li class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: activeOcTab === 'comments' }"
+                  @click="activeOcTab = 'comments'">
+                  Комментарии
+                </button>
+              </li>
+              <li class="nav-item">
+                <button type="button" class="nav-link" :class="{ active: activeOcTab === 'files' }"
+                  @click="activeOcTab = 'files'">
+                  Файлы
+                </button>
+              </li>
+            </ul>
+          </div>
+
+          <div v-if="activeOcTab === 'files'">
+            <!-- Folder path with copy (browser URL) -->
+            <div class="mb-3">
+              <label class="form-label">URL папки (для просмотра в браузере)</label>
+              <div class="input-group">
+                <input type="text" class="form-control" :value="publicFolderUrl" readonly />
+                <button class="btn btn-outline-secondary" type="button" @click="copyFolderPath">Копировать</button>
+                <button class="btn btn-secondary" type="button" @click="openFolderUrl">Перейти</button>
+              </div>
+            </div>
+
+            <div v-if="filesLoading" class="text-secondary">Загрузка списка файлов…</div>
+            <div v-else>
+              <div v-if="filesError" class="text-danger">{{ filesError }}</div>
+              <div v-else>
+                <div v-if="!yandexItems.length" class="text-secondary">Файлы не найдены.</div>
+                <ul v-else class="list-group">
+                  <li v-for="it in yandexItems" :key="it.resource_id || it.path || it.name"
+                    class="list-group-item d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="badge" :class="it.type === 'dir' ? 'bg-secondary' : 'bg-primary'">{{ it.type ===
+                        'dir' ?
+                        'Папка' : 'Файл' }}</span>
+                      <span>{{ it.name }}</span>
+                      <span v-if="it.size && it.type === 'file'" class="text-secondary small">{{
+                        (it.size / 1024 / 1024).toFixed(2) }} MB</span>
+                    </div>
+                    <div>
+                      <button v-if="it.type === 'file'" class="btn btn-sm btn-outline-primary"
+                        @click="() => downloadYandexItem(it)">Скачать</button>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Photographer upload UI moved below the list -->
+            <div v-if="oc.ownership === 'Photographer'" class="mt-3 d-flex align-items-center gap-2">
+              <input type="file" accept="image/*" multiple ref="fileInputRef" class="d-none" @change="onFilesChosen" />
+              <button class="btn btn-primary" :disabled="uploading" @click="openUploader">
+                <span v-if="!uploading">Загрузить фото</span>
+                <span v-else>Загрузка…</span>
+              </button>
+              <span v-if="uploadError" class="text-danger small">{{ uploadError }}</span>
+            </div>
+          </div>
+
+          <div v-else>
+            <div v-if="commentsLoading" class="text-secondary">Загрузка комментариев…</div>
+            <div v-else>
+              <div v-if="comments.length === 0" class="text-secondary mb-2">Комментариев пока нет.</div>
+              <ul class="list-unstyled">
+                <li v-for="c in comments" :key="c.id" class="mb-2 d-flex justify-content-between align-items-start">
+                  <div>
+                    <div class="fw-bold">{{ c.user?.name || '—' }} <span class="text-secondary small">{{ new
+                      Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
+                    <div style="white-space: pre-wrap;">{{ c.content }}</div>
+                  </div>
+                  <button class="btn btn-ghost-danger btn-sm" title="Удалить" @click="deleteComment(c)">Удалить</button>
+                </li>
+              </ul>
+              <div class="mt-2">
+                <textarea v-model="newComment" rows="2" class="form-control"
+                  placeholder="Новый комментарий…"></textarea>
+                <div class="mt-2 d-flex justify-content-end">
+                  <button class="btn btn-primary" :disabled="!newComment.trim() || submitting"
+                    @click="addComment">Добавить</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Fallback backdrop when Bootstrap Offcanvas is not available -->
+      <div v-if="offcanvasOpen && !hasOffcanvas" class="modal-backdrop fade show" style="z-index: 1040;"
+        @click="closeOffcanvas"></div>
     </teleport>
   </TablerLayout>
 </template>
