@@ -6,11 +6,13 @@ import TablerLayout from '@/Layouts/TablerLayout.vue'
 const items = ref([])
 const loading = ref(false)
 const createName = ref('')
+const createPrefix = ref('')
 const errors = ref({})
 const showCreate = ref(false)
 
 const editing = ref(null)
 const editName = ref('')
+const editPrefix = ref('')
 
 async function load() {
   loading.value = true
@@ -25,8 +27,12 @@ async function load() {
 async function createItem() {
   errors.value = {}
   try {
-    await window.axios.post(route('task_types.store'), { name: createName.value.trim() })
+    await window.axios.post(route('task_types.store'), {
+      name: createName.value.trim(),
+      prefix: createPrefix.value.trim() || null
+    })
     createName.value = ''
+    createPrefix.value = ''
     showCreate.value = false
     await load()
   } catch (e) {
@@ -37,18 +43,23 @@ async function createItem() {
 function startEdit(item) {
   editing.value = item
   editName.value = item.name
+  editPrefix.value = item.prefix || ''
 }
 
 function cancelEdit() {
   editing.value = null
   editName.value = ''
+  editPrefix.value = ''
 }
 
 async function saveEdit() {
   if (!editing.value) return
   errors.value = {}
   try {
-    await window.axios.put(route('task_types.update', editing.value.id), { name: editName.value.trim() })
+    await window.axios.put(route('task_types.update', editing.value.id), {
+      name: editName.value.trim(),
+      prefix: editPrefix.value.trim() || null
+    })
     cancelEdit()
     await load()
   } catch (e) {
@@ -93,15 +104,16 @@ onMounted(load)
                 <tr>
                   <th class="w-1">#</th>
                   <th>Наименование</th>
+                  <th>Префикс</th>
                   <th class="w-1"></th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-if="loading">
-                  <td colspan="3" class="text-center text-secondary py-4">Загрузка...</td>
+                  <td colspan="4" class="text-center text-secondary py-4">Загрузка...</td>
                 </tr>
                 <tr v-else-if="items.length === 0">
-                  <td colspan="3" class="text-center text-secondary py-4">Нет данных</td>
+                  <td colspan="4" class="text-center text-secondary py-4">Нет данных</td>
                 </tr>
                 <tr v-for="(it, i) in items" :key="it.id">
                   <td>{{ i + 1 }}</td>
@@ -112,6 +124,15 @@ onMounted(load)
                     </template>
                     <template v-else>
                       {{ it.name }}
+                    </template>
+                  </td>
+                  <td>
+                    <template v-if="editing?.id === it.id">
+                      <input v-model="editPrefix" type="text" class="form-control" placeholder="Префикс" />
+                      <div class="text-danger small" v-if="errors.prefix">{{ errors.prefix }}</div>
+                    </template>
+                    <template v-else>
+                      {{ it.prefix || '—' }}
                     </template>
                   </td>
                   <td class="text-end">
@@ -146,10 +167,19 @@ onMounted(load)
               <button type="button" class="btn-close" aria-label="Close" @click="showCreate = false"></button>
             </div>
             <div class="modal-body">
-              <label class="form-label">Наименование</label>
-              <input v-model="createName" type="text" class="form-control" placeholder="Например: Ретушь"
-                @keyup.enter="createItem" />
-              <div class="text-danger small mt-1" v-if="errors.name">{{ errors.name }}</div>
+              <div class="mb-3">
+                <label class="form-label">Наименование</label>
+                <input v-model="createName" type="text" class="form-control" placeholder="Например: Ретушь"
+                  @keyup.enter="createItem" />
+                <div class="text-danger small mt-1" v-if="errors.name">{{ errors.name }}</div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Префикс</label>
+                <input v-model="createPrefix" type="text" class="form-control" placeholder="Например: R"
+                  maxlength="10" />
+                <div class="text-danger small mt-1" v-if="errors.prefix">{{ errors.prefix }}</div>
+                <small class="text-secondary">Максимум 10 символов</small>
+              </div>
             </div>
             <div class="modal-footer">
               <button type="button" class="btn me-auto" @click="showCreate = false">Отмена</button>

@@ -14,7 +14,7 @@ class TaskTypeController extends Controller
     public function index(Request $request): JsonResponse|Response
     {
         if ($request->expectsJson()) {
-            $items = TaskType::orderBy('name')->get(['id','name']);
+            $items = TaskType::orderBy('name')->get(['id','name','prefix']);
             return response()->json(['data' => $items]);
         }
         return Inertia::render('TaskTypes/Index');
@@ -24,6 +24,7 @@ class TaskTypeController extends Controller
     {
         $data = $request->validate([
             'name' => ['required','string','max:255','unique:task_types,name'],
+            'prefix' => ['nullable','string','max:10'],
         ]);
         $item = TaskType::create($data);
         if ($request->expectsJson()) {
@@ -36,6 +37,7 @@ class TaskTypeController extends Controller
     {
         $data = $request->validate([
             'name' => ['required','string','max:255','unique:task_types,name,' . $taskType->id],
+            'prefix' => ['nullable','string','max:10'],
         ]);
         $taskType->update($data);
         if ($request->expectsJson()) {

@@ -570,7 +570,7 @@ async function openFilesOffcanvas(task) {
       const brandNameSanitized = sanitizeName(brandName);
       const typeName = sanitizeName(task.type?.name || 'Type');
       const articleName = sanitizeName(task.article?.name || task.name || 'Article');
-      const prefix = typeName.charAt(0);
+      const prefix = task.type?.prefix || typeName.charAt(0);
       const path = `/${brandNameSanitized}/${typeName}/${prefix}_${articleName}`;
 
       const response = await fetch(route('integrations.yandex.publish_folder'), {

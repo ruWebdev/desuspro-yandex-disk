@@ -44,7 +44,7 @@ class TaskController extends Controller
 
         // Assignee options
         $performers = User::role('Performer')->get(['id','name','is_blocked']);
-        $taskTypes = TaskType::query()->orderBy('name')->get(['id','name']);
+        $taskTypes = TaskType::query()->orderBy('name')->get(['id','name','prefix']);
 
         return Inertia::render('Tasks/All', [
             'tasks' => $tasks,
@@ -67,7 +67,7 @@ class TaskController extends Controller
             ->get([ 'id','brand_id','task_type_id','article_id','name','status','assignee_id','public_link','highlighted','comment','size','created_at' ]);
 
         $performers = User::role('Performer')->get(['id','name','is_blocked']);
-        $taskTypes = TaskType::query()->orderBy('name')->get(['id','name']);
+        $taskTypes = TaskType::query()->orderBy('name')->get(['id','name','prefix']);
 
         return Inertia::render('Tasks/Index', [
             'brand' => $brand->only(['id','name']),
@@ -247,7 +247,7 @@ class TaskController extends Controller
 
             $brandPath = '/' . $brandName;
             $typePath = $brandPath . '/' . $typeName;
-            $prefix = mb_substr($typeName, 0, 1);
+            $prefix = $type->prefix ?: mb_substr($typeName, 0, 1); // Use TaskType prefix or fallback to first char
             $leaf = $typePath . '/' . $prefix . '_' . $articleName;
 
             Log::info('Creating Yandex.Disk folder structure', [
@@ -323,7 +323,7 @@ class TaskController extends Controller
 
             $brandPath = '/' . $brandName;
             $typePath = $brandPath . '/' . $typeName;
-            $prefix = mb_substr($typeName, 0, 1);
+            $prefix = $type->prefix ?: mb_substr($typeName, 0, 1); // Use TaskType prefix or fallback to first char
             $leaf = $typePath . '/' . $prefix . '_' . $articleName;
 
             // Best-effort delete; ignore not found errors
