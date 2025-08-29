@@ -142,7 +142,8 @@ class TaskController extends Controller
         }
         $data = $request->validate([
             'name' => ['sometimes','required','string','max:255'],
-            'status' => ['sometimes','required','in:created,assigned,review,rework,accepted'],
+            // Must match DB enum: created, assigned, on_review, rework, rejected, accepted, done
+            'status' => ['sometimes','required','in:created,assigned,on_review,rework,rejected,accepted,done'],
             'priority' => ['sometimes','required','in:low,medium,high,urgent'],
             'assignee_id' => ['nullable','exists:users,id'],
             'highlighted' => ['sometimes','boolean'],
@@ -169,7 +170,8 @@ class TaskController extends Controller
         $update = [];
         if (array_key_exists('status', $payload)) {
             $status = $this->normalizeStatus($payload['status']);
-            if (!in_array($status, ['created','assigned','review','rework','accepted'], true)) {
+            // Must match DB enum
+            if (!in_array($status, ['created','assigned','on_review','rework','rejected','accepted','done'], true)) {
                 return response()->json(['success' => false, 'error' => 'Invalid status'], 422);
             }
             $update['status'] = $status;
@@ -208,8 +210,11 @@ class TaskController extends Controller
     {
         if ($status === null) return null;
         return match ($status) {
-            'on_review' => 'review',
-            'done' => 'accepted', // backward compatibility
+            // Accept both 'review' and 'on_review', persist 'on_review' to match DB enum
+            'review' => 'on_review',
+            // Keep 'done' as-is since DB enum includes it; some older UI sends 'done' for accepted
+            // If you want to merge to 'accepted', uncomment the next line
+            // 'done' => 'accepted',
             default => $status,
         };
     }
