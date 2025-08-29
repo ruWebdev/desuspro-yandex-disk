@@ -134,6 +134,44 @@ const anySelected = computed(() => selectedIds.value.length > 0);
 const selectedTasks = computed(() => props.tasks.filter(t => selectedIds.value.includes(t.id)));
 function clearSelection() { selectedIds.value = []; }
 
+// Bulk actions: assign, status, priority
+const showBulkAssign = ref(false);
+const bulkAssignUserId = ref(null);
+function openBulkAssign() { showBulkAssign.value = true; }
+function closeBulkAssign() { showBulkAssign.value = false; bulkAssignUserId.value = null; }
+async function submitBulkAssign() {
+  const uid = bulkAssignUserId.value ? Number(bulkAssignUserId.value) : null;
+  if (uid == null) return;
+  const ids = [...selectedIds.value];
+  for (const id of ids) {
+    const t = props.tasks.find(x => x.id === id);
+    if (!t) continue;
+    const payload = { assignee_id: uid, status: 'assigned' };
+    await router.put(route('brands.tasks.update', { brand: t.brand_id, task: t.id }), payload, { preserveScroll: true });
+  }
+  closeBulkAssign();
+}
+
+async function bulkUpdateStatus(value) {
+  if (!value) return;
+  const ids = [...selectedIds.value];
+  for (const id of ids) {
+    const t = props.tasks.find(x => x.id === id);
+    if (!t) continue;
+    await router.put(route('brands.tasks.update', { brand: t.brand_id, task: t.id }), { status: value }, { preserveScroll: true });
+  }
+}
+
+async function bulkUpdatePriority(value) {
+  if (!value) return;
+  const ids = [...selectedIds.value];
+  for (const id of ids) {
+    const t = props.tasks.find(x => x.id === id);
+    if (!t) continue;
+    await router.put(route('brands.tasks.update', { brand: t.brand_id, task: t.id }), { priority: value }, { preserveScroll: true });
+  }
+}
+
 // Public link helpers
 async function ensurePublicLink(task) {
   if (task.public_link) return true;
@@ -1120,12 +1158,36 @@ async function deleteSourceComment(c) {
             </div>
           </div>
           <div class="card-header" v-if="anySelected">
-            <!-- Bulk actions (only delete now) -->
+            <!-- Bulk actions toolbar -->
             <div class="row">
-              <div class="col-12 d-flex align-items-center">
+              <div class="col-12 d-flex align-items-center flex-wrap gap-2">
                 <div class="me-3">
                   <i class="ti ti-selector me-1"></i> Выбрано: {{ selectedIds.length }}
                 </div>
+
+                <!-- Bulk assign performer -->
+                <button class="btn btn-sm btn-outline-primary" @click="openBulkAssign">
+                  <i class="ti ti-user-plus me-1"></i> Добавить исполнителя
+                </button>
+
+                <!-- Bulk status change -->
+                <div class="d-flex align-items-center gap-1">
+                  <span class="text-secondary small">Статус:</span>
+                  <select class="form-select form-select-sm w-auto" @change="(e) => bulkUpdateStatus(e.target.value)">
+                    <option value="" selected disabled>Выбрать…</option>
+                    <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
+                  </select>
+                </div>
+
+                <!-- Bulk priority change -->
+                <div class="d-flex align-items-center gap-1">
+                  <span class="text-secondary small">Приоритет:</span>
+                  <select class="form-select form-select-sm w-auto" @change="(e) => bulkUpdatePriority(e.target.value)">
+                    <option value="" selected disabled>Выбрать…</option>
+                    <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{ p.label }}</option>
+                  </select>
+                </div>
+
                 <div class="ms-auto">
                   <button class="btn btn-sm btn-outline-secondary me-2" @click="clearSelection">
                     <i class="ti ti-x me-1"></i> Снять выделение
@@ -1338,6 +1400,35 @@ async function deleteSourceComment(c) {
                 <span v-if="creating" class="spinner-border spinner-border-sm me-2"></span>
                 Создать
               </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
+    <!-- Bulk Assign Performer Modal -->
+    <teleport to="body">
+      <div class="modal modal-blur fade" :class="{ show: showBulkAssign }" :style="showBulkAssign ? 'display: block;' : ''"
+        tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Добавить исполнителя ({{ selectedIds.length }})</h5>
+              <button type="button" class="btn-close" @click="closeBulkAssign" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">Исполнитель</label>
+                <select class="form-select" v-model="bulkAssignUserId">
+                  <option :value="null">— Не выбрано —</option>
+                  <option v-for="u in performers" :key="u.id" :value="u.id">{{ u.name }}</option>
+                </select>
+              </div>
+              <div class="text-secondary small">Будут обновлены выбранные задания: назначен исполнитель и статус «Назначено».</div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-link" @click="closeBulkAssign">Отмена</button>
+              <button type="button" class="btn btn-primary" :disabled="!bulkAssignUserId" @click="submitBulkAssign">Сохранить</button>
             </div>
           </div>
         </div>
