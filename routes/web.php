@@ -108,6 +108,7 @@ Route::middleware(['auth', 'role:Manager'])->group(function () {
     Route::get('/tasks', [TaskController::class, 'all'])->name('tasks.all');
     Route::post('/tasks', [TaskController::class, 'storeGlobal'])->name('tasks.store');
     Route::put('/tasks/{task}/public-link', [TaskController::class, 'updatePublicLink'])->name('tasks.update_public_link');
+    Route::put('/tasks/bulk-update', [TaskController::class, 'bulkUpdate'])->name('tasks.bulk_update'); // Added manager-only route for bulk task updates
 
     // Executors (all non-manager users) - unified management
     Route::get('/users/executors', [\App\Http\Controllers\Users\ExecutorsController::class, 'index'])->name('users.executors.index');

@@ -143,33 +143,22 @@ async function submitBulkAssign() {
   const uid = bulkAssignUserId.value ? Number(bulkAssignUserId.value) : null;
   if (uid == null) return;
   const ids = [...selectedIds.value];
-  for (const id of ids) {
-    const t = props.tasks.find(x => x.id === id);
-    if (!t) continue;
-    const payload = { assignee_id: uid, status: 'assigned' };
-    await router.put(route('brands.tasks.update', { brand: t.brand_id, task: t.id }), payload, { preserveScroll: true });
-  }
-  closeBulkAssign();
+  await router.put(route('tasks.bulk_update'), { ids, assignee_id: uid }, {
+    preserveScroll: true,
+    onSuccess: () => { closeBulkAssign(); },
+  });
 }
 
 async function bulkUpdateStatus(value) {
   if (!value) return;
   const ids = [...selectedIds.value];
-  for (const id of ids) {
-    const t = props.tasks.find(x => x.id === id);
-    if (!t) continue;
-    await router.put(route('brands.tasks.update', { brand: t.brand_id, task: t.id }), { status: value }, { preserveScroll: true });
-  }
+  await router.put(route('tasks.bulk_update'), { ids, status: value }, { preserveScroll: true });
 }
 
 async function bulkUpdatePriority(value) {
   if (!value) return;
   const ids = [...selectedIds.value];
-  for (const id of ids) {
-    const t = props.tasks.find(x => x.id === id);
-    if (!t) continue;
-    await router.put(route('brands.tasks.update', { brand: t.brand_id, task: t.id }), { priority: value }, { preserveScroll: true });
-  }
+  await router.put(route('tasks.bulk_update'), { ids, priority: value }, { preserveScroll: true });
 }
 
 // Public link helpers

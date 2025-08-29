@@ -133,6 +133,13 @@ class TaskController extends Controller
     public function update(Request $request, Brand $brand, Task $task): RedirectResponse
     {
         abort_unless($task->brand_id === $brand->id, 404);
+        // Normalize known legacy/alias statuses before validation
+        if ($request->has('status')) {
+            $normalized = $this->normalizeStatus($request->string('status'));
+            if ($normalized !== null) {
+                $request->merge(['status' => $normalized]);
+            }
+        }
         $data = $request->validate([
             'name' => ['sometimes','required','string','max:255'],
             'status' => ['sometimes','required','in:created,assigned,review,rework,accepted'],
@@ -143,6 +150,68 @@ class TaskController extends Controller
         ]);
         $task->fill($data)->save();
         return back()->with('status', 'task-updated');
+    }
+
+    /**
+     * Bulk update tasks: accepts IDs and one or more fields among status, priority, assignee_id.
+     * Returns JSON for easier frontend handling.
+     */
+    public function bulkUpdate(Request $request)
+    {
+        $payload = $request->validate([
+            'ids' => ['required','array','min:1'],
+            'ids.*' => ['integer','exists:tasks,id'],
+            'status' => ['sometimes','string'],
+            'priority' => ['sometimes','string'],
+            'assignee_id' => ['sometimes','nullable','integer','exists:users,id'],
+        ]);
+
+        $update = [];
+        if (array_key_exists('status', $payload)) {
+            $status = $this->normalizeStatus($payload['status']);
+            if (!in_array($status, ['created','assigned','review','rework','accepted'], true)) {
+                return response()->json(['success' => false, 'error' => 'Invalid status'], 422);
+            }
+            $update['status'] = $status;
+        }
+        if (array_key_exists('priority', $payload)) {
+            $priority = $payload['priority'];
+            if (!in_array($priority, ['low','medium','high','urgent'], true)) {
+                return response()->json(['success' => false, 'error' => 'Invalid priority'], 422);
+            }
+            $update['priority'] = $priority;
+        }
+        if (array_key_exists('assignee_id', $payload)) {
+            $update['assignee_id'] = $payload['assignee_id'];
+            // If assigning, ensure status reflects assignment unless explicitly overridden
+            if (!isset($update['status']) && $payload['assignee_id']) {
+                $update['status'] = 'assigned';
+            }
+        }
+
+        if (empty($update)) {
+            return response()->json(['success' => false, 'error' => 'No fields to update'], 422);
+        }
+
+        Task::whereIn('id', $payload['ids'])->update($update);
+
+        $result = ['success' => true, 'updated' => count($payload['ids'])];
+        // If the request expects JSON (API/AJAX), return JSON. Otherwise, redirect back for Inertia.
+        if ($request->expectsJson() || $request->wantsJson()) {
+            return response()->json($result);
+        }
+        return back()->with('status', 'tasks-bulk-updated');
+    }
+
+    /** Normalize frontend aliases to canonical statuses used in the DB. */
+    private function normalizeStatus(?string $status): ?string
+    {
+        if ($status === null) return null;
+        return match ($status) {
+            'on_review' => 'review',
+            'done' => 'accepted', // backward compatibility
+            default => $status,
+        };
     }
 
     public function destroy(Brand $brand, Task $task): RedirectResponse
