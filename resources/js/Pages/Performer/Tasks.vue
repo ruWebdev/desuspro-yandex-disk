@@ -125,7 +125,7 @@ const hasOffcanvas = ref(false);
 const offcanvasEl = ref(null);
 let offcanvasInstance = null;
 
-const oc = ref({ brandId: null, brandName: '', taskId: null, taskName: '' });
+const oc = ref({ brandId: null, brandName: '', taskId: null, taskName: '', typeName: '', typePrefix: '', articleName: '' });
 const activeOcTab = ref('comments'); // comments | files
 const currentTask = ref(null);
 
@@ -151,9 +151,14 @@ function openOffcanvas(t) {
         brandId: t.brand_id || t.brand?.id || null,
         brandName,
         taskId: t.id || null,
-        taskName: t.name || '',
+        taskName: t.name || t.article?.name || '',
+        typeName: t.type?.name || t.task_type?.name || t.type_name || '',
+        typePrefix: t.type?.prefix || t.task_type?.prefix || t.type_prefix || '',
+        articleName: t.article?.name || t.article_name || '',
     };
     currentTask.value = { ...t };
+    // Use stored public link for display/open/copy
+    publicFolderUrl.value = t.public_link || '';
     activeOcTab.value = 'comments';
     comments.value = [];
     newComment.value = '';
@@ -289,20 +294,33 @@ const uploadError = ref('');
 
 const folderPath = computed(() => publicFolderUrl.value || '');
 
+function sanitizeName(name) {
+    if (!name) return '';
+    let s = String(name);
+    s = s.replace(/[\\\n\r\t]/g, ' ');
+    s = s.replace(/\//g, '-');
+    return s.trim();
+}
+
 function yandexFolderPath() {
-    if (!oc.value.brandName || !currentTask.value) return null;
-    const subName = currentTask.value.name || '';
-    if (!subName) return null;
-    // Choose prefix based on ownership
-    const prefix = currentTask.value.ownership === 'PhotoEditor' ? 'д_' : 'ф_';
-    return `disk:/${oc.value.brandName}/${prefix}${subName}`;
+    const brandName = sanitizeName(oc.value.brandName);
+    const typeName = sanitizeName(oc.value.typeName);
+    const leafBase = sanitizeName(oc.value.articleName || oc.value.taskName);
+    if (!brandName || !leafBase) return null;
+    const prefix = (oc.value.typePrefix || '').toLowerCase();
+    const leaf = `${prefix ? prefix + '_' : ''}${leafBase}`;
+    return typeName ? `disk:/${brandName}/${typeName}/${leaf}` : `disk:/${brandName}/${leaf}`;
 }
 
 function photographerFolderPath() {
-    if (!oc.value.brandName || !currentTask.value) return null;
-    const subName = currentTask.value.name || '';
-    if (!subName) return null;
-    return `disk:/${oc.value.brandName}/ф_${subName}`;
+    // Photographer folder assumed to share the same brand/type, but with 'ф_' prefix
+    const brandName = sanitizeName(oc.value.brandName);
+    const typeName = sanitizeName(oc.value.typeName);
+    const leafBase = sanitizeName(oc.value.articleName || oc.value.taskName);
+    if (!brandName || !leafBase) return null;
+    const prefix = 'ф';
+    const leaf = `${prefix}_${leafBase}`;
+    return typeName ? `disk:/${brandName}/${typeName}/${leaf}` : `disk:/${brandName}/${leaf}`;
 }
 
 async function loadYandexFiles() {
@@ -311,18 +329,6 @@ async function loadYandexFiles() {
     filesLoading.value = true;
     filesError.value = '';
     try {
-        try {
-            const resCreate = await fetch(route('integrations.yandex.create_folder'), {
-                method: 'POST',
-                headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'), 'Accept': 'application/json', 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path }),
-            });
-            if (resCreate.ok) {
-                const created = await resCreate.json();
-                publicFolderUrl.value = created?.public_url || '';
-            }
-        } catch (e) { /* ignore */ }
-
         const url = route('integrations.yandex.list') + `?path=${encodeURIComponent(path)}&limit=100`;
         const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -338,19 +344,13 @@ async function loadYandexFiles() {
 async function loadPhotographerPublicUrl() {
     // Only relevant when current task is owned by PhotoEditor
     if (!currentTask.value || currentTask.value.ownership !== 'PhotoEditor') { photographerPublicUrl.value = ''; return; }
-    const path = photographerFolderPath();
-    if (!path) { photographerPublicUrl.value = ''; return; }
-    try {
-        const res = await fetch(route('integrations.yandex.create_folder'), {
-            method: 'POST',
-            headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'), 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path }),
-        });
-        if (res.ok) {
-            const data = await res.json();
-            photographerPublicUrl.value = data?.public_url || '';
-        }
-    } catch (e) { /* ignore */ }
+
+    // For PhotoEditor tasks, the photographer's public URL should be available from the task data
+    // or retrieved from the backend. For now, we'll leave it empty to avoid duplicate folder creation.
+    photographerPublicUrl.value = '';
+
+    // TODO: Implement proper retrieval of photographer's public URL from backend
+    // This should be stored in the task or subtask data during creation
 }
 
 async function copyText(val) {
@@ -682,16 +682,14 @@ async function sendRowForReview(t) {
                         <div v-else>
                             <div v-if="comments.length === 0" class="text-secondary mb-2">Комментариев пока нет.</div>
                             <ul class="list-unstyled">
-                                <li v-for="c in comments" :key="c.id"
-                                    class="mb-2 d-flex justify-content-between align-items-start">
+                                <li v-for="c in comments" :key="c.id" class="mb-2">
                                     <div>
-                                        <div class="fw-bold">{{ c.user?.name || '—' }} <span
-                                                class="text-secondary small">{{ new
-                                                    Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
-                                        <div style="white-space: pre-wrap;">{{ c.content }}</div>
+                                        <div class="fw-bold">{{ c.user?.name || '—' }} <span class="text-secondary small">{{ new Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
+                                        <div v-if="c.content" style="white-space: pre-wrap;">{{ c.content }}</div>
+                                        <div v-if="c.image_path" class="mt-2">
+                                            <img :src="'/storage/' + c.image_path" class="img-fluid rounded" style="max-width: 300px; max-height: 200px;" />
+                                        </div>
                                     </div>
-                                    <button class="btn btn-ghost-danger btn-sm" title="Удалить"
-                                        @click="deleteComment(c)">Удалить</button>
                                 </li>
                             </ul>
                             <div class="mt-2">
@@ -727,15 +725,14 @@ async function sendRowForReview(t) {
                     <div v-else>
                         <div v-if="sourceComments.length === 0" class="text-secondary mb-2">Комментариев пока нет.</div>
                         <ul class="list-unstyled">
-                            <li v-for="c in sourceComments" :key="c.id"
-                                class="mb-2 d-flex justify-content-between align-items-start">
+                            <li v-for="c in sourceComments" :key="c.id" class="mb-2">
                                 <div>
-                                    <div class="fw-bold">{{ c.user?.name || '—' }} <span class="text-secondary small">{{
-                                        new Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
-                                    <div style="white-space: pre-wrap;">{{ c.content }}</div>
+                                    <div class="fw-bold">{{ c.user?.name || '—' }} <span class="text-secondary small">{{ new Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
+                                    <div v-if="c.content" style="white-space: pre-wrap;">{{ c.content }}</div>
+                                    <div v-if="c.image_path" class="mt-2">
+                                        <img :src="'/storage/' + c.image_path" class="img-fluid rounded" style="max-width: 300px; max-height: 200px;" />
+                                    </div>
                                 </div>
-                                <button class="btn btn-ghost-danger btn-sm" title="Удалить"
-                                    @click="deleteSourceComment(c)">Удалить</button>
                             </li>
                         </ul>
                         <div class="mt-2">

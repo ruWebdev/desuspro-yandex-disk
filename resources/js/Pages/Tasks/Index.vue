@@ -449,23 +449,6 @@ async function loadYandexFiles() {
   filesLoading.value = true;
   filesError.value = '';
   try {
-    // Ensure folder exists and is published, capture public_url
-    try {
-      const resCreate = await fetch(route('integrations.yandex.create_folder'), {
-        method: 'POST',
-        headers: {
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ path }),
-      });
-      if (resCreate.ok) {
-        const created = await resCreate.json();
-        publicFolderUrl.value = created?.public_url || '';
-      }
-    } catch (e) { /* ignore publish errors to still show listing */ }
-
     const url = route('integrations.yandex.list') + `?path=${encodeURIComponent(path)}&limit=100`;
     const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -647,7 +630,8 @@ function rejectSubtask() { updateSubtaskStatus('rejected'); }
 
 <template>
   <!-- Render All.vue clone with brand preselected -->
-  <AllTasks :tasks="tasks" :brands="brandsToPass" :performers="performersToPass" :taskTypes="taskTypesToPass" :initialBrandId="props.brand?.id" />
+  <AllTasks :tasks="tasks" :brands="brandsToPass" :performers="performersToPass" :taskTypes="taskTypesToPass"
+    :initialBrandId="props.brand?.id" />
   <TablerLayout v-if="false">
 
     <Head title="Все задания" />
@@ -759,16 +743,22 @@ function rejectSubtask() { updateSubtaskStatus('rejected'); }
                 <td>{{ new Date(t.created_at).toLocaleString('ru-RU') }}</td>
                 <td class="text-nowrap">
                   <div class="btn-list d-flex flex-nowrap align-items-center gap-2">
-                    <button class="btn btn-icon btn-ghost-secondary" @click="copyTaskPublicLink(t)" title="Копировать ссылку">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <button class="btn btn-icon btn-ghost-secondary" @click="copyTaskPublicLink(t)"
+                      title="Копировать ссылку">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24"
+                        stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round"
+                        stroke-linejoin="round">
                         <path stroke="none" d="M0 0h24v24H0z" fill="none" />
                         <path d="M9 15l6 -6" />
                         <path d="M11 6l-1.5 1.5a3.5 3.5 0 0 0 0 5l1 1" />
                         <path d="M13 18l1.5 -1.5a3.5 3.5 0 0 0 0 -5l-1 -1" />
                       </svg>
                     </button>
-                    <button class="btn btn-icon btn-ghost-secondary" @click="openTaskPublicLink(t)" title="Открыть ссылку">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <button class="btn btn-icon btn-ghost-secondary" @click="openTaskPublicLink(t)"
+                      title="Открыть ссылку">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24"
+                        stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round"
+                        stroke-linejoin="round">
                         <path stroke="none" d="M0 0h24v24H0z" fill="none" />
                         <path d="M10 14l11 -11" />
                         <path d="M15 3h6v6" />
@@ -905,7 +895,7 @@ function rejectSubtask() { updateSubtaskStatus('rejected'); }
             <div class="mb-3 d-flex gap-2 align-items-end">
               <div class="flex-grow-1">
                 <label class="form-label">Исполнитель ({{ oc.ownership === 'Photographer' ? 'Фотограф' : 'Фоторедактор'
-                  }})</label>
+                }})</label>
                 <select class="form-select" v-model="selectedAssigneeId">
                   <option :value="null">— Не назначено —</option>
                   <option v-for="u in assigneeOptions[oc.ownership]" :key="u.id" :value="u.id">{{ assigneeLabel(u) }}
@@ -915,7 +905,7 @@ function rejectSubtask() { updateSubtaskStatus('rejected'); }
               <div>
                 <button class="btn btn-primary" :disabled="!canSaveAssignee" @click="saveAssignee">{{
                   assigneeButtonLabel
-                  }}</button>
+                }}</button>
               </div>
             </div>
             <div v-if="commentsLoading" class="text-secondary">Загрузка комментариев…</div>

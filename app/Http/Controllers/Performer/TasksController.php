@@ -20,7 +20,7 @@ class TasksController extends Controller
             ->with([
                 'brand:id,name',
                 'article:id,name',
-                'type:id,name',
+                'type:id,name,prefix',
             ])
             ->orderByDesc('created_at')
             ->get([

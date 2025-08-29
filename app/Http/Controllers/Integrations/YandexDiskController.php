@@ -151,6 +151,16 @@ class YandexDiskController extends Controller
         return response()->json(['href' => $this->disk->downloadUrl($token->access_token, $request->string('path'))]);
     }
 
+    public function publishFolder(Request $request)
+    {
+        $request->validate(['path' => 'required|string']);
+        $token = $this->requireToken($request);
+        $token = $this->disk->ensureValidToken($token);
+
+        $result = $this->disk->createFolderPublic($token->access_token, $request->string('path'));
+        return response()->json($result);
+    }
+
     public function upload(Request $request)
     {
         $request->validate(['path' => 'required|string', 'file' => 'required|file']);

@@ -509,7 +509,7 @@ function submitDelete() {
 
 // Offcanvas state and opener (RESULT: comments/files)
 const offcanvasOpen = ref(false);
-const oc = ref({ brandId: null, brandName: '', taskId: null, taskName: '' });
+const oc = ref({ brandId: null, brandName: '', taskId: null, taskName: '', typeName: '', typePrefix: '', articleName: '' });
 const activeOcTab = ref('comments'); // comments|files
 const commentsLoading = ref(false);
 const comments = ref([]);
@@ -546,6 +546,9 @@ function openCommentsOffcanvas(task) {
     brandName,
     taskId: task.id,
     taskName: task.name || task.article?.name || '',
+    typeName: task.type?.name || '',
+    typePrefix: task.type?.prefix || '',
+    articleName: task.article?.name || '',
   };
   offcanvasOpen.value = true;
   activeOcTab.value = 'comments';
@@ -562,49 +565,13 @@ async function openFilesOffcanvas(task) {
     brandName,
     taskId: task.id,
     taskName: task.name || task.article?.name || '',
+    typeName: task.type?.name || '',
+    typePrefix: task.type?.prefix || '',
+    articleName: task.article?.name || '',
   };
 
-  // Check if public_link exists, if not, publish the folder and update the task
-  if (!task.public_link) {
-    try {
-      const brandNameSanitized = sanitizeName(brandName);
-      const typeName = sanitizeName(task.type?.name || 'Type');
-      const articleName = sanitizeName(task.article?.name || task.name || 'Article');
-      const prefix = task.type?.prefix || typeName.charAt(0);
-      const path = `/${brandNameSanitized}/${typeName}/${prefix}_${articleName}`;
-
-      const response = await fetch(route('integrations.yandex.publish_folder'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-        },
-        body: JSON.stringify({ path }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.href) {
-          // Update the task's public_link in the database
-          const updateResponse = await fetch(route('tasks.update_public_link', { task: task.id }), {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-            },
-            body: JSON.stringify({ public_link: data.href }),
-          });
-
-          if (updateResponse.ok) {
-            // Update the task data on the client side
-            task.public_link = data.href;
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error publishing folder:', error);
-    }
-  }
+  // Set the public folder URL from the task's public_link
+  publicFolderUrl.value = task.public_link || '';
 
   offcanvasOpen.value = true;
   activeOcTab.value = 'files';
@@ -734,10 +701,26 @@ function openFolderUrl() {
   window.open(url, '_blank');
 }
 
+function sanitizeName(name) {
+  if (!name) return '';
+  // Replace backslashes and control characters with space
+  name = name.replace(/[\\\n\r\t]/g, ' ');
+  // Replace forward slashes with dashes
+  name = name.replace(/\//g, '-');
+  return name.trim();
+}
+
 function yandexFolderPath() {
-  if (!oc.value.brandName || !oc.value.taskName) return null;
-  // Use task name as folder identifier
-  return `disk:/${oc.value.brandName}/${oc.value.taskName}`;
+  const brandName = sanitizeName(oc.value.brandName);
+  const typeName = sanitizeName(oc.value.typeName);
+  // Prefer article name as leaf name; fallback to taskName
+  const leafBase = sanitizeName(oc.value.articleName || oc.value.taskName);
+  if (!brandName || !leafBase) return null;
+  const prefix = (oc.value.typePrefix || '').toLowerCase();
+  const leaf = `${prefix ? prefix + '_' : ''}${leafBase}`;
+  return typeName
+    ? `disk:/${brandName}/${typeName}/${leaf}`
+    : `disk:/${brandName}/${leaf}`;
 }
 
 async function loadYandexFiles() {
@@ -746,23 +729,6 @@ async function loadYandexFiles() {
   filesLoading.value = true;
   filesError.value = '';
   try {
-    // Ensure folder exists and is published, capture public_url
-    try {
-      const resCreate = await fetch(route('integrations.yandex.create_folder'), {
-        method: 'POST',
-        headers: {
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ path }),
-      });
-      if (resCreate.ok) {
-        const created = await resCreate.json();
-        publicFolderUrl.value = created?.public_url || '';
-      }
-    } catch (e) { /* ignore publish errors to still show listing */ }
-
     const url = route('integrations.yandex.list') + `?path=${encodeURIComponent(path)}&limit=100`;
     const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
