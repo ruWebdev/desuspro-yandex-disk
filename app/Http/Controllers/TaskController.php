@@ -33,7 +33,7 @@ class TaskController extends Controller
         $tasks = Task::query()
             ->with([
                 'brand:id,name',
-                'type:id,name',
+                'type:id,name,prefix',
                 'article:id,name',
                 'assignee:id,name',
             ])
@@ -59,7 +59,7 @@ class TaskController extends Controller
         $tasks = Task::query()
             ->where('brand_id', $brand->id)
             ->with([
-                'type:id,name',
+                'type:id,name,prefix',
                 'article:id,name',
                 'assignee:id,name',
             ])
