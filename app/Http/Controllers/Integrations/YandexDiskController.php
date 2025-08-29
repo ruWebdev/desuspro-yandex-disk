@@ -11,6 +11,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class YandexDiskController extends Controller
@@ -18,6 +19,48 @@ class YandexDiskController extends Controller
     public function __construct(private readonly YandexDiskService $disk)
     {
         $this->middleware(['auth']);
+    }
+
+    /**
+     * Process a previously saved list file: clean to items[] structure and run yim.py --use-file-field.
+     * Request: { file: string } where file is a filename under storage/app/private/yandex/list.
+     * Response: JSON produced by yim.py (status, files[], errors...).
+     */
+    public function processList(Request $request)
+    {
+        $data = $request->validate([
+            'file' => ['required','string'], // e.g. 20250829_122712_abcdef.json
+        ]);
+
+        $relative = ltrim($data['file'], '/');
+        $baseDir = 'private/yandex/list';
+        $fullPath = $baseDir . '/' . basename($relative);
+
+        if (!Storage::disk('local')->exists($fullPath)) {
+            abort(404, 'List file not found');
+        }
+
+        // Load and clean to { items: [ ...files only... ] }
+        $raw = json_decode(Storage::disk('local')->get($fullPath), true);
+        if (!is_array($raw)) {
+            abort(400, 'Invalid JSON');
+        }
+        $embedded = data_get($raw, 'response._embedded.items', []);
+        if (!is_array($embedded)) $embedded = [];
+        $files = array_values(array_filter($embedded, fn($it) => is_array($it) && ($it['type'] ?? null) === 'file'));
+
+        $clean = [ 'items' => $files ];
+
+        // Save cleaned file next to original for traceability
+        $cleanName = preg_replace('/\.json$/', '', basename($fullPath)) . '.clean.json';
+        $cleanPath = $baseDir . '/' . $cleanName;
+        Storage::disk('local')->put($cleanPath, json_encode($clean, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+
+        // Run Python resolver with the cleaned file path under project root
+        $resolver = app(\App\Services\YandexUrlResolver::class);
+        $output = $resolver->resolveFromListFile('storage/app/' . $cleanPath, true);
+
+        return response()->json($output);
     }
 
     public function connect(Request $request)
@@ -121,7 +164,27 @@ class YandexDiskController extends Controller
         $token = $this->disk->ensureValidToken($token);
         $path = $request->query('path', '/');
         $limit = (int) $request->query('limit', 20);
-        return response()->json($this->disk->listResources($token->access_token, $path, $limit));
+        $data = $this->disk->listResources($token->access_token, $path, $limit);
+
+        // Persist list request/response for later analysis
+        try {
+            $payload = [
+                'requested_at' => Carbon::now()->toIso8601String(),
+                'user_id' => optional($request->user())->id,
+                'query' => [
+                    'path' => $path,
+                    'limit' => $limit,
+                ],
+                'response' => $data,
+            ];
+            $dir = 'private/yandex/list';
+            $filename = sprintf('%s/%s_%s.json', $dir, Carbon::now()->format('Ymd_His'), md5((string) $path));
+            Storage::disk('local')->put($filename, json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        } catch (\Throwable $e) {
+            Log::warning('Failed to persist Yandex list payload', ['error' => $e->getMessage()]);
+        }
+
+        return response()->json($data);
     }
 
     public function createFolder(Request $request)
@@ -148,7 +211,31 @@ class YandexDiskController extends Controller
         $request->validate(['path' => 'required|string']);
         $token = $this->requireToken($request);
         $token = $this->disk->ensureValidToken($token);
-        return response()->json(['href' => $this->disk->downloadUrl($token->access_token, $request->string('path'))]);
+        // Return a public embeddable link (suitable for <img>), publishing if needed
+        $href = $this->disk->publicFileUrl($token->access_token, (string) $request->string('path'));
+        return response()->json(['href' => $href]);
+    }
+
+    /**
+     * Resolve a Yandex downloader URL to the final storage URL (follow redirects).
+     */
+    public function resolveUrl(Request $request)
+    {
+        $request->validate(['url' => 'required|string']);
+        $final = $this->disk->resolveFinalUrl((string) $request->string('url'));
+        return response()->json(['href' => $final]);
+    }
+
+    /**
+     * Resolve from a single Yandex item payload using Python script (yim.py --input ...)
+     */
+    public function resolveFromItem(Request $request)
+    {
+        $data = $request->validate(['item' => 'required|array']);
+        $item = $data['item'];
+        $resolver = app(\App\Services\YandexUrlResolver::class);
+        $href = $resolver->resolveFromItem($item);
+        return response()->json(['href' => $href]);
     }
 
     public function publishFolder(Request $request)
@@ -170,15 +257,29 @@ class YandexDiskController extends Controller
         $file = $request->file('file');
         $resource = fopen($file->getRealPath(), 'r');
 
+        $path = (string) $request->string('path');
         try {
-            $result = $this->disk->upload($token->access_token, $request->string('path'), $resource);
+            $result = $this->disk->upload($token->access_token, $path, $resource);
         } finally {
             if (is_resource($resource)) {
                 fclose($resource);
             }
         }
 
-        return response()->json($result);
+        // Immediately publish the uploaded file so it is viewable without OAuth
+        $publicUrl = $this->disk->getOrPublishPublicUrl($token->access_token, $path);
+        // Also provide a direct embeddable URL for images
+        $fileUrl = null;
+        try {
+            $fileUrl = $this->disk->publicFileUrl($token->access_token, $path);
+        } catch (\Throwable $e) {
+            // Fallback: keep null; client may still use download url endpoint
+        }
+
+        return response()->json(array_merge($result, [
+            'public_url' => $publicUrl,
+            'file_url' => $fileUrl,
+        ]));
     }
 
     public function move(Request $request)
@@ -197,6 +298,114 @@ class YandexDiskController extends Controller
             (bool) $request->boolean('overwrite', false)
         );
         return response()->json($res);
+    }
+
+    /**
+     * Download a Yandex public URL (or already resolved direct URL) to a temporary local file
+     * and return a public URL under storage (e.g. /storage/tmp/yandex/...).
+     * Request JSON:
+     *   - public_url?: string  (e.g. https://yadi.sk/i/... or any public resource URL)
+     *   - direct_url?: string  (e.g. https://downloader.disk.yandex.ru/disk/...)
+     * Response JSON: { url: string, id: string, path: string, mime: string }
+     */
+    public function downloadPublicToTemp(Request $request)
+    {
+        $data = $request->validate([
+            'public_url' => ['sometimes','string'],
+            'direct_url' => ['sometimes','string'],
+        ]);
+
+        if (empty($data['public_url']) && empty($data['direct_url'])) {
+            abort(422, 'Either public_url or direct_url must be provided');
+        }
+
+        // Determine source URL to download
+        $sourceUrl = $data['direct_url'] ?? null;
+        if (!$sourceUrl && !empty($data['public_url'])) {
+            // Use Yandex public resources API to get a direct href
+            $publicKey = (string) $data['public_url'];
+            $apiUrl = 'https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key=' . urlencode($publicKey);
+            $apiJson = @file_get_contents($apiUrl);
+            if ($apiJson === false) {
+                abort(502, 'Failed to contact Yandex public API');
+            }
+            $api = json_decode($apiJson, true);
+            $href = $api['href'] ?? null;
+            if (!$href) {
+                abort(502, 'Failed to obtain direct download link from Yandex');
+            }
+            $sourceUrl = $href;
+        }
+
+        // Fetch headers to determine mime and a safe extension
+        $headers = @get_headers($sourceUrl, 1);
+        if ($headers === false || !isset($headers['Content-Type'])) {
+            abort(502, 'Failed to determine MIME type');
+        }
+        $mime = is_array($headers['Content-Type']) ? end($headers['Content-Type']) : $headers['Content-Type'];
+        $mimeMap = [
+            'image/jpeg' => 'jpg',
+            'image/png'  => 'png',
+            'image/gif'  => 'gif',
+            'image/webp' => 'webp',
+            'image/bmp'  => 'bmp',
+            'image/svg+xml' => 'svg',
+            'image/heic' => 'heic',
+            'image/heif' => 'heif',
+            'video/mp4' => 'mp4',
+            'video/quicktime' => 'mov',
+        ];
+
+        $ext = $mimeMap[$mime] ?? null;
+        if (!$ext) {
+            // Try to infer from URL query or content-disposition
+            $ext = 'bin';
+        }
+
+        // Download file contents
+        $content = @file_get_contents($sourceUrl);
+        if ($content === false) {
+            abort(502, 'Failed to download file');
+        }
+
+        // Save under public disk for temporary serving
+        $dir = 'tmp/yandex';
+        $name = 'yd_' . now()->format('Ymd_His') . '_' . Str::random(8) . '.' . $ext;
+        $path = $dir . '/' . $name;
+        Storage::disk('public')->put($path, $content);
+
+        // Build public URL manually to avoid static analysis warning on Storage::url
+        $url = asset('storage/' . ltrim($path, '/')); // typically /storage/...
+
+        return response()->json([
+            'url' => $url,
+            'id' => $name,
+            'path' => $path,
+            'mime' => $mime,
+        ]);
+    }
+
+    /**
+     * Delete a previously created temporary file by relative path or id (filename).
+     * Accepts either { path } or { id } referring to storage/app/public/tmp/yandex.
+     */
+    public function deleteTemp(Request $request)
+    {
+        $data = $request->validate([
+            'path' => ['sometimes','string'],
+            'id' => ['sometimes','string'],
+        ]);
+
+        if (empty($data['path']) && empty($data['id'])) {
+            abort(422, 'Provide path or id');
+        }
+        $rel = $data['path'] ?? ('tmp/yandex/' . basename($data['id']));
+        // Only allow deletion inside tmp/yandex
+        if (!str_starts_with($rel, 'tmp/yandex/')) {
+            abort(403, 'Invalid path');
+        }
+        $ok = Storage::disk('public')->delete($rel);
+        return response()->json(['deleted' => $ok]);
     }
 
     private function requireToken(Request $request): YandexToken

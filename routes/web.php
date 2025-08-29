@@ -57,8 +57,14 @@ Route::middleware('auth')->group(function () {
         Route::post('/move', [YandexDiskController::class, 'move'])->name('move');
         Route::delete('/delete', [YandexDiskController::class, 'delete'])->name('delete');
         Route::get('/download-url', [YandexDiskController::class, 'downloadUrl'])->name('download_url');
+        Route::get('/resolve-url', [YandexDiskController::class, 'resolveUrl'])->name('resolve_url');
+        Route::post('/resolve-from-item', [YandexDiskController::class, 'resolveFromItem'])->name('resolve_from_item');
+        Route::post('/process-list', [YandexDiskController::class, 'processList'])->name('process_list');
         Route::post('/upload', [YandexDiskController::class, 'upload'])->name('upload');
         Route::post('/publish-folder', [YandexDiskController::class, 'publishFolder'])->name('publish_folder');
+        // Temp download to public storage and cleanup
+        Route::post('/download-public-to-temp', [YandexDiskController::class, 'downloadPublicToTemp'])->name('download_public_to_temp');
+        Route::delete('/temp', [YandexDiskController::class, 'deleteTemp'])->name('delete_temp');
     });
 
     // Subtasks and comments should be available to authenticated users (Photographer/PhotoEditor/Manager)

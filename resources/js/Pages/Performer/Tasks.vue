@@ -9,8 +9,39 @@ const props = defineProps({
 
 // Search / filter
 const search = ref('');
-// all|assigned|on_review|accepted|rejected
+// all|assigned|on_review|rework|accepted (synced with All.vue)
 const statusFilter = ref('all');
+
+// Additional filters (synced with All.vue)
+const brandFilter = ref('all'); // brand id or 'all'
+const articleFilter = ref(''); // free text
+const createdFilter = ref('all'); // all|today|yesterday|date
+const createdDate = ref(''); // yyyy-mm-dd
+
+const availableBrands = computed(() => {
+    const map = new Map();
+    for (const t of props.tasks) {
+        const id = t.brand_id || t.brand?.id;
+        const name = t.brand?.name;
+        if (id && name && !map.has(id)) map.set(id, name);
+    }
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+});
+
+function matchesCreated(t) {
+    if (createdFilter.value === 'all') return true;
+    const d = new Date(t.created_at);
+    const pad = (n) => String(n).padStart(2, '0');
+    const ymd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const today = new Date();
+    const ymdToday = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+    const yest = new Date(today); yest.setDate(today.getDate() - 1);
+    const ymdYest = `${yest.getFullYear()}-${pad(yest.getMonth() + 1)}-${pad(yest.getDate())}`;
+    if (createdFilter.value === 'today') return ymd === ymdToday;
+    if (createdFilter.value === 'yesterday') return ymd === ymdYest;
+    if (createdFilter.value === 'date') return !!createdDate.value && ymd === createdDate.value;
+    return true;
+}
 
 function isAssigned(t) {
     return !!t.assignee_id;
@@ -18,7 +49,7 @@ function isAssigned(t) {
 
 function matchesFilter(t) {
     if (statusFilter.value === 'all') return true;
-    if (statusFilter.value === 'assigned') return isAssigned(t) && !['on_review', 'accepted', 'rejected'].includes(t.status);
+    if (statusFilter.value === 'assigned') return isAssigned(t) && !['on_review', 'accepted', 'rework'].includes(t.status);
     return t.status === statusFilter.value;
 }
 
@@ -26,6 +57,18 @@ const filtered = computed(() => {
     const q = search.value.trim().toLowerCase();
     return props.tasks.filter((t) => {
         if (!matchesFilter(t)) return false;
+        // brand select
+        if (brandFilter.value !== 'all') {
+            const bid = t.brand_id || t.brand?.id || null;
+            if (String(bid) !== String(brandFilter.value)) return false;
+        }
+        // article free-text
+        if (articleFilter.value.trim()) {
+            const a = (t.article?.name || t.article_name || t.article || '').toString().toLowerCase();
+            if (!a.includes(articleFilter.value.trim().toLowerCase())) return false;
+        }
+        // created date
+        if (!matchesCreated(t)) return false;
         if (!q) return true;
         const taskName = t.name || '';
         const brandName = t.brand?.name || '';
@@ -39,11 +82,12 @@ const filtered = computed(() => {
 
 const displayed = computed(() => [...filtered.value].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
 
-// Status helpers (RU labels)
+// Status helpers (RU labels, synced with All.vue)
 function statusLabel(status, hasAssignee) {
     if (status === 'on_review') return 'На проверке';
     if (status === 'accepted') return 'Принято';
-    if (status === 'rework') return 'Не принято';
+    if (status === 'rework') return 'На доработку';
+    if (status === 'created') return 'Создано';
     return hasAssignee ? 'Назначено' : '—';
 }
 function statusClass(status, hasAssignee) {
@@ -288,6 +332,95 @@ const publicFolderUrl = ref('');
 // Photographer public URL shown in Information tab for PhotoEditor subtasks
 const photographerPublicUrl = ref('');
 
+// Lightbox state and helpers (with temp cleanup like in All.vue)
+const lightboxOpen = ref(false);
+const lightboxSrc = ref('');
+const lightboxTemp = ref(null); // { id, path } for cleanup
+function openLightbox(src, tempMeta = null) {
+    if (!src) return;
+    lightboxSrc.value = src;
+    lightboxTemp.value = tempMeta;
+    lightboxOpen.value = true;
+}
+function closeLightbox() {
+    lightboxOpen.value = false;
+    lightboxSrc.value = '';
+    // Cleanup temp file if any
+    const meta = lightboxTemp.value;
+    lightboxTemp.value = null;
+    if (meta?.path || meta?.id) {
+        try {
+            const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+            fetch(route('integrations.yandex.delete_temp'), {
+                method: 'DELETE',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
+                },
+                body: JSON.stringify({ path: meta.path, id: meta.id })
+            });
+        } catch (e) { console.warn('Temp cleanup failed', e); }
+    }
+}
+function isImageName(name) { return /(\.(jpe?g|png|gif|webp|bmp|svg|heic|heif))$/i.test(name || ''); }
+async function viewYandexItemInLightbox(item) {
+    if (!item || item.type !== 'file') return;
+    if (!isImageName(item.name)) {
+        // Fallback for non-images: open direct URL in new tab
+        return downloadYandexItem(item);
+    }
+    let reqPath = item.path;
+    if (!reqPath) {
+        const folder = yandexFolderPath();
+        if (!folder) return;
+        reqPath = `${folder}/${item.name}`;
+    }
+    const url = route('integrations.yandex.download_url') + `?path=${encodeURIComponent(reqPath)}`;
+    try {
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (data && data.href) {
+            // Ask backend to download to temp public file for safer inline viewing
+            const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+            const tempRes = await fetch(route('integrations.yandex.download_public_to_temp'), {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
+                },
+                body: JSON.stringify({ direct_url: data.href })
+            });
+            if (tempRes.ok) {
+                const temp = await tempRes.json();
+                if (temp?.url) openLightbox(temp.url, { id: temp.id, path: temp.path });
+                else openLightbox(data.href);
+            } else {
+                openLightbox(data.href);
+            }
+        }
+    } catch (e) { console.error(e); }
+}
+
+async function downloadYandexItem(item) {
+    if (!item || item.type !== 'file') return;
+    let reqPath = item.path;
+    if (!reqPath) {
+        const folder = yandexFolderPath();
+        if (!folder) return;
+        reqPath = `${folder}/${item.name}`;
+    }
+    const url = route('integrations.yandex.download_url') + `?path=${encodeURIComponent(reqPath)}`;
+    try {
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (data && data.href) window.open(data.href, '_blank');
+    } catch (e) { console.error(e); }
+}
+
 const fileInputRef = ref(null);
 const uploading = ref(false);
 const uploadError = ref('');
@@ -393,6 +526,8 @@ async function uploadFiles(files) {
 
 async function deleteYandexItem(item) {
     if (!item || item.type !== 'file') return;
+    // Do not allow deleting files if task is already accepted
+    if (currentTask.value?.status === 'accepted') return;
     // Build path if not provided
     let reqPath = item.path;
     if (!reqPath) {
@@ -414,11 +549,11 @@ async function deleteYandexItem(item) {
 // Status transition: send for review
 const sending = ref(false);
 const canSendForReview = computed(() => {
-    // Only allow from assigned or rework/rejected
+    // Only allow from assigned or rework
     const st = currentTask.value?.status;
-    return st === 'assigned' || st === 'rejected' || st === 'rework';
+    return st === 'assigned' || st === 'rework';
 });
-const sendLabel = computed(() => currentTask.value?.status === 'rejected' ? 'Отправить на повторную проверку' : 'Отправить на проверку');
+const sendLabel = computed(() => currentTask.value?.status === 'rework' ? 'Отправить на повторную проверку' : 'Отправить на проверку');
 
 async function sendForReview() {
     if (!oc.value.taskId) return;
@@ -441,8 +576,8 @@ async function sendForReview() {
 }
 
 function canSendForReviewRow(t) {
-    // Only active for statuses: assigned (назначено) or rework/rejected (на доработку)
-    return !!t && (t.status === 'assigned' || t.status === 'rejected' || t.status === 'rework');
+    // Only active for statuses: assigned (назначено) or rework (на доработку)
+    return !!t && (t.status === 'assigned' || t.status === 'rework');
 }
 async function sendRowForReview(t) {
     if (!t || !t.id || !canSendForReviewRow(t)) return;
@@ -471,7 +606,7 @@ async function sendRowForReview(t) {
                     <div class="card-title">Назначенные мне задания</div>
                     <div class="card-subtitle">Список заданий, назначенных вам.</div>
                 </div>
-                <div class="card-actions d-flex flex-wrap">
+                <div class="card-actions d-flex flex-wrap align-items-center gap-2">
                     <div class="input-group input-group-flat w-auto me-2">
                         <span class="input-group-text">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
@@ -483,13 +618,35 @@ async function sendRowForReview(t) {
                         </span>
                         <input v-model="search" type="text" class="form-control" placeholder="Поиск..." />
                     </div>
-                    <select v-model="statusFilter" class="form-select w-auto me-2">
+                    <select v-model="statusFilter" class="form-select w-auto me-2" style="display:none;">
                         <option value="all">Все статусы</option>
                         <option value="assigned">Назначено</option>
                         <option value="on_review">На проверке</option>
-                        <option value="rejected">Не принято</option>
+                        <option value="rework">На доработку</option>
                         <option value="accepted">Принято</option>
                     </select>
+
+                    <select v-model="brandFilter" class="form-select w-auto me-2">
+                        <option value="all">Все бренды</option>
+                        <option v-for="b in availableBrands" :key="b.id" :value="b.id">{{ b.name }}</option>
+                    </select>
+
+                    <div class="input-group input-group-flat w-auto me-2">
+                        <span class="input-group-text">Артикул</span>
+                        <input v-model="articleFilter" type="text" class="form-control"
+                            placeholder="Поиск по артикулу" />
+                    </div>
+
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <select v-model="createdFilter" class="form-select w-auto">
+                            <option value="all">Любая дата</option>
+                            <option value="today">Сегодня</option>
+                            <option value="yesterday">Вчера</option>
+                            <option value="date">Дата…</option>
+                        </select>
+                        <input v-if="createdFilter === 'date'" v-model="createdDate" type="date"
+                            class="form-control w-auto" />
+                    </div>
                 </div>
             </div>
 
@@ -540,7 +697,7 @@ async function sendRowForReview(t) {
                             <td>
                                 <span class="badge text-light" :class="priorityClass(t.priority)">{{
                                     priorityLabel(t.priority)
-                                }}</span>
+                                    }}</span>
                             </td>
                             <td class="text-nowrap">
                                 <div class="btn-list d-flex flex-nowrap align-items-center gap-2">
@@ -632,6 +789,9 @@ async function sendRowForReview(t) {
                                                     / 1024 / 1024).toFixed(2) }} MB</span>
                                         </div>
                                         <div>
+                                            <button v-if="it.type === 'file'"
+                                                class="btn btn-sm btn-outline-primary me-2"
+                                                @click="() => viewYandexItemInLightbox(it)">ПОСМОТРЕТЬ</button>
                                             <button v-if="it.type === 'file'" class="btn btn-sm btn-outline-danger"
                                                 :disabled="currentTask?.status === 'accepted'"
                                                 @click="() => deleteYandexItem(it)">Удалить</button>
@@ -684,10 +844,15 @@ async function sendRowForReview(t) {
                             <ul class="list-unstyled">
                                 <li v-for="c in comments" :key="c.id" class="mb-2">
                                     <div>
-                                        <div class="fw-bold">{{ c.user?.name || '—' }} <span class="text-secondary small">{{ new Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
+                                        <div class="fw-bold">{{ c.user?.name || '—' }} <span
+                                                class="text-secondary small">{{ new
+                                                Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
                                         <div v-if="c.content" style="white-space: pre-wrap;">{{ c.content }}</div>
                                         <div v-if="c.image_path" class="mt-2">
-                                            <img :src="'/storage/' + c.image_path" class="img-fluid rounded" style="max-width: 300px; max-height: 200px;" />
+                                            <img :src="'/storage/' + c.image_path"
+                                                class="img-fluid rounded cursor-pointer"
+                                                style="max-width: 300px; max-height: 200px;"
+                                                @click="() => openLightbox('/storage/' + c.image_path)" />
                                         </div>
                                     </div>
                                 </li>
@@ -727,10 +892,13 @@ async function sendRowForReview(t) {
                         <ul class="list-unstyled">
                             <li v-for="c in sourceComments" :key="c.id" class="mb-2">
                                 <div>
-                                    <div class="fw-bold">{{ c.user?.name || '—' }} <span class="text-secondary small">{{ new Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
+                                    <div class="fw-bold">{{ c.user?.name || '—' }} <span class="text-secondary small">{{
+                                        new Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
                                     <div v-if="c.content" style="white-space: pre-wrap;">{{ c.content }}</div>
                                     <div v-if="c.image_path" class="mt-2">
-                                        <img :src="'/storage/' + c.image_path" class="img-fluid rounded" style="max-width: 300px; max-height: 200px;" />
+                                        <img :src="'/storage/' + c.image_path" class="img-fluid rounded cursor-pointer"
+                                            style="max-width: 300px; max-height: 200px;"
+                                            @click="() => openLightbox('/storage/' + c.image_path)" />
                                     </div>
                                 </div>
                             </li>
@@ -749,5 +917,30 @@ async function sendRowForReview(t) {
             <div v-if="sourceOffcanvasOpen && !hasSourceOffcanvas" class="modal-backdrop fade show"
                 style="z-index: 1040;" @click="closeSourceOffcanvas"></div>
         </teleport>
+
+        <!-- Lightbox Modal -->
+        <teleport to="body">
+            <div class="modal modal-blur fade" :class="{ show: lightboxOpen }"
+                :style="lightboxOpen ? 'display: block;' : ''" tabindex="-1" role="dialog" @click.self="closeLightbox">
+                <div class="modal-dialog modal-xl" role="document">
+                    <div class="modal-content bg-dark">
+                        <div class="modal-body p-0 d-flex justify-content-center align-items-center"
+                            style="min-height: 60vh;">
+                            <img v-if="lightboxSrc" :src="lightboxSrc" alt="preview"
+                                style="max-width: 100%; max-height: 80vh;" />
+                        </div>
+                        <div class="modal-footer border-0">
+                            <button type="button" class="btn btn-light" @click="closeLightbox">Закрыть</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </teleport>
     </TablerLayout>
 </template>
+
+<style scoped>
+.cursor-pointer {
+    cursor: pointer;
+}
+</style>

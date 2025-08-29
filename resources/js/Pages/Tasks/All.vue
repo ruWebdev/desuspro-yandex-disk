@@ -75,6 +75,8 @@ const displayedTasks = computed(() => {
     }
   }
 
+
+
   const filtered = props.tasks.filter(t => {
     // Brand
     if (brandId && t.brand_id !== brandId) return false;
@@ -340,6 +342,89 @@ async function loadArticlesForBrand(brandId) {
     const data = await res.json();
     brandArticles.value = Array.isArray(data?.data) ? data.data : [];
   } catch (e) { console.error(e); }
+}
+
+// Prefer direct Yandex "sizes" URL (ORIGINAL > XXXL > XXL > XL > L > M), then preview, else fallback
+function getBestSizeUrl(item) {
+  const sizes = Array.isArray(item?.sizes) ? item.sizes : [];
+  if (sizes.length) {
+    const pref = ['ORIGINAL', 'XXXL', 'XXL', 'XL', 'L', 'M', 'DEFAULT'];
+    for (const name of pref) {
+      const found = sizes.find(s => s?.name === name && s?.url);
+      if (found?.url) return found.url;
+    }
+    if (sizes[0]?.url) return sizes[0].url;
+  }
+  if (item?.preview) return item.preview;
+  if (item?.file) return item.file;
+  return null;
+}
+
+async function openYandexItemDirect(item) {
+  if (!item || item.type !== 'file') return;
+  // Prefer Python-based resolver via backend with --input JSON
+  try {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+    const res = await fetch(route('integrations.yandex.resolve_from_item'), {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
+      },
+      body: JSON.stringify({ item })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const href = data?.href;
+      if (href) {
+        // Pipe via temp public download for consistent inline serving
+        const tempRes = await fetch(route('integrations.yandex.download_public_to_temp'), {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
+          },
+          body: JSON.stringify({ direct_url: href })
+        });
+        if (tempRes.ok) {
+          const temp = await tempRes.json();
+          if (temp?.url) { openLightbox(temp.url, { id: temp.id, path: temp.path }); return; }
+        }
+        openLightbox(href);
+        return;
+      }
+    }
+  } catch (e) {
+    console.warn('resolve_from_item failed, trying direct URL', e);
+  }
+
+  // Fallback: try direct sizes URL if available
+  const direct = getBestSizeUrl(item);
+  if (direct) {
+    try {
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+      const tempRes = await fetch(route('integrations.yandex.download_public_to_temp'), {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
+        },
+        body: JSON.stringify({ direct_url: direct })
+      });
+      if (tempRes.ok) {
+        const temp = await tempRes.json();
+        if (temp?.url) { openLightbox(temp.url, { id: temp.id, path: temp.path }); return; }
+      }
+    } catch {}
+    openLightbox(direct);
+    return;
+  }
+
+  // Final fallback: backend public download url flow
+  await downloadYandexItem(item);
 }
 
 function openCreate() {
@@ -673,6 +758,80 @@ const filesLoading = ref(false);
 const filesError = ref('');
 const yandexItems = ref([]);
 const publicFolderUrl = ref('');
+
+// Lightbox state and helpers
+const lightboxOpen = ref(false);
+const lightboxSrc = ref('');
+const lightboxTemp = ref(null); // { id, path } for cleanup
+function openLightbox(src, tempMeta = null) {
+  if (!src) return;
+  lightboxSrc.value = src;
+  lightboxTemp.value = tempMeta;
+  lightboxOpen.value = true;
+}
+function closeLightbox() {
+  lightboxOpen.value = false;
+  lightboxSrc.value = '';
+  // Cleanup temp file if any
+  const meta = lightboxTemp.value;
+  lightboxTemp.value = null;
+  if (meta?.path || meta?.id) {
+    try {
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+      fetch(route('integrations.yandex.delete_temp'), {
+        method: 'DELETE',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
+        },
+        body: JSON.stringify({ path: meta.path, id: meta.id })
+      });
+    } catch (e) { console.warn('Temp cleanup failed', e); }
+  }
+}
+function isImageName(name) {
+  return /\.(jpe?g|png|gif|webp|bmp|svg|heic|heif)$/i.test(name || '');
+}
+async function viewYandexItemInLightbox(item) {
+  if (!item || item.type !== 'file') return;
+  if (!isImageName(item.name)) {
+    // Fallback: open in new tab
+    return downloadYandexItem(item);
+  }
+  let reqPath = item.path;
+  if (!reqPath) {
+    const folder = yandexFolderPath();
+    if (!folder) return;
+    reqPath = `${folder}/${item.name}`;
+  }
+  const url = route('integrations.yandex.download_url') + `?path=${encodeURIComponent(reqPath)}`;
+  try {
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data && data.href) {
+      // Ask backend to download to temp public file for safer inline viewing
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+      const tempRes = await fetch(route('integrations.yandex.download_public_to_temp'), {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
+        },
+        body: JSON.stringify({ direct_url: data.href })
+      });
+      if (tempRes.ok) {
+        const temp = await tempRes.json();
+        if (temp?.url) openLightbox(temp.url, { id: temp.id, path: temp.path });
+        else openLightbox(data.href);
+      } else {
+        openLightbox(data.href);
+      }
+    }
+  } catch (e) { console.error(e); }
+}
 
 // Upload state
 const fileInputRef = ref(null);
@@ -1388,7 +1547,7 @@ async function deleteSourceComment(c) {
                     </div>
                     <div>
                       <button v-if="it.type === 'file'" class="btn btn-sm btn-outline-primary"
-                        @click="() => downloadYandexItem(it)">Скачать</button>
+                        @click="() => openYandexItemDirect(it)">ПОСМОТРЕТЬ</button>
                     </div>
                   </li>
                 </ul>
@@ -1417,8 +1576,9 @@ async function deleteSourceComment(c) {
                       Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
                     <div v-if="c.content" style="white-space: pre-wrap;">{{ c.content }}</div>
                     <div v-if="c.image_path" class="mt-2">
-                      <img :src="'/storage/' + c.image_path" class="img-fluid rounded"
-                        style="max-width: 300px; max-height: 200px;" />
+                      <img :src="'/storage/' + c.image_path" class="img-fluid rounded cursor-pointer"
+                        style="max-width: 300px; max-height: 200px;"
+                        @click="() => openLightbox('/storage/' + c.image_path)" />
                     </div>
                   </div>
                   <button class="btn btn-ghost-danger btn-sm ms-2" title="Удалить"
@@ -1489,8 +1649,9 @@ async function deleteSourceComment(c) {
                       Date(c.created_at).toLocaleString('ru-RU') }}</span></div>
                     <div v-if="c.content" style="white-space: pre-wrap;">{{ c.content }}</div>
                     <div v-if="c.image_path" class="mt-2">
-                      <img :src="'/storage/' + c.image_path" class="img-fluid rounded"
-                        style="max-width: 300px; max-height: 200px;" />
+                      <img :src="'/storage/' + c.image_path" class="img-fluid rounded cursor-pointer"
+                        style="max-width: 300px; max-height: 200px;"
+                        @click="() => openLightbox('/storage/' + c.image_path)" />
                     </div>
                   </div>
                   <button class="btn btn-ghost-danger btn-sm ms-2" title="Удалить"
@@ -1524,6 +1685,23 @@ async function deleteSourceComment(c) {
       </div>
       <div v-if="sourceOffcanvasOpen && !hasSourceOffcanvas" class="modal-backdrop fade show" style="z-index: 1040;"
         @click="closeSourceOffcanvas"></div>
+    </teleport>
+
+    <!-- Lightbox Modal -->
+    <teleport to="body">
+      <div class="modal modal-blur fade" :class="{ show: lightboxOpen }" :style="lightboxOpen ? 'display: block;' : ''"
+        tabindex="-1" role="dialog" @click.self="closeLightbox">
+        <div class="modal-dialog modal-xl" role="document">
+          <div class="modal-content bg-dark">
+            <div class="modal-body p-0 d-flex justify-content-center align-items-center" style="min-height: 60vh;">
+              <img v-if="lightboxSrc" :src="lightboxSrc" alt="preview" style="max-width: 100%; max-height: 80vh;" />
+            </div>
+            <div class="modal-footer border-0">
+              <button type="button" class="btn btn-light" @click="closeLightbox">Закрыть</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </teleport>
   </TablerLayout>
 </template>
