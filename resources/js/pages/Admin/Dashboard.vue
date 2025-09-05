@@ -222,22 +222,117 @@ async function submitBulkAssign() {
     const uid = bulkAssignUserId.value ? Number(bulkAssignUserId.value) : null;
     if (uid == null) return;
     const ids = [...selectedIds.value];
+    const performer = props.performers.find(p => p.id === uid);
+
     await router.put(route('tasks.bulk_update'), { ids, assignee_id: uid }, {
         preserveScroll: true,
-        onSuccess: () => { closeBulkAssign(); },
+        onSuccess: () => {
+            // Update the tasks in the items array
+            ids.forEach(id => {
+                const taskIndex = items.value.findIndex(t => t.id === id);
+                if (taskIndex !== -1) {
+                    items.value[taskIndex].assignee_id = uid;
+                    items.value[taskIndex].assignee = performer || null;
+                }
+            });
+
+            // Show success toast
+            window.toast.success(`Назначено ${ids.length} задач${performer ? ` исполнителю ${performer.name}` : ''}`, {
+                position: 'top-right',
+                timeout: 3000,
+                closeOnClick: true,
+                pauseOnHover: true
+            });
+
+            // Clear selection and close modal
+            clearSelection();
+            closeBulkAssign();
+        },
+        onError: () => {
+            window.toast.error('Не удалось назначить задачи', {
+                position: 'top-right',
+                timeout: 3000,
+                closeOnClick: true,
+                pauseOnHover: true
+            });
+        }
     });
 }
 
 async function bulkUpdateStatus(value) {
     if (!value) return;
     const ids = [...selectedIds.value];
-    await router.put(route('tasks.bulk_update'), { ids, status: value }, { preserveScroll: true });
+    const statusLabel = statusOptions.find(s => s.value === value)?.label || value;
+
+    await router.put(route('tasks.bulk_update'), { ids, status: value }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            // Update the tasks in the items array
+            ids.forEach(id => {
+                const taskIndex = items.value.findIndex(t => t.id === id);
+                if (taskIndex !== -1) {
+                    items.value[taskIndex].status = value;
+                }
+            });
+
+            // Show success toast
+            window.toast.success(`Статус ${ids.length} задач обновлен на: ${statusLabel}`, {
+                position: 'top-right',
+                timeout: 3000,
+                closeOnClick: true,
+                pauseOnHover: true
+            });
+
+            // Clear selection
+            clearSelection();
+        },
+        onError: () => {
+            window.toast.error('Не удалось обновить статус задач', {
+                position: 'top-right',
+                timeout: 3000,
+                closeOnClick: true,
+                pauseOnHover: true
+            });
+        }
+    });
 }
 
 async function bulkUpdatePriority(value) {
     if (!value) return;
     const ids = [...selectedIds.value];
-    await router.put(route('tasks.bulk_update'), { ids, priority: value }, { preserveScroll: true });
+    const priorityLabel = priorityOptions.find(p => p.value === value)?.label || value;
+
+    await router.put(route('tasks.bulk_update'), { ids, priority: value }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            // Update the tasks in the items array
+            ids.forEach(id => {
+                const taskIndex = items.value.findIndex(t => t.id === id);
+                if (taskIndex !== -1) {
+                    items.value[taskIndex].priority = value;
+                }
+            });
+
+            // Show success toast
+            window.toast.success(`Приоритет ${ids.length} задач обновлен на: ${priorityLabel}`, {
+                position: 'top-right',
+                timeout: 3000,
+                closeOnClick: true,
+                pauseOnHover: true
+            });
+
+            // Clear selection
+            clearSelection();
+        },
+        onError: () => {
+            window.toast.error('Не удалось обновить приоритет задач', {
+                position: 'top-right',
+                timeout: 3000,
+                closeOnClick: true,
+                pauseOnHover: true
+            });
+        }
+    });
 }
 
 // Public link helpers
