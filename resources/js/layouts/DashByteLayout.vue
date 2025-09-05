@@ -165,6 +165,7 @@ watch(() => page.url, () => {
         </div>
       </div>
     </header>
+    <slot name="header"></slot>
   </div>
 
   <div class="page-body">

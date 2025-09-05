@@ -1368,6 +1368,68 @@ async function deleteSourceComment(c) {
 
 <template>
     <DashByteLayout>
+
+        <template #header>
+            <header class="navbar-expand-md">
+                <div class="collapse navbar-collapse" id="navbar-menu">
+                    <div class="navbar">
+                        <div class="container-xl">
+                            <div class="d-md-flex align-items-center justify-content-between">
+                                <div class="d-flex gap-2 mt-3 mt-md-0">
+                                    <!-- Global search -->
+                                    <div class="input-group input-group-flat w-auto me-2">
+                                        <span class="input-group-text"><i class="ti ti-search"></i></span>
+                                        <input type="text" class="form-control" v-model="globalSearch"
+                                            placeholder="Общий поиск..." autocomplete="off" />
+                                    </div>
+                                    <!-- Name search -->
+                                    <div class="input-group input-group-flat w-auto me-2">
+                                        <span class="input-group-text"><i class="ti ti-letter-case"></i></span>
+                                        <input type="text" class="form-control" v-model="search"
+                                            placeholder="Название..." autocomplete="off" />
+                                    </div>
+                                    <!-- Brand filter -->
+                                    <select class="form-select w-auto me-2" v-model="brandFilter">
+                                        <option value="">Все бренды</option>
+                                        <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.name }}</option>
+                                    </select>
+                                    <!-- Article filter (dependent on brand) -->
+                                    <select class="form-select w-auto me-2" v-model="articleFilter"
+                                        :disabled="!brandFilter" style="display:none;">
+                                        <option value="">Все артикулы</option>
+                                        <option v-for="a in filterArticles" :key="a.id" :value="a.id">{{ a.name }}
+                                        </option>
+                                    </select>
+                                    <!-- Executor filter -->
+                                    <select class="form-select w-auto me-2" v-model="performerFilter">
+                                        <option value="">Все исполнители</option>
+                                        <option v-for="u in performers" :key="u.id" :value="u.id">{{ u.name }}</option>
+                                    </select>
+                                    <!-- Created date filter -->
+                                    <select class="form-select w-auto me-2" v-model="createdFilter">
+                                        <option value="">Все даты</option>
+                                        <option value="today">Сегодня</option>
+                                        <option value="yesterday">Вчера</option>
+                                        <option value="date">Дата…</option>
+                                    </select>
+                                    <input v-if="createdFilter === 'date'" type="date" class="form-control w-auto me-2"
+                                        v-model="createdDate" />
+
+                                    <!-- Action buttons -->
+                                    <button class="btn btn-secondary me-2" @click="resetFilters">
+                                        <i class="ti ti-filter-off me-1"></i> СБРОСИТЬ ФИЛЬТРЫ
+                                    </button>
+                                    <button class="btn btn-primary" @click="openCreate" style="display:none;">
+                                        <i class="ti ti-plus me-1"></i> НОВАЯ ЗАДАЧА
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+        </template>
+
         <div class="row">
             <div class="col-2">
                 <div class="card">
@@ -1407,62 +1469,6 @@ async function deleteSourceComment(c) {
                 </div>
             </div>
             <div class="col-10">
-
-                <div class="d-md-flex align-items-center justify-content-between mb-4">
-                    <div>
-                        <ol class="breadcrumb fs-sm mb-1">
-                            <li class="breadcrumb-item">Просмотр и управление всеми задачами</li>
-                        </ol>
-                        <h4 class="main-title mb-0">Список задач</h4>
-                    </div>
-                    <div class="d-flex gap-2 mt-3 mt-md-0">
-                        <!-- Global search -->
-                        <div class="input-group input-group-flat w-auto me-2">
-                            <span class="input-group-text"><i class="ti ti-search"></i></span>
-                            <input type="text" class="form-control form-control-sm" v-model="globalSearch"
-                                placeholder="Общий поиск..." autocomplete="off" />
-                        </div>
-                        <!-- Name search -->
-                        <div class="input-group input-group-flat w-auto me-2">
-                            <span class="input-group-text"><i class="ti ti-letter-case"></i></span>
-                            <input type="text" class="form-control form-control-sm" v-model="search"
-                                placeholder="Название..." autocomplete="off" />
-                        </div>
-                        <!-- Brand filter -->
-                        <select class="form-select form-select-sm w-auto me-2" v-model="brandFilter">
-                            <option value="">Все бренды</option>
-                            <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.name }}</option>
-                        </select>
-                        <!-- Article filter (dependent on brand) -->
-                        <select class="form-select form-select-sm w-auto me-2" v-model="articleFilter"
-                            :disabled="!brandFilter" style="display:none;">
-                            <option value="">Все артикулы</option>
-                            <option v-for="a in filterArticles" :key="a.id" :value="a.id">{{ a.name }}</option>
-                        </select>
-                        <!-- Executor filter -->
-                        <select class="form-select form-select-sm w-auto me-2" v-model="performerFilter">
-                            <option value="">Все исполнители</option>
-                            <option v-for="u in performers" :key="u.id" :value="u.id">{{ u.name }}</option>
-                        </select>
-                        <!-- Created date filter -->
-                        <select class="form-select form-select-sm w-auto me-2" v-model="createdFilter">
-                            <option value="">Все даты</option>
-                            <option value="today">Сегодня</option>
-                            <option value="yesterday">Вчера</option>
-                            <option value="date">Дата…</option>
-                        </select>
-                        <input v-if="createdFilter === 'date'" type="date" class="form-control w-auto me-2"
-                            v-model="createdDate" />
-
-                        <!-- Action buttons -->
-                        <button class="btn btn-sm btn-secondary me-2" @click="resetFilters">
-                            <i class="ti ti-filter-off me-1"></i> СБРОСИТЬ ФИЛЬТРЫ
-                        </button>
-                        <button class="btn btn-sm btn-primary" @click="openCreate">
-                            <i class="ti ti-plus me-1"></i> НОВАЯ ЗАДАЧА
-                        </button>
-                    </div>
-                </div>
 
                 <div class="card mb-2" v-if="anySelected">
                     <div class="card-header">
@@ -1927,7 +1933,8 @@ async function deleteSourceComment(c) {
                             <select class="form-select" v-model="assignUserId">
                                 <option :value="null">Не назначен</option>
                                 <option v-for="u in performers" :key="u.id" :value="u.id">{{ u.name }}<span
-                                        v-if="u.is_blocked"> —
+                                        v-if="u.is_blocked">
+                                        —
                                         ЗАБЛОКИРОВАН</span></option>
                             </select>
                         </div>
@@ -2015,10 +2022,11 @@ async function deleteSourceComment(c) {
                                         class="list-group-item d-flex justify-content-between align-items-center">
                                         <div class="d-flex align-items-center gap-2">
                                             <span class="badge"
-                                                :class="it.type === 'dir' ? 'bg-secondary' : 'bg-primary'">{{ it.type
-                                                    ===
-                                                    'dir' ?
-                                                    'Папка' : 'Файл' }}</span>
+                                                :class="it.type === 'dir' ? 'bg-secondary' : 'bg-primary'">{{
+                                                    it.type
+                                                        ===
+                                                        'dir' ?
+                                                        'Папка' : 'Файл' }}</span>
                                             <span>{{ it.name }}</span>
                                             <span v-if="it.size && it.type === 'file'" class="text-secondary small">{{
                                                 (it.size / 1024 / 1024).toFixed(2) }} MB</span>
