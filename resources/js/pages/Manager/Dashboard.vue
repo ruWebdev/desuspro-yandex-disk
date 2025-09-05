@@ -342,14 +342,14 @@ const statusOptions = [
 const priorityOptions = [
     { value: 'low', label: 'Низкий' },
     { value: 'medium', label: 'Средний' },
-    { value: 'high', label: 'Высокий' },
+    { value: 'high', label: 'Срочный' },
 ];
 
 function priorityLabel(priority) {
     switch (priority) {
         case 'low': return 'Низкий';
         case 'medium': return 'Средний';
-        case 'high': return 'Высокий';
+        case 'high': return 'Срочный';
         default: return 'Средний';
     }
 }
@@ -427,14 +427,14 @@ async function submitAssign() {
     if (!assigningTask.value) return;
     const uid = assignUserId.value ? Number(assignUserId.value) : null;
     const payload = { assignee_id: uid, status: uid ? 'assigned' : 'created' };
-    
+
     // Store references before closing modal
     const taskId = assigningTask.value.id;
     const brandId = assigningTask.value.brand_id;
-    
+
     // Close the modal
     closeAssign();
-    
+
     await router.put(route('brands.tasks.update', { brand: brandId, task: taskId }), payload, {
         preserveScroll: true,
         onSuccess: () => {
@@ -825,9 +825,15 @@ watch(editSelectedArticle, (newVal) => {
 });
 
 // Watch for edit brand changes to reset article
-watch(() => editForm.value.brand_id, () => {
+watch(() => editForm.value.brand_id, async (newBrandId) => {
     editForm.value.article_id = '';
     editArticleSearch.value = '';
+    // Load articles for the newly selected brand
+    if (newBrandId) {
+        await loadEditArticlesForBrand(Number(newBrandId));
+    } else {
+        editBrandArticles.value = [];
+    }
 });
 
 // Removed offcanvas, comments, and Yandex files for simplified single-assignment flow
@@ -1490,7 +1496,7 @@ async function deleteSourceComment(c) {
                                         @change="(e) => bulkUpdatePriority(e.target.value)">
                                         <option value="" selected disabled>Выбрать…</option>
                                         <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{ p.label
-                                        }}</option>
+                                            }}</option>
                                     </select>
                                 </div>
 
@@ -1547,7 +1553,7 @@ async function deleteSourceComment(c) {
                                 <td class="text-center" style="vertical-align: middle;">
                                     <div class="d-flex justify-content-center gap-2">
                                         <span v-if="t.assignee?.name" class="text-secondary">{{ t.assignee.name
-                                        }}</span>
+                                            }}</span>
                                         <button class="btn btn-sm btn-outline-primary" @click="openAssign(t)">
                                             {{ t.assignee?.name ? 'Изменить' : 'Назначить' }}
                                         </button>

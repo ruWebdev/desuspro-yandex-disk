@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Dropdown, Modal, Toast, Tooltip, Popover, Offcanvas } from 'bootstrap';
+
 import { useToast } from 'vue-toastification';
 
 // Make axios available globally
@@ -7,7 +7,7 @@ window.axios = axios;
 window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
 
 // Initialize Bootstrap components
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     // Initialize all dropdowns
     const dropdownElementList = [].slice.call(document.querySelectorAll('[data-bs-toggle="dropdown"]'));
     dropdownElementList.map(function (dropdownToggleEl) {
@@ -27,14 +27,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// Make Bootstrap components available globally
-window.bootstrap = {
-    Dropdown,
-    Modal,
-    Toast,
-    Tooltip,
-    Popover,
-    Offcanvas
-};
+
 // Make toast available globally (optional convenience)
 window.toast = useToast();

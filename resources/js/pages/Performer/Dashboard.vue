@@ -60,8 +60,7 @@ const statusOptions = [
 const priorityOptions = [
     { value: 'low', label: 'Низкий' },
     { value: 'medium', label: 'Средний' },
-    { value: 'high', label: 'Высокий' },
-    { value: 'urgent', label: 'Срочный' }
+    { value: 'high', label: 'Срочный' },
 ];
 
 // Return only allowed status options for performers
@@ -812,156 +811,158 @@ function formatManagerName(manager) {
             </div>
             <div class="col-10">
 
-            <div class="d-md-flex align-items-center justify-content-between mb-4">
-                <div>
-                    <ol class="breadcrumb fs-sm mb-1">
-                        <li class="breadcrumb-item">Список задач, назначенных вам</li>
-                    </ol>
-                    <h4 class="main-title mb-0">Назначенные мне задачи</h4>
-                </div>
-                <div class="d-flex gap-2 mt-3 mt-md-0 flex-wrap">
-                    <div class="input-group input-group-flat w-auto me-2">
-                        <span class="input-group-text">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                stroke-linejoin="round" class="icon icon-1">
-                                <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
-                                <path d="M21 21l-6 -6" />
-                            </svg>
-                        </span>
-                        <input v-model="search" type="text" class="form-control form-control-sm"
-                            placeholder="Поиск..." />
+                <div class="d-md-flex align-items-center justify-content-between mb-4">
+                    <div>
+                        <ol class="breadcrumb fs-sm mb-1">
+                            <li class="breadcrumb-item">Список задач, назначенных вам</li>
+                        </ol>
+                        <h4 class="main-title mb-0">Назначенные мне задачи</h4>
                     </div>
-                    <select v-model="statusFilter" class="form-select form-select-sm w-auto me-2" style="display:none;">
-                        <option value="all">Все статусы</option>
-                        <option value="assigned">Назначено</option>
-                        <option value="on_review">На проверке</option>
-                        <option value="rework">На доработку</option>
-                        <option value="accepted">Принято</option>
-                    </select>
-
-                    <select v-model="brandFilter" class="form-select form-select-sm w-auto me-2">
-                        <option value="">Все бренды</option>
-                        <option v-for="b in availableBrands" :key="b.id" :value="b.id">{{ b.name }}</option>
-                    </select>
-                    <div class="input-group input-group-flat w-auto me-2">
-                        <span class="input-group-text">Артикул</span>
-                        <input v-model="articleFilter" type="text" class="form-control form-control-sm"
-                            placeholder="Поиск по артикулу" />
-                    </div>
-
-                    <div class="d-flex align-items-center gap-2 flex-wrap">
-                        <select v-model="createdFilter" class="form-select form-select-sm w-auto">
-                            <option value="">Любая дата</option>
-                            <option value="today">Сегодня</option>
-                            <option value="yesterday">Вчера</option>
-                            <option value="date">Дата…</option>
+                    <div class="d-flex gap-2 mt-3 mt-md-0 flex-wrap">
+                        <div class="input-group input-group-flat w-auto me-2">
+                            <span class="input-group-text">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round" class="icon icon-1">
+                                    <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
+                                    <path d="M21 21l-6 -6" />
+                                </svg>
+                            </span>
+                            <input v-model="search" type="text" class="form-control form-control-sm"
+                                placeholder="Поиск..." />
+                        </div>
+                        <select v-model="statusFilter" class="form-select form-select-sm w-auto me-2"
+                            style="display:none;">
+                            <option value="all">Все статусы</option>
+                            <option value="assigned">Назначено</option>
+                            <option value="on_review">На проверке</option>
+                            <option value="rework">На доработку</option>
+                            <option value="accepted">Принято</option>
                         </select>
-                        <input v-if="createdFilter === 'date'" v-model="createdDate" type="date"
-                            class="form-control form-control-sm w-auto" />
-                        <button class="btn btn-sm btn-outline-secondary" @click="resetFilters"
-                            :disabled="loading">Сбросить
-                            фильтры</button>
+
+                        <select v-model="brandFilter" class="form-select form-select-sm w-auto me-2">
+                            <option value="">Все бренды</option>
+                            <option v-for="b in availableBrands" :key="b.id" :value="b.id">{{ b.name }}</option>
+                        </select>
+                        <div class="input-group input-group-flat w-auto me-2">
+                            <span class="input-group-text">Артикул</span>
+                            <input v-model="articleFilter" type="text" class="form-control form-control-sm"
+                                placeholder="Поиск по артикулу" />
+                        </div>
+
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <select v-model="createdFilter" class="form-select form-select-sm w-auto">
+                                <option value="">Любая дата</option>
+                                <option value="today">Сегодня</option>
+                                <option value="yesterday">Вчера</option>
+                                <option value="date">Дата…</option>
+                            </select>
+                            <input v-if="createdFilter === 'date'" v-model="createdDate" type="date"
+                                class="form-control form-control-sm w-auto" />
+                            <button class="btn btn-sm btn-outline-secondary" @click="resetFilters"
+                                :disabled="loading">Сбросить
+                                фильтры</button>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="table-wrapper" style="position: relative; height: calc(100vh - 200px);">
-                <!-- Header -->
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Создан</th>
-                            <th>Наименование задачи</th>
-                            <th>Бренд, Артикул</th>
-                            <th>Проверяющий</th>
-                            <th>Тип</th>
-                            <th>Исходник</th>
-                            <th>Результат</th>
-                            <th>Статус</th>
-                            <th>Приоритет</th>
-                            <th class="w-1">ДЕЙСТВИЯ</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-if="displayed.length === 0">
-                            <td colspan="10" class="text-center text-secondary py-4">Назначенных задач нет</td>
-                        </tr>
-                        <tr v-for="t in displayed" :key="t.id">
-                            <td>{{ new Date(t.created_at).toLocaleString('ru-RU') }}</td>
-                            <td>{{ t.name || t.article?.name || t.article_name || '' }}</td>
-                            <td>{{ t.brand?.name || '—' }}<br />{{ t.article?.name || t.article_name || t.article || '—'
-                            }}
-                            </td>
-                            <td>{{ formatManagerName(t.creator) || '—' }}</td>
-                            <td>{{ t.type?.name || t.task_type?.name || t.type_name || '—' }}</td>
-                            <td>
-                                <div class="d-flex gap-1">
-                                    <button class="btn btn-sm btn-outline-secondary"
-                                        @click="openSourceCommentsOffcanvas(t)">КОММЕНТАРИЙ</button>
-                                </div>
-                            </td>
-                            <td>
-                                <div class="d-flex gap-1">
-                                    <button class="btn btn-sm btn-outline-secondary"
-                                        @click="openOffcanvas(t)">КОММЕНТАРИЙ</button>
-                                    <button class="btn btn-sm btn-outline-primary"
-                                        @click="() => { openOffcanvas(t); activeOcTab = 'files'; }">ФАЙЛЫ</button>
-                                </div>
-                            </td>
-                            <td>
-                                <div class="d-flex align-items-center gap-2">
-                                    <select class="form-select form-select-sm w-auto" :value="t.status"
-                                        @change="(e) => updateTaskStatus(t, e.target.value, e)"
-                                        :disabled="['accepted', 'cancelled'].includes(t.status)">
-                                        <option v-for="status in statusOptions" :key="status.value"
-                                            :value="status.value" :selected="status.value === t.status">
-                                            {{ status.label }}
-                                        </option>
-                                    </select>
-                                </div>
-                            </td>
-                            <td>
-                                <span class="badge text-light" :class="priorityClass(t.priority)">{{
-                                    priorityLabel(t.priority)
-                                }}</span>
-                            </td>
-                            <td class="text-nowrap">
-                                <div class="btn-list d-flex flex-nowrap align-items-center gap-2">
-                                    <button class="btn btn-icon btn-ghost-secondary" @click="copyTaskPublicLink(t)"
-                                        title="Копировать ссылку">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                            stroke-linecap="round" stroke-linejoin="round"
-                                            class="icon icon-tabler icons-tabler-outline icon-tabler-copy">
-                                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                            <path
-                                                d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
-                                            <path
-                                                d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
-                                        </svg>
-                                    </button>
-                                    <button class="btn btn-icon btn-ghost-secondary" @click="openTaskPublicLink(t)"
-                                        title="Открыть ссылку">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                            stroke-linecap="round" stroke-linejoin="round"
-                                            class="icon icon-tabler icons-tabler-outline icon-tabler-link">
-                                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                            <path d="M9 15l6 -6" />
-                                            <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />
-                                            <path
-                                                d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463" />
-                                        </svg>
-                                    </button>
+                <div class="table-wrapper" style="position: relative; height: calc(100vh - 200px);">
+                    <!-- Header -->
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Создан</th>
+                                <th>Наименование задачи</th>
+                                <th>Бренд, Артикул</th>
+                                <th>Проверяющий</th>
+                                <th>Тип</th>
+                                <th>Исходник</th>
+                                <th>Результат</th>
+                                <th>Статус</th>
+                                <th>Приоритет</th>
+                                <th class="w-1">ДЕЙСТВИЯ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-if="displayed.length === 0">
+                                <td colspan="10" class="text-center text-secondary py-4">Назначенных задач нет</td>
+                            </tr>
+                            <tr v-for="t in displayed" :key="t.id">
+                                <td>{{ new Date(t.created_at).toLocaleString('ru-RU') }}</td>
+                                <td>{{ t.name || t.article?.name || t.article_name || '' }}</td>
+                                <td>{{ t.brand?.name || '—' }}<br />{{ t.article?.name || t.article_name || t.article ||
+                                    '—'
+                                    }}
+                                </td>
+                                <td>{{ formatManagerName(t.creator) || '—' }}</td>
+                                <td>{{ t.type?.name || t.task_type?.name || t.type_name || '—' }}</td>
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        <button class="btn btn-sm btn-outline-secondary"
+                                            @click="openSourceCommentsOffcanvas(t)">КОММЕНТАРИЙ</button>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        <button class="btn btn-sm btn-outline-secondary"
+                                            @click="openOffcanvas(t)">КОММЕНТАРИЙ</button>
+                                        <button class="btn btn-sm btn-outline-primary"
+                                            @click="() => { openOffcanvas(t); activeOcTab = 'files'; }">ФАЙЛЫ</button>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <select class="form-select form-select-sm w-auto" :value="t.status"
+                                            @change="(e) => updateTaskStatus(t, e.target.value, e)"
+                                            :disabled="['accepted', 'cancelled'].includes(t.status)">
+                                            <option v-for="status in statusOptions" :key="status.value"
+                                                :value="status.value" :selected="status.value === t.status">
+                                                {{ status.label }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge text-light" :class="priorityClass(t.priority)">{{
+                                        priorityLabel(t.priority)
+                                        }}</span>
+                                </td>
+                                <td class="text-nowrap">
+                                    <div class="btn-list d-flex flex-nowrap align-items-center gap-2">
+                                        <button class="btn btn-icon btn-ghost-secondary" @click="copyTaskPublicLink(t)"
+                                            title="Копировать ссылку">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                                stroke-linecap="round" stroke-linejoin="round"
+                                                class="icon icon-tabler icons-tabler-outline icon-tabler-copy">
+                                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                                <path
+                                                    d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
+                                                <path
+                                                    d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
+                                            </svg>
+                                        </button>
+                                        <button class="btn btn-icon btn-ghost-secondary" @click="openTaskPublicLink(t)"
+                                            title="Открыть ссылку">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                                stroke-linecap="round" stroke-linejoin="round"
+                                                class="icon icon-tabler icons-tabler-outline icon-tabler-link">
+                                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                                <path d="M9 15l6 -6" />
+                                                <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />
+                                                <path
+                                                    d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463" />
+                                            </svg>
+                                        </button>
 
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
-        </div>
         </div>
 
         <!-- Right offcanvas -->

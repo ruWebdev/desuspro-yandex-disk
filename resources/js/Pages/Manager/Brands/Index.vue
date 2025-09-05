@@ -1,7 +1,7 @@
 <script setup>
 import { Head, Link } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
-import DashByteLayout from '@/Layouts/DashByteLayout.vue';
+import DashByteLayout from '@/layouts/DashByteLayout.vue';
 
 defineOptions({
     layout: DashByteLayout,
@@ -55,6 +55,11 @@ const filteredBrands = computed(() => {
                                 class="form-control" 
                                 placeholder="Поиск по названию"
                             >
+                        </div>
+                        <div class="ms-md-auto">
+                            <Link :href="route('manager.brands.create')" class="btn btn-primary">
+                                <i class="ri-add-line"></i> Создать бренд
+                            </Link>
                         </div>
                     </div>
 
