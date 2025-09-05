@@ -9,9 +9,9 @@ const brandFilter = ref(''); // brand id as string, empty = all
 const articleFilter = ref(''); // free text (merged into search for server-side)
 const createdFilter = ref(''); // ''|today|yesterday|date
 const createdDate = ref(''); // yyyy-mm-dd
-// Missing local filters used in template and watchers
 const search = ref('');
-const statusFilter = ref('all');
+const statusFilter = ref('');
+const priorityFilter = ref('');
 
 // Server-side list state
 const items = ref([]);
@@ -28,7 +28,8 @@ function buildQueryParams(resetPage = false) {
     const q = [search.value, articleFilter.value].filter(Boolean).join(' ').trim();
     if (q) params.set('search', q);
     if (brandFilter.value) params.set('brand_id', String(brandFilter.value));
-    if (statusFilter.value && statusFilter.value !== 'all') params.set('status', statusFilter.value);
+    if (statusFilter.value) params.set('status', statusFilter.value);
+    if (priorityFilter.value) params.set('priority', priorityFilter.value);
     if (createdFilter.value) {
         params.set('created', createdFilter.value);
         if (createdFilter.value === 'date' && createdDate.value) params.set('date', createdDate.value);
@@ -44,15 +45,23 @@ function isUrl(str) {
     } catch { return false; }
 }
 
-// Status options for dropdown
+// Status and Priority options for filters and dropdown
 const statusOptions = [
+    { value: 'created', label: 'Создана' },
     { value: 'assigned', label: 'Назначена' },
     { value: 'in_progress', label: 'В работе' },
     { value: 'on_review', label: 'На проверку' },
     { value: 'rework', label: 'Доработать' },
     { value: 'accepted', label: 'Принята' },
     { value: 'question', label: 'Вопрос' },
-    { value: 'cancelled', label: 'Отменена' },
+    { value: 'cancelled', label: 'Отменена' }
+];
+
+const priorityOptions = [
+    { value: 'low', label: 'Низкий' },
+    { value: 'medium', label: 'Средний' },
+    { value: 'high', label: 'Высокий' },
+    { value: 'urgent', label: 'Срочный' }
 ];
 
 // Return only allowed status options for performers
@@ -160,7 +169,7 @@ onMounted(() => {
 });
 
 let debounceTimer = null;
-watch([search, articleFilter, brandFilter, statusFilter, createdFilter, createdDate], () => {
+watch([search, statusFilter, priorityFilter, brandFilter, articleFilter, createdFilter, createdDate], () => {
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
         fetchPage(true);
@@ -708,18 +717,18 @@ async function deleteYandexItem(item) {
 // Format manager name to ФАМИЛИЯ И.О.
 function formatManagerName(manager) {
     if (!manager?.name) return '—';
-    
+
     const parts = manager.name.trim().split(' ').filter(p => p.trim() !== '');
     if (parts.length === 0) return '—';
-    
+
     // Last name is the first part
     const lastName = parts[0];
-    
+
     // Get first letters of other parts (middle names) with dots
     const initials = parts.slice(1)
         .map(part => part.charAt(0) + '.')
         .join('');
-    
+
     return `${lastName} ${initials}`.toUpperCase();
 }
 
@@ -729,13 +738,44 @@ function formatManagerName(manager) {
 <template>
     <DashByteLayout>
 
-        <div class="card">
-            <div class="card-header">
+        <div id="fileSidebar" class="file-sidebar">
+            <label class="sidebar-label mb-2">Статусы</label>
+            <nav class="nav nav-sidebar mb-4">
+                <a href="#" class="nav-link" :class="{ 'active': statusFilter === '' }"
+                    @click.prevent="statusFilter = ''">
+                    Все статусы
+                </a>
+                <a v-for="status in statusOptions" :key="status.value" href="#" class="nav-link"
+                    :class="{ 'active': statusFilter === status.value }" @click.prevent="statusFilter = status.value">
+                    {{ status.label }}
+                </a>
+            </nav>
+
+            <label class="sidebar-label mb-2">Приоритеты</label>
+            <nav class="nav nav-sidebar mb-4">
+                <a href="#" class="nav-link" :class="{ 'active': priorityFilter === '' }"
+                    @click.prevent="priorityFilter = ''">
+                    Все приоритеты
+                </a>
+                <a v-for="priority in priorityOptions" :key="priority.value" href="#" class="nav-link"
+                    :class="{ 'active': priorityFilter === priority.value }"
+                    @click.prevent="priorityFilter = priority.value">
+                    {{ priority.label }}
+                </a>
+            </nav>
+
+
+        </div><!-- file-sidebar -->
+        <div id="fileContent" class="file-content p-3 p-lg-4">
+
+            <div class="d-md-flex align-items-center justify-content-between mb-4">
                 <div>
-                    <div class="card-title">Назначенные мне задачи</div>
-                    <div class="card-subtitle">Список задач, назначенных вам.</div>
+                    <ol class="breadcrumb fs-sm mb-1">
+                        <li class="breadcrumb-item">Список задач, назначенных вам</li>
+                    </ol>
+                    <h4 class="main-title mb-0">Назначенные мне задачи</h4>
                 </div>
-                <div class="card-actions d-flex flex-wrap align-items-center gap-2">
+                <div class="d-flex gap-2 mt-3 mt-md-0 flex-wrap">
                     <div class="input-group input-group-flat w-auto me-2">
                         <span class="input-group-text">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
@@ -745,9 +785,10 @@ function formatManagerName(manager) {
                                 <path d="M21 21l-6 -6" />
                             </svg>
                         </span>
-                        <input v-model="search" type="text" class="form-control" placeholder="Поиск..." />
+                        <input v-model="search" type="text" class="form-control form-control-sm"
+                            placeholder="Поиск..." />
                     </div>
-                    <select v-model="statusFilter" class="form-select w-auto me-2" style="display:none;">
+                    <select v-model="statusFilter" class="form-select form-select-sm w-auto me-2" style="display:none;">
                         <option value="all">Все статусы</option>
                         <option value="assigned">Назначено</option>
                         <option value="on_review">На проверке</option>
@@ -755,35 +796,35 @@ function formatManagerName(manager) {
                         <option value="accepted">Принято</option>
                     </select>
 
-                    <select v-model="brandFilter" class="form-select w-auto me-2">
+                    <select v-model="brandFilter" class="form-select form-select-sm w-auto me-2">
                         <option value="">Все бренды</option>
                         <option v-for="b in availableBrands" :key="b.id" :value="b.id">{{ b.name }}</option>
                     </select>
-
                     <div class="input-group input-group-flat w-auto me-2">
                         <span class="input-group-text">Артикул</span>
-                        <input v-model="articleFilter" type="text" class="form-control"
+                        <input v-model="articleFilter" type="text" class="form-control form-control-sm"
                             placeholder="Поиск по артикулу" />
                     </div>
 
                     <div class="d-flex align-items-center gap-2 flex-wrap">
-                        <select v-model="createdFilter" class="form-select w-auto">
+                        <select v-model="createdFilter" class="form-select form-select-sm w-auto">
                             <option value="">Любая дата</option>
                             <option value="today">Сегодня</option>
                             <option value="yesterday">Вчера</option>
                             <option value="date">Дата…</option>
                         </select>
                         <input v-if="createdFilter === 'date'" v-model="createdDate" type="date"
-                            class="form-control w-auto" />
-                        <button class="btn btn-outline-secondary" @click="resetFilters" :disabled="loading">Сбросить
+                            class="form-control form-control-sm w-auto" />
+                        <button class="btn btn-sm btn-outline-secondary" @click="resetFilters"
+                            :disabled="loading">Сбросить
                             фильтры</button>
                     </div>
                 </div>
             </div>
 
             <div class="table-responsive">
-                <table class="table table-vcenter card-table">
-                    <thead>
+                <table class="table table-sm">
+                    <thead class="table-light">
                         <tr>
                             <th>Создан</th>
                             <th>Наименование задачи</th>
@@ -805,7 +846,7 @@ function formatManagerName(manager) {
                             <td>{{ new Date(t.created_at).toLocaleString('ru-RU') }}</td>
                             <td>{{ t.name || t.article?.name || t.article_name || '' }}</td>
                             <td>{{ t.brand?.name || '—' }}<br />{{ t.article?.name || t.article_name || t.article || '—'
-                            }}
+                                }}
                             </td>
                             <td>{{ formatManagerName(t.creator) || '—' }}</td>
                             <td>{{ t.type?.name || t.task_type?.name || t.type_name || '—' }}</td>
@@ -875,7 +916,8 @@ function formatManagerName(manager) {
                     </tbody>
                 </table>
             </div>
-        </div>
+        </div><!-- file-content -->
+
         <!-- Right offcanvas -->
         <teleport to="body">
             <div class="offcanvas offcanvas-end w-50" ref="offcanvasEl" tabindex="-1" role="dialog"

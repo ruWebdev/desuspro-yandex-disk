@@ -1501,7 +1501,7 @@ async function deleteSourceComment(c) {
                                     @change="(e) => bulkUpdatePriority(e.target.value)">
                                     <option value="" selected disabled>Выбрать…</option>
                                     <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{ p.label
-                                    }}</option>
+                                        }}</option>
                                 </select>
                             </div>
 
@@ -1622,128 +1622,68 @@ async function deleteSourceComment(c) {
                                     </select>
                                 </div>
                             </td>
-                            <td class="text-end position-relative">
-                                <div class="dropdown d-inline-block position-static">
-                                    <button class="btn btn-icon btn-ghost-secondary" type="button"
-                                        id="taskActionsDropdown" data-bs-toggle="dropdown" aria-expanded="false"
-                                        data-bs-auto-close="true" data-bs-boundary="viewport">
+                            <td class="text-end">
+                                <div class="d-flex gap-1 justify-content-end">
+                                    <!-- Copy Link Button -->
+                                    <button class="btn btn-icon btn-ghost-primary btn-sm" @click="copyTaskPublicLink(t)"
+                                        v-tooltip="'Копировать ссылку'" type="button">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
                                             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                                             stroke-linecap="round" stroke-linejoin="round"
-                                            class="icon icon-tabler icons-tabler-outline icon-tabler-dots-vertical">
+                                            class="icon icon-tabler icons-tabler-outline icon-tabler-copy">
                                             <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                            <path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
-                                            <path d="M12 19m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
-                                            <path d="M12 5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+                                            <path
+                                                d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
+                                            <path
+                                                d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
                                         </svg>
-                                        <span class="visually-hidden">Действия</span>
                                     </button>
-                                    <ul class="dropdown-menu dropdown-menu-end dropdown-menu-lg-end shadow-sm position-absolute"
-                                        aria-labelledby="taskActionsDropdown" style="position: absolute; inset: 0px auto auto 0px; margin: 0px; transform: translate(-100%, 34px);">
-                                        <!-- Copy Link -->
-                                        <li>
-                                            <a class="dropdown-item" href="#" @click.prevent="copyTaskPublicLink(t)">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                                                    viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                                                    class="icon icon-tabler icons-tabler-outline icon-tabler-copy me-2">
-                                                    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                                    <path
-                                                        d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
-                                                    <path
-                                                        d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
-                                                </svg>
-                                                Копировать ссылку
-                                            </a>
-                                        </li>
-                                        <!-- Open Link -->
-                                        <li>
-                                            <a class="dropdown-item" href="#" @click.prevent="openTaskPublicLink(t)">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                                                    viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                                                    class="icon icon-tabler icons-tabler-outline icon-tabler-link me-2">
-                                                    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                                    <path d="M9 15l6 -6" />
-                                                    <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />
-                                                    <path
-                                                        d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463" />
-                                                </svg>
-                                                Открыть ссылку
-                                            </a>
-                                        </li>
-                                        <!-- Edit -->
-                                        <li>
-                                            <a class="dropdown-item" href="#" @click.prevent="onEditTask(t)">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                                                    viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                                                    class="icon icon-tabler icons-tabler-outline icon-tabler-edit me-2">
-                                                    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                                    <path
-                                                        d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" />
-                                                    <path
-                                                        d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" />
-                                                    <path d="M16 5l3 3" />
-                                                </svg>
-                                                Редактировать
-                                            </a>
-                                        </li>
-                                        <!-- Delete -->
-                                        <li>
-                                            <a class="dropdown-item text-danger" href="#"
-                                                @click.prevent="onDeleteTask(t)">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                                                    viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                                                    class="icon icon-tabler icons-tabler-outline icon-tabler-trash me-2">
-                                                    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                                    <path d="M4 7l16 0" />
-                                                    <path d="M10 11l0 6" />
-                                                    <path d="M14 11l0 6" />
-                                                    <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" />
-                                                    <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
-                                                </svg>
-                                                Удалить
-                                            </a>
-                                        </li>
-                                        <!-- Comments -->
-                                        <li v-if="t.comments_count || true">
-                                            <a class="dropdown-item" href="#" @click.prevent="openCommentsOffcanvas(t)">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                                                    viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                                                    class="icon icon-tabler icons-tabler-outline icon-tabler-message me-2">
-                                                    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                                    <path d="M8 9h8" />
-                                                    <path d="M8 13h6" />
-                                                    <path
-                                                        d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z" />
-                                                </svg>
-                                                Комментарии
-                                                <span v-if="t.comments_count"
-                                                    class="badge bg-primary rounded-pill ms-2">{{ t.comments_count
-                                                    }}</span>
-                                            </a>
-                                        </li>
-                                        <!-- Files -->
-                                        <li>
-                                            <a class="dropdown-item" href="#" @click.prevent="openFilesOffcanvas(t)">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                                                    viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                                                    class="icon icon-tabler icons-tabler-outline icon-tabler-files me-2">
-                                                    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                                    <path d="M15 3v4a1 1 0 0 0 1 1h4" />
-                                                    <path
-                                                        d="M18 17h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h4l5 5v7a2 2 0 0 1 -2 2z" />
-                                                    <path
-                                                        d="M16 17v2a2 2 0 0 1 -2 2h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h2" />
-                                                </svg>
-                                                Файлы
-                                            </a>
-                                        </li>
-                                    </ul>
+
+                                    <!-- Open Link Button -->
+                                    <button class="btn btn-icon btn-ghost-primary btn-sm" @click="openTaskPublicLink(t)"
+                                        v-tooltip="'Открыть ссылку'" type="button">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round"
+                                            class="icon icon-tabler icons-tabler-outline icon-tabler-link">
+                                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                            <path d="M9 15l6 -6" />
+                                            <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />
+                                            <path
+                                                d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463" />
+                                        </svg>
+                                    </button>
+
+                                    <!-- Edit Button -->
+                                    <button class="btn btn-icon btn-ghost-primary btn-sm" @click="onEditTask(t)"
+                                        v-tooltip="'Редактировать'" type="button">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round"
+                                            class="icon icon-tabler icons-tabler-outline icon-tabler-edit">
+                                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                            <path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" />
+                                            <path
+                                                d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" />
+                                            <path d="M16 5l3 3" />
+                                        </svg>
+                                    </button>
+
+                                    <!-- Delete Button -->
+                                    <button class="btn btn-icon btn-ghost-danger btn-sm" @click="onDeleteTask(t)"
+                                        v-tooltip="'Удалить'" type="button">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round"
+                                            class="icon icon-tabler icons-tabler-outline icon-tabler-trash">
+                                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                            <path d="M4 7l16 0" />
+                                            <path d="M10 11l0 6" />
+                                            <path d="M14 11l0 6" />
+                                            <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" />
+                                            <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
+                                        </svg>
+                                    </button>
                                 </div>
                             </td>
                         </tr>

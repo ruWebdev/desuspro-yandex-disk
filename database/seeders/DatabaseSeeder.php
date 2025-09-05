@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Task;
 use App\Models\User;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -16,6 +17,12 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // Seed tasks if needed
+        if (Task::count() === 0) {
+            $this->call(TaskSeeder::class);
+            return; // Skip other seeders if we're just seeding tasks
+        }
+
         // Вспомогательная функция: безопасное создание пользователя по email
         $getOrCreateUser = function (string $email, array $attrs = []) {
             $existing = User::where('email', $email)->first();
