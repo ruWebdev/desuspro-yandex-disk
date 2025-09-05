@@ -21,6 +21,7 @@ class TasksController extends Controller
                 'brand:id,name',
                 'article:id,name',
                 'type:id,name,prefix',
+                'creator:id,name',
             ])
             ->orderByDesc('created_at')
             ->get([
@@ -32,6 +33,7 @@ class TasksController extends Controller
                 'status',
                 'ownership',
                 'assignee_id',
+                'created_by',
                 'public_link',
                 'highlighted',
                 'comment',
@@ -53,7 +55,12 @@ class TasksController extends Controller
         $q = Task::query()
             ->where('assignee_id', $user->id)
             ->whereIn('ownership', ['Photographer','PhotoEditor'])
-            ->with(['brand:id,name','article:id,name','type:id,name,prefix'])
+            ->with([
+                'brand:id,name',
+                'article:id,name',
+                'type:id,name,prefix',
+                'creator:id,name',
+            ])
             ->orderByDesc('created_at');
 
         // Optional filters

@@ -59,6 +59,12 @@ class Task extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    // Alias for createdBy to maintain backward compatibility
+    public function creator(): BelongsTo
+    {
+        return $this->createdBy();
+    }
+
     public function subtasks(): HasMany
     {
         return $this->hasMany(Subtask::class);

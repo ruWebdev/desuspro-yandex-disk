@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Brand;
 use App\Models\Task;
+use App\Models\TaskSourceComment;
 use App\Models\User;
 use App\Models\Subtask;
 use App\Models\TaskType;
@@ -165,6 +166,7 @@ class TaskController extends Controller
             'priority' => ['nullable','in:low,medium,high,urgent'],
             'source_files' => ['sometimes','array'],
             'source_files.*' => ['nullable','string','max:2048'],
+            'source_comment' => ['nullable','string'],
         ]);
 
         $article = Article::findOrFail($data['article_id']);
@@ -180,6 +182,15 @@ class TaskController extends Controller
             'status' => isset($data['assignee_id']) ? 'assigned' : 'created',
             'source_files' => $data['source_files'] ?? null,
         ]);
+        // If an initial source comment is provided, store it in task_source_comments
+        if (!empty(trim((string)($data['source_comment'] ?? '')))) {
+            TaskSourceComment::create([
+                'task_id' => $task->id,
+                'user_id' => $request->user()->id,
+                'content' => trim((string)$data['source_comment']),
+                'image_path' => null,
+            ]);
+        }
         // Create Yandex.Disk folder
         $this->createYandexFolderStructure($request, $brand, $task, $type, $article);
         return back()->with('status', 'task-created');
@@ -199,6 +210,7 @@ class TaskController extends Controller
             'priority' => ['nullable','in:low,medium,high,urgent'],
             'source_files' => ['sometimes','array'],
             'source_files.*' => ['nullable','string','max:2048'],
+            'source_comment' => ['nullable','string'],
         ]);
 
         $brand = Brand::findOrFail($data['brand_id']);

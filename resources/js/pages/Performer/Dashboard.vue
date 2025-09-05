@@ -36,6 +36,14 @@ function buildQueryParams(resetPage = false) {
     return params;
 }
 
+// Helper to check if a string is a URL
+function isUrl(str) {
+    try {
+        const u = new URL(String(str));
+        return !!u.protocol && !!u.host;
+    } catch { return false; }
+}
+
 // Status options for dropdown
 const statusOptions = [
     { value: 'assigned', label: 'Назначена' },
@@ -391,6 +399,7 @@ async function deleteComment(c) {
 const sourceOffcanvasOpen = ref(false);
 const sourceOc = ref({ brandId: null, brandName: '', taskId: null, taskName: '' });
 const sourceComments = ref([]);
+const sourceFiles = ref([]);
 const newSourceComment = ref('');
 const sourceSubmitting = ref(false);
 const sourceCommentsLoading = ref(false);
@@ -425,6 +434,7 @@ function openSourceCommentsOffcanvas(task) {
         taskId: task.id,
         taskName: task.name || task.article?.name || '',
     };
+    sourceFiles.value = Array.isArray(task.source_files) ? task.source_files : [];
     sourceComments.value = [];
     newSourceComment.value = '';
     sourceOffcanvasOpen.value = true;
@@ -695,6 +705,24 @@ async function deleteYandexItem(item) {
     } catch (e) { console.error(e); }
 }
 
+// Format manager name to ФАМИЛИЯ И.О.
+function formatManagerName(manager) {
+    if (!manager?.name) return '—';
+    
+    const parts = manager.name.trim().split(' ').filter(p => p.trim() !== '');
+    if (parts.length === 0) return '—';
+    
+    // Last name is the first part
+    const lastName = parts[0];
+    
+    // Get first letters of other parts (middle names) with dots
+    const initials = parts.slice(1)
+        .map(part => part.charAt(0) + '.')
+        .join('');
+    
+    return `${lastName} ${initials}`.toUpperCase();
+}
+
 // Removed: send-for-review flow and related helpers
 </script>
 
@@ -759,8 +787,8 @@ async function deleteYandexItem(item) {
                         <tr>
                             <th>Создан</th>
                             <th>Наименование задачи</th>
-                            <th>Артикул</th>
-                            <th>Бренд</th>
+                            <th>Бренд, Артикул</th>
+                            <th>Проверяющий</th>
                             <th>Тип</th>
                             <th>Исходник</th>
                             <th>Результат</th>
@@ -776,8 +804,10 @@ async function deleteYandexItem(item) {
                         <tr v-for="t in displayed" :key="t.id">
                             <td>{{ new Date(t.created_at).toLocaleString('ru-RU') }}</td>
                             <td>{{ t.name || t.article?.name || t.article_name || '' }}</td>
-                            <td>{{ t.article?.name || t.article_name || t.article || '—' }}</td>
-                            <td>{{ t.brand?.name || '—' }}</td>
+                            <td>{{ t.brand?.name || '—' }}<br />{{ t.article?.name || t.article_name || t.article || '—'
+                            }}
+                            </td>
+                            <td>{{ formatManagerName(t.creator) || '—' }}</td>
                             <td>{{ t.type?.name || t.task_type?.name || t.type_name || '—' }}</td>
                             <td>
                                 <div class="d-flex gap-1">
@@ -995,6 +1025,16 @@ async function deleteYandexItem(item) {
                 <div class="offcanvas-body">
                     <div v-if="sourceCommentsLoading" class="text-secondary">Загрузка комментариев…</div>
                     <div v-else>
+                        <div v-if="sourceFiles && sourceFiles.length" class="mb-3">
+                            <div class="fw-bold">Файлы задачи:</div>
+                            <ul class="list-unstyled small mb-0">
+                                <li v-for="(f, idx) in sourceFiles" :key="idx">
+                                    <a v-if="isUrl(f)" :href="f" target="_blank" rel="noopener">{{ f }}</a>
+                                    <span v-else>{{ f }}</span>
+                                </li>
+                            </ul>
+                            <hr class="my-3" />
+                        </div>
                         <div v-if="sourceComments.length === 0" class="text-secondary mb-2">Комментариев пока нет.</div>
                         <ul class="list-unstyled">
                             <li v-for="c in sourceComments" :key="c.id" class="mb-2">

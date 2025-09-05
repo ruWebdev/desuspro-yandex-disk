@@ -398,7 +398,9 @@ const createForm = ref({
     assignee_id: '',
     priority: 'medium', // Default priority
     // Text fields for FILE links/names
-    source_files: ['']
+    source_files: [''],
+    // Source comment to be created along with the task
+    source_comment: ''
 });
 const brandArticles = ref([]);
 const creating = ref(false);
@@ -559,7 +561,7 @@ async function openYandexItemDirect(item) {
 }
 
 function openCreate() {
-    createForm.value = { name: '', brand_id: '', task_type_id: '', article_id: '', assignee_id: '', priority: 'medium', source_files: [''] };
+    createForm.value = { name: '', brand_id: '', task_type_id: '', article_id: '', assignee_id: '', priority: 'medium', source_files: [''], source_comment: '' };
     brandArticles.value = [];
 
     // Show the modal
@@ -577,6 +579,10 @@ async function submitCreate() {
         name: createForm.value.name?.trim() || undefined,
         assignee_id: createForm.value.assignee_id ? Number(createForm.value.assignee_id) : null,
         priority: createForm.value.priority || 'medium',
+        // optional source comment to be persisted in task_source_comments
+        ...(createForm.value.source_comment && createForm.value.source_comment.trim().length
+            ? { source_comment: createForm.value.source_comment.trim() }
+            : {}),
         // Only send non-empty text file entries
         ...(Array.isArray(createForm.value.source_files)
             ? (() => {
@@ -625,8 +631,10 @@ async function loadEditArticlesForBrand(brandId) {
     } catch (e) { console.error(e); }
 }
 
-function openEdit(task) {
+async function openEdit(task) {
     editingTask.value = task;
+    
+    // Reset form
     editForm.value = {
         name: task.name || '',
         brand_id: String(task.brand_id || ''),
@@ -638,9 +646,40 @@ function openEdit(task) {
             ? task.source_files.map(v => (v ?? '').toString())
             : ['']
     };
+
+    // Clear and reset search state
     editArticleSearch.value = '';
+    showEditArticleDropdown.value = false;
     editBrandArticles.value = [];
-    loadEditArticlesForBrand(task.brand_id);
+    
+    // Load articles for the brand
+    await loadEditArticlesForBrand(task.brand_id);
+
+    // If task has an article, ensure it's in the list and select it
+    if (task.article_id) {
+        // Check if article exists in loaded articles
+        const articleExists = editBrandArticles.value.some(a => a.id == task.article_id);
+
+        if (!articleExists && task.article) {
+            // If article not in loaded list but we have its data, add it
+            editBrandArticles.value.unshift({
+                id: task.article_id,
+                name: task.article.name || `Артикул #${task.article_id}`,
+                article_number: task.article.article_number
+            });
+        }
+
+        // Set the article ID and search text
+        editForm.value.article_id = String(task.article_id);
+        const article = editBrandArticles.value.find(a => a.id == task.article_id);
+        if (article) {
+            editArticleSearch.value = article.name || '';
+        } else if (task.article?.name) {
+            editArticleSearch.value = task.article.name;
+        }
+    }
+
+    // Show the modal
     const m = getBsModal('editTaskModal');
     m?.show();
 }
@@ -1585,6 +1624,10 @@ async function deleteSourceComment(c) {
                                     </div>
                                     <div class="form-text">Добавляйте текстовые значения (например ссылки) для связанных
                                         файлов.</div>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">КОММЕНТАРИЙ</label>
+                                    <textarea class="form-control" rows="3" v-model="createForm.source_comment" placeholder="Комментарий к исходнику (необязательно)"></textarea>
                                 </div>
                             </div>
                         </div>
