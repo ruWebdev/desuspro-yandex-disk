@@ -226,9 +226,6 @@ async function deleteArticle(article) {
                         <button class="btn btn-outline-secondary btn-sm" @click="openArticles(b)">
                           Артикулы
                         </button>
-                        <Link class="btn btn-outline-primary btn-sm" :href="route('brands.tasks.index', b.id)">
-                        Задания
-                        </Link>
                         <button class="btn btn-ghost-primary btn-icon" aria-label="Редактировать" @click="startEdit(b)">
                           <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24"
                             viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
