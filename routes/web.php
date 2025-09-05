@@ -177,6 +177,7 @@ Route::middleware(['auth', 'role:Manager|Administrator'])->group(function () {
     // Manager Brands
     Route::prefix('manager')->name('manager.')->group(function () {
         Route::get('/brands', [\App\Http\Controllers\Manager\BrandController::class, 'index'])->name('brands.index');
+        Route::post('/brands', [\App\Http\Controllers\Manager\BrandController::class, 'store'])->name('brands.store');
         Route::get('/brands/{brand}/edit', [\App\Http\Controllers\Manager\BrandController::class, 'edit'])->name('brands.edit');
         Route::put('/brands/{brand}', [\App\Http\Controllers\Manager\BrandController::class, 'update'])->name('brands.update');
     });

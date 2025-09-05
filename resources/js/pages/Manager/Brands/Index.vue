@@ -54,7 +54,7 @@ function openCreate() {
 }
 
 function submitCreate() {
-  createForm.post(route('brands.store'), {
+  createForm.post(route('manager.brands.store'), {
     preserveScroll: true,
     onSuccess: () => {
       showCreate.value = false;

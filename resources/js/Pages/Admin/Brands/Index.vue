@@ -1,6 +1,6 @@
 <script setup>
-import { Head, Link, router } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { ref, computed } from 'vue';
 import DashByteLayout from '@/Layouts/DashByteLayout.vue';
 
 defineOptions({
@@ -15,11 +15,29 @@ const props = defineProps({
 });
 
 const searchQuery = ref('');
+const showCreate = ref(false);
+const createForm = useForm({ name: '' });
+const creating = computed(() => createForm.processing);
+
+function openCreate() {
+    createForm.reset();
+    showCreate.value = true;
+}
+
+function submitCreate() {
+    createForm.post(route('admin.brands.store'), {
+        preserveScroll: true,
+        onSuccess: () => {
+            showCreate.value = false;
+            createForm.reset();
+        },
+    });
+}
 
 const filteredBrands = computed(() => {
     if (!searchQuery.value) return props.brands;
     const query = searchQuery.value.toLowerCase();
-    return props.brands.filter(brand => 
+    return props.brands.filter(brand =>
         brand.name.toLowerCase().includes(query)
     );
 });
@@ -37,6 +55,7 @@ const deleteBrand = (brand) => {
 </script>
 
 <template>
+
     <Head title="Управление брендами" />
 
     <div class="page-header d-print-none">
@@ -49,9 +68,9 @@ const deleteBrand = (brand) => {
                 </div>
                 <div class="col-auto ms-auto d-print-none">
                     <div class="d-flex">
-                        <Link :href="route('admin.brands.create')" class="btn btn-primary">
+                        <button @click="openCreate" class="btn btn-primary">
                             <i class="ri-add-line me-1"></i> Добавить бренд
-                        </Link>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -67,12 +86,8 @@ const deleteBrand = (brand) => {
                             <span class="input-group-text">
                                 <i class="ri-search-line"></i>
                             </span>
-                            <input 
-                                v-model="searchQuery" 
-                                type="text" 
-                                class="form-control" 
-                                placeholder="Поиск по названию"
-                            >
+                            <input v-model="searchQuery" type="text" class="form-control"
+                                placeholder="Поиск по названию">
                         </div>
                     </div>
 
@@ -91,18 +106,13 @@ const deleteBrand = (brand) => {
                                     <td>{{ new Date(brand.created_at).toLocaleDateString('ru-RU') }}</td>
                                     <td class="text-nowrap">
                                         <div class="btn-list flex-nowrap">
-                                            <Link 
-                                                :href="route('admin.brands.edit', brand.id)" 
+                                            <Link :href="route('admin.brands.edit', brand.id)"
                                                 class="btn btn-icon btn-outline-primary btn-sm me-1"
-                                                title="Редактировать"
-                                            >
-                                                <i class="ri-edit-line"></i>
+                                                title="Редактировать">
+                                            <i class="ri-edit-line"></i>
                                             </Link>
-                                            <button 
-                                                @click="deleteBrand(brand)" 
-                                                class="btn btn-icon btn-outline-danger btn-sm"
-                                                title="Удалить"
-                                            >
+                                            <button @click="deleteBrand(brand)"
+                                                class="btn btn-icon btn-outline-danger btn-sm" title="Удалить">
                                                 <i class="ri-delete-bin-line"></i>
                                             </button>
                                         </div>
@@ -121,4 +131,38 @@ const deleteBrand = (brand) => {
             </div>
         </div>
     </div>
+
+    <!-- Create Modal -->
+    <teleport to="body">
+        <div v-if="showCreate">
+            <div class="modal modal-blur fade show d-block" tabindex="-1" role="dialog" style="z-index: 1050;">
+                <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Добавить бренд</h5>
+                            <button type="button" class="btn-close" aria-label="Close"
+                                @click="showCreate = false"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form @submit.prevent="submitCreate">
+                                <label class="form-label">Наименование</label>
+                                <input v-model="createForm.name" type="text" class="form-control" required />
+                                <div v-if="Object.keys(createForm.errors).length" class="text-danger small mt-2">
+                                    <div v-for="(err, key) in createForm.errors" :key="key">{{ err }}</div>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn me-auto" @click="showCreate = false">Отмена</button>
+                            <button :disabled="creating" type="button" class="btn btn-primary" @click="submitCreate">
+                                <span v-if="creating" class="spinner-border spinner-border-sm me-2" />
+                                Создать
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-backdrop fade show" style="z-index: 1040;" @click="showCreate = false"></div>
+        </div>
+    </teleport>
 </template>

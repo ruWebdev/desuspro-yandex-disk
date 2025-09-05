@@ -144,20 +144,28 @@ watch(() => page.url, () => {
         </ul>
         <div class="navbar-nav flex-row order-md-last">
           <div class="nav-item dropdown">
-            <a href="#" class="nav-link d-flex lh-1 text-reset p-0 dropdown-toggle" data-bs-toggle="dropdown"
-              aria-expanded="false" aria-label="Open user menu">
+            <a href="#" class="nav-link d-flex lh-1 text-reset p-0" data-bs-toggle="dropdown" aria-expanded="false"
+              aria-label="Open user menu">
               <span class="avatar avatar-sm" style="background-image: url(./static/avatars/000m.jpg)"></span>
               <div class="d-none d-xl-block ps-2">
                 <div>{{ user.name }}</div>
                 <div class="mt-1 small text-secondary">{{ user.email }}</div>
               </div>
             </a>
-            <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
-              <a href="/profile" class="dropdown-item"><i class="ri-edit-2-line"></i> Профиль</a>
-              <a href="#" @click.prevent="$inertia.post(route('logout'))" class="dropdown-item">
-                <i class="ri-logout-box-r-line"></i> Выход
-              </a>
-            </div>
+          </div>
+          <div class="btn-list m-1">
+            <a href="#" @click.prevent="$inertia.post(route('logout'))" class="btn ms-2" target="_blank"
+              rel="noreferrer">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                class="icon icon-tabler icons-tabler-outline icon-tabler-logout-2">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                <path d="M10 8v-2a2 2 0 0 1 2 -2h7a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-7a2 2 0 0 1 -2 -2v-2" />
+                <path d="M15 12h-12l3 -3" />
+                <path d="M6 15l-3 -3" />
+              </svg>
+              Выход
+            </a>
           </div>
         </div>
       </div>

@@ -229,6 +229,16 @@ class TaskController extends Controller
             'source_files' => $data['source_files'] ?? null,
         ]);
 
+        // If an initial source comment is provided, store it in task_source_comments (parity with brand-scoped store)
+        if (!empty(trim((string)($data['source_comment'] ?? '')))) {
+            TaskSourceComment::create([
+                'task_id' => $task->id,
+                'user_id' => $request->user()->id,
+                'content' => trim((string)$data['source_comment']),
+                'image_path' => null,
+            ]);
+        }
+
         // Create Yandex.Disk folder structure
         $this->createYandexFolderStructure($request, $brand, $task, $type, $article);
 
@@ -253,6 +263,8 @@ class TaskController extends Controller
             'status' => ['sometimes','required','in:created,assigned,in_progress,on_review,rework,question,rejected,accepted,cancelled,done'],
             'priority' => ['sometimes','required','in:low,medium,high,urgent'],
             'assignee_id' => ['nullable','exists:users,id'],
+            // Allow changing brand as part of edit
+            'brand_id' => ['sometimes','required','exists:brands,id'],
             // Allow updating type and article
             'task_type_id' => ['sometimes','required','exists:task_types,id'],
             'article_id' => ['sometimes','required','exists:articles,id'],
@@ -267,6 +279,10 @@ class TaskController extends Controller
         
         // Update the task
         $task->fill($data);
+        // If brand_id was provided, persist it explicitly (fill already covers it, but this clarifies intent)
+        if (array_key_exists('brand_id', $data)) {
+            $task->brand_id = (int) $data['brand_id'];
+        }
 
         // If article changed and name not explicitly provided, sync name with article
         if (array_key_exists('article_id', $data) && !array_key_exists('name', $data)) {

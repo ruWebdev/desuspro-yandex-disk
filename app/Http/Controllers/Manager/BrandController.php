@@ -12,10 +12,22 @@ class BrandController extends Controller
     public function index()
     {
         $brands = Brand::orderBy('name')->get();
-        
+
         return Inertia::render('Manager/Brands/Index', [
             'brands' => $brands
         ]);
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255|unique:brands,name',
+        ]);
+
+        $brand = Brand::create($validated);
+
+        return redirect()->route('manager.brands.index')
+            ->with('success', 'Бренд успешно создан');
     }
 
     public function edit(Brand $brand)
