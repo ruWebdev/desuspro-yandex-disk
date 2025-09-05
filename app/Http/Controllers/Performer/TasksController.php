@@ -75,6 +75,12 @@ class TasksController extends Controller
             $status = (string)$request->query('status');
             if ($status !== 'all') $q->where('status', $status);
         }
+        if ($request->filled('priority')) {
+            $priority = (string)$request->query('priority');
+            if (in_array($priority, ['low','medium','high','urgent'], true)) {
+                $q->where('priority', $priority);
+            }
+        }
         if ($request->filled('search')) {
             $s = trim((string)$request->query('search'));
             $q->where(function($qq) use ($s) {

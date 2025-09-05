@@ -134,12 +134,7 @@ watch(() => page.url, () => {
 
           <!-- Меню для Исполнителя -->
           <template v-else-if="isPerformer">
-            <li class="nav-item">
-              <Link :href="route('performer.tasks')" :class="{ 'active': $page.url.startsWith('/my-tasks') }"
-                class="nav-link">
-              <i class="ri-task-line"></i> Задачи
-              </Link>
-            </li>
+
           </template>
         </ul>
         <div class="navbar-nav flex-row order-md-last">

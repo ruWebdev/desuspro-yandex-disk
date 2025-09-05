@@ -46,6 +46,12 @@ class TaskController extends Controller
         if ($request->filled('brand_id')) $q->where('brand_id', (int)$request->query('brand_id'));
         if ($request->filled('article_id')) $q->where('article_id', (int)$request->query('article_id'));
         if ($request->filled('assignee_id')) $q->where('assignee_id', (int)$request->query('assignee_id'));
+        if ($request->filled('priority')) {
+            $priority = (string)$request->query('priority');
+            if (in_array($priority, ['low','medium','high','urgent'], true)) {
+                $q->where('priority', $priority);
+            }
+        }
 
         if ($request->filled('status')) {
             $status = $this->normalizeStatus($request->query('status'));
