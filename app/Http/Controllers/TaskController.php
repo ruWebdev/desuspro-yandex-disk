@@ -163,6 +163,8 @@ class TaskController extends Controller
             'name' => ['nullable','string','max:255'],
             'assignee_id' => ['nullable','exists:users,id'],
             'priority' => ['nullable','in:low,medium,high,urgent'],
+            'source_files' => ['sometimes','array'],
+            'source_files.*' => ['nullable','string','max:2048'],
         ]);
 
         $article = Article::findOrFail($data['article_id']);
@@ -176,6 +178,7 @@ class TaskController extends Controller
             'assignee_id' => $data['assignee_id'] ?? null,
             'priority' => $data['priority'] ?? 'medium',
             'status' => isset($data['assignee_id']) ? 'assigned' : 'created',
+            'source_files' => $data['source_files'] ?? null,
         ]);
         // Create Yandex.Disk folder
         $this->createYandexFolderStructure($request, $brand, $task, $type, $article);
@@ -194,6 +197,8 @@ class TaskController extends Controller
             'name' => ['nullable','string','max:255'],
             'assignee_id' => ['nullable','exists:users,id'],
             'priority' => ['nullable','in:low,medium,high,urgent'],
+            'source_files' => ['sometimes','array'],
+            'source_files.*' => ['nullable','string','max:2048'],
         ]);
 
         $brand = Brand::findOrFail($data['brand_id']);
@@ -209,6 +214,7 @@ class TaskController extends Controller
             'assignee_id' => $data['assignee_id'] ?? null,
             'priority' => $data['priority'] ?? 'medium',
             'status' => isset($data['assignee_id']) ? 'assigned' : 'created',
+            'source_files' => $data['source_files'] ?? null,
         ]);
 
         // Create Yandex.Disk folder structure
@@ -237,6 +243,8 @@ class TaskController extends Controller
             'assignee_id' => ['nullable','exists:users,id'],
             'highlighted' => ['sometimes','boolean'],
             'comment' => ['nullable','string'],
+            'source_files' => ['sometimes','array'],
+            'source_files.*' => ['nullable','string','max:2048'],
         ]);
         
         // Store old status for event if needed
@@ -244,6 +252,9 @@ class TaskController extends Controller
         
         // Update the task
         $task->fill($data);
+        if (array_key_exists('source_files', $data)) {
+            $task->source_files = $data['source_files'];
+        }
         $task->save();
         
         // Return JSON response for API requests, Inertia response for web

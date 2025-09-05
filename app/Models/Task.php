@@ -25,11 +25,13 @@ class Task extends Model
         'highlighted',
         'comment',
         'size',
+        'source_files',
     ];
 
     protected $casts = [
         'highlighted' => 'boolean',
         'size' => 'integer',
+        'source_files' => 'array',
     ];
 
     public function brand(): BelongsTo

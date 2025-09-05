@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import DashByteLayout from '@/layouts/DashByteLayout.vue';
 import { Offcanvas } from 'bootstrap';
+import { useToastService } from '@/plugins/toast';
 
 // Reference to Bootstrap's Modal component
 const Modal = window.bootstrap?.Modal;
@@ -51,6 +52,27 @@ function resetFilters() {
 
     // Reset to first page and fetch fresh data
     fetchPage(true);
+}
+
+// Handlers for dynamic FILE text fields (Create modal)
+function addSourceFileField() {
+    if (!Array.isArray(createForm.value.source_files)) createForm.value.source_files = [''];
+    createForm.value.source_files.push('');
+}
+function removeSourceFileField(idx) {
+    if (!Array.isArray(createForm.value.source_files)) return;
+    if (createForm.value.source_files.length <= 1) return; // keep at least one field
+    createForm.value.source_files.splice(idx, 1);
+}
+// Handlers for dynamic FILE text fields (Edit modal)
+function addEditSourceFileField() {
+    if (!Array.isArray(editForm.value.source_files)) editForm.value.source_files = [''];
+    editForm.value.source_files.push('');
+}
+function removeEditSourceFileField(idx) {
+    if (!Array.isArray(editForm.value.source_files)) return;
+    if (editForm.value.source_files.length <= 1) return; // keep at least one field
+    editForm.value.source_files.splice(idx, 1);
 }
 
 function buildQueryParams(resetPage = false) {
@@ -155,20 +177,39 @@ async function submitBulkAssign() {
     const ids = [...selectedIds.value];
     await router.put(route('tasks.bulk_update'), { ids, assignee_id: uid }, {
         preserveScroll: true,
-        onSuccess: () => { closeBulkAssign(); },
+        onSuccess: () => {
+            closeBulkAssign();
+            fetchPage(true);
+            clearSelection();
+            toast.success(`Назначено ${selectedTasks.value.length} заданий`);
+        },
     });
 }
 
 async function bulkUpdateStatus(value) {
     if (!value) return;
     const ids = [...selectedIds.value];
-    await router.put(route('tasks.bulk_update'), { ids, status: value }, { preserveScroll: true });
+    await router.put(route('tasks.bulk_update'), { ids, status: value }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            fetchPage(true);
+            toast.success(`Обновлен статус для ${selectedTasks.value.length} заданий`);
+            clearSelection();
+        }
+    });
 }
 
 async function bulkUpdatePriority(value) {
     if (!value) return;
     const ids = [...selectedIds.value];
-    await router.put(route('tasks.bulk_update'), { ids, priority: value }, { preserveScroll: true });
+    await router.put(route('tasks.bulk_update'), { ids, priority: value }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            fetchPage(true);
+            toast.success(`Обновлен приоритет для ${selectedTasks.value.length} заданий`);
+            clearSelection();
+        }
+    });
 }
 
 // Public link helpers
@@ -281,16 +322,16 @@ function priorityClass(priority) {
 
 function updateTaskStatus(task, status) {
     if (!task || !status) return;
-    
+
     // Update the local state optimistically
     const taskToUpdate = items.value.find(t => t.id === task.id);
     if (taskToUpdate) {
         taskToUpdate.status = status;
     }
-    
+
     // Make the API call
     router.put(
-        route('brands.tasks.update', { brand: task.brand_id, task: task.id }), 
+        route('brands.tasks.update', { brand: task.brand_id, task: task.id }),
         { status },
         {
             preserveScroll: true,
@@ -307,9 +348,9 @@ function updateTaskStatus(task, status) {
 function updateTaskPriority(task, priority) {
     if (!task || !priority) return;
     router.put(
-        route('brands.tasks.update', { brand: task.brand_id, task: task.id }), 
-        { priority }, 
-        { 
+        route('brands.tasks.update', { brand: task.brand_id, task: task.id }),
+        { priority },
+        {
             preserveScroll: true,
             onSuccess: () => {
                 // Update local state
@@ -355,7 +396,9 @@ const createForm = ref({
     task_type_id: '',
     article_id: '',
     assignee_id: '',
-    priority: 'medium' // Default priority
+    priority: 'medium', // Default priority
+    // Text fields for FILE links/names
+    source_files: ['']
 });
 const brandArticles = ref([]);
 const creating = ref(false);
@@ -516,7 +559,7 @@ async function openYandexItemDirect(item) {
 }
 
 function openCreate() {
-    createForm.value = { name: '', brand_id: '', task_type_id: '', article_id: '', assignee_id: '', priority: 'medium' };
+    createForm.value = { name: '', brand_id: '', task_type_id: '', article_id: '', assignee_id: '', priority: 'medium', source_files: [''] };
     brandArticles.value = [];
 
     // Show the modal
@@ -534,6 +577,15 @@ async function submitCreate() {
         name: createForm.value.name?.trim() || undefined,
         assignee_id: createForm.value.assignee_id ? Number(createForm.value.assignee_id) : null,
         priority: createForm.value.priority || 'medium',
+        // Only send non-empty text file entries
+        ...(Array.isArray(createForm.value.source_files)
+            ? (() => {
+                const files = createForm.value.source_files
+                    .map(v => (v ?? '').toString().trim())
+                    .filter(v => v.length > 0);
+                return files.length ? { source_files: files } : {};
+            })()
+            : {})
     };
     if (!payload.brand_id || !payload.task_type_id || !payload.article_id) return;
     creating.value = true;
@@ -546,7 +598,7 @@ async function submitCreate() {
 // Edit task modal
 // Edit Task Modal (Bootstrap)
 const editingTask = ref(null);
-const editForm = ref({ name: '', brand_id: '', task_type_id: '', article_id: '', assignee_id: '' });
+const editForm = ref({ name: '', brand_id: '', task_type_id: '', article_id: '', assignee_id: '', source_files: [''] });
 const editBrandArticles = ref([]);
 const editArticleSearch = ref('');
 const showEditArticleDropdown = ref(false);
@@ -581,6 +633,10 @@ function openEdit(task) {
         task_type_id: String(task.task_type_id || ''),
         article_id: String(task.article_id || ''),
         assignee_id: String(task.assignee_id || ''),
+        // initialize source_files from task or keep one empty field
+        source_files: Array.isArray(task.source_files) && task.source_files.length
+            ? task.source_files.map(v => (v ?? '').toString())
+            : ['']
     };
     editArticleSearch.value = '';
     editBrandArticles.value = [];
@@ -593,7 +649,7 @@ function closeEdit() {
     const m = getBsModal('editTaskModal');
     m?.hide();
     editingTask.value = null;
-    editForm.value = { name: '', brand_id: '', task_type_id: '', article_id: '', assignee_id: '' };
+    editForm.value = { name: '', brand_id: '', task_type_id: '', article_id: '', assignee_id: '', source_files: [''] };
     editArticleSearch.value = '';
 }
 
@@ -605,9 +661,24 @@ async function submitEdit() {
         article_id: editForm.value.article_id ? Number(editForm.value.article_id) : null,
         name: editForm.value.name?.trim() || undefined,
         assignee_id: editForm.value.assignee_id ? Number(editForm.value.assignee_id) : null,
+        // Only send non-empty text file entries
+        ...(Array.isArray(editForm.value.source_files)
+            ? (() => {
+                const files = editForm.value.source_files
+                    .map(v => (v ?? '').toString().trim())
+                    .filter(v => v.length > 0);
+                return files.length ? { source_files: files } : { source_files: [] };
+            })()
+            : { source_files: [] })
     };
     if (!payload.brand_id || !payload.task_type_id || !payload.article_id) return;
-    router.put(route('brands.tasks.update', { brand: editingTask.value.brand_id, task: editingTask.value.id }), payload, { preserveScroll: true });
+    router.put(route('brands.tasks.update', { brand: editingTask.value.brand_id, task: editingTask.value.id }), payload, {
+        preserveScroll: true,
+        onSuccess: () => {
+            fetchPage(true);
+            toast.success('Задание обновлено');
+        }
+    });
     closeEdit();
 }
 
@@ -846,6 +917,10 @@ const publicFolderUrl = ref('');
 // Lightbox state and helpers
 const lightboxSrc = ref('');
 const lightboxTemp = ref(null); // { id, path } for cleanup
+
+// Initialize toast service
+const toast = useToastService();
+
 function openLightbox(src, tempMeta = null) { lightboxSrc.value = src; lightboxTemp.value = tempMeta; const m = getBsModal('lightboxModal'); m?.show(); }
 function closeLightbox() {
     const m = getBsModal('lightboxModal'); m?.hide();
@@ -1078,24 +1153,24 @@ function openSourceCommentsOffcanvas(task) {
     };
     sourceComments.value = [];
     newSourceComment.value = '';
-    
+
     // Initialize the offcanvas if it doesn't exist
     if (!sourceOffcanvasInstance && sourceOffcanvasEl.value) {
-        sourceOffcanvasInstance = new Offcanvas(sourceOffcanvasEl.value, { 
-            backdrop: true, 
-            keyboard: true, 
-            scroll: true 
+        sourceOffcanvasInstance = new Offcanvas(sourceOffcanvasEl.value, {
+            backdrop: true,
+            keyboard: true,
+            scroll: true
         });
         hasSourceOffcanvas.value = true;
     }
-    
+
     // Show the offcanvas
     if (sourceOffcanvasInstance) {
         sourceOffcanvasInstance.show();
     } else {
         sourceOffcanvasOpen.value = true;
     }
-    
+
     loadSourceComments();
 }
 
@@ -1257,7 +1332,7 @@ async function deleteSourceComment(c) {
                                 @change="(e) => bulkUpdatePriority(e.target.value)">
                                 <option value="" selected disabled>Выбрать…</option>
                                 <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{ p.label
-                                }}</option>
+                                    }}</option>
                             </select>
                         </div>
 
@@ -1491,6 +1566,26 @@ async function deleteSourceComment(c) {
                                         </option>
                                     </select>
                                 </div>
+                                <div class="col-12">
+                                    <label class="form-label d-flex align-items-center justify-content-between">
+                                        <span>ФАЙЛ(ы)</span>
+                                        <div>
+                                            <button type="button" class="btn btn-sm btn-outline-primary"
+                                                @click="addSourceFileField">+
+                                            </button>
+                                        </div>
+                                    </label>
+                                    <div v-for="(f, idx) in createForm.source_files" :key="idx"
+                                        class="input-group mb-2">
+                                        <input type="text" class="form-control" v-model="createForm.source_files[idx]"
+                                            placeholder="Укажите ссылку или название файла" />
+                                        <button type="button" class="btn btn-outline-danger"
+                                            @click="removeSourceFileField(idx)"
+                                            :disabled="createForm.source_files.length <= 1">-</button>
+                                    </div>
+                                    <div class="form-text">Добавляйте текстовые значения (например ссылки) для связанных
+                                        файлов.</div>
+                                </div>
                             </div>
                         </div>
                         <div class="modal-footer">
@@ -1599,6 +1694,20 @@ async function deleteSourceComment(c) {
                                             {{ u.name }}<span v-if="u.is_blocked"> — ЗАБЛОКИРОВАН</span>
                                         </option>
                                     </select>
+                                </div>
+                                <div class="col-12 mt-2">
+                                    <label class="form-label d-flex align-items-center justify-content-between">
+                                        <span>ФАЙЛ(ы)</span>
+                                        <div>
+                                            <button type="button" class="btn btn-sm btn-outline-primary" @click="addEditSourceFileField">+
+                                            </button>
+                                        </div>
+                                    </label>
+                                    <div v-for="(f, idx) in editForm.source_files" :key="idx" class="input-group mb-2">
+                                        <input type="text" class="form-control" v-model="editForm.source_files[idx]" placeholder="Укажите ссылку или название файла" />
+                                        <button type="button" class="btn btn-outline-danger" @click="removeEditSourceFileField(idx)" :disabled="editForm.source_files.length <= 1">-</button>
+                                    </div>
+                                    <div class="form-text">Добавляйте текстовые значения (например ссылки) для связанных файлов.</div>
                                 </div>
                             </div>
                         </div>
