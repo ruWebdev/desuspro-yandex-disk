@@ -145,8 +145,13 @@ function updateTaskStatus(task, status, event) {
     const statusLabel = statusOptions.find(s => s.value === status)?.label || status;
 
     // Check if status change is allowed
+    // Allow only:
+    // - 'on_review' (На проверку)
+    // - 'question' (Вопрос) – handled via modal below
+    // - 'in_progress' (В работе) only when current status is 'assigned' (Назначена)
     const allowedStatuses = ['on_review', 'question'];
-    if (!allowedStatuses.includes(status)) {
+    const canStartWork = (status === 'in_progress' && task.status === 'assigned');
+    if (!canStartWork && !allowedStatuses.includes(status)) {
         // Revert the select to previous value
         const select = event?.target;
         if (select) {
