@@ -616,10 +616,18 @@ async function submitAssign() {
     if (!assigningTask.value) return;
     const uid = assignUserId.value ? Number(assignUserId.value) : null;
     const payload = { assignee_id: uid, status: uid ? 'assigned' : 'created' };
-    await router.put(route('brands.tasks.update', { brand: assigningTask.value.brand_id, task: assigningTask.value.id }), payload, {
+    
+    // Store references before closing modal
+    const taskId = assigningTask.value.id;
+    const brandId = assigningTask.value.brand_id;
+    
+    // Close the modal
+    closeAssign();
+    
+    await router.put(route('brands.tasks.update', { brand: brandId, task: taskId }), payload, {
         preserveScroll: true,
         onSuccess: () => {
-            const taskId = assigningTask.value.id;
+            // Update local state optimistically
             const taskIndex = items.value.findIndex(t => t.id === taskId);
             if (taskIndex !== -1) {
                 const performer = props.performers.find(p => p.id === uid) || null;
@@ -630,11 +638,21 @@ async function submitAssign() {
                     status: payload.status
                 });
             }
-            // Ensure server-side filters and pagination are reflected
+            // Force reload from server to ensure consistency
             fetchPage(true);
+        },
+        onError: () => {
+            // Find the task again to reopen modal
+            const task = items.value.find(t => t.id === taskId);
+            if (task) openAssign(task);
+            window.toast.error('Не удалось обновить исполнителя', {
+                position: 'top-right',
+                timeout: 3000,
+                closeOnClick: true,
+                pauseOnHover: true
+            });
         }
     });
-    closeAssign();
 }
 
 // Bulk delete
