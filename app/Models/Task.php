@@ -13,6 +13,7 @@ class Task extends Model
 
     protected $fillable = [
         'brand_id',
+        'created_by',
         'name',
         'task_type_id',
         'article_id',
@@ -49,6 +50,11 @@ class Task extends Model
     public function assignee(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assignee_id');
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function subtasks(): HasMany

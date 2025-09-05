@@ -25,20 +25,98 @@ class TaskController extends Controller
     {
         // Ensure routes using this controller require auth in routes if needed.
     }
+
+    /**
+     * JSON search endpoint for manager: server-side filters + pagination (default 20 per page).
+     */
+    public function search(Request $request)
+    {
+        $q = Task::query()
+            ->with(['brand:id,name','type:id,name,prefix','article:id,name','assignee:id,name'])
+            ->orderByDesc('created_at');
+
+        // Managers can only see tasks they created
+        $user = $request->user();
+        if ($user && method_exists($user, 'hasRole') && $user->hasRole('Manager')) {
+            $q->where('created_by', $user->id);
+        }
+
+        // Filters
+        if ($request->filled('brand_id')) $q->where('brand_id', (int)$request->query('brand_id'));
+        if ($request->filled('article_id')) $q->where('article_id', (int)$request->query('article_id'));
+        if ($request->filled('assignee_id')) $q->where('assignee_id', (int)$request->query('assignee_id'));
+
+        if ($request->filled('status')) {
+            $status = $this->normalizeStatus($request->query('status'));
+            $q->where('status', $status);
+        }
+
+        // Name search
+        if ($request->filled('search')) {
+            $name = trim((string)$request->query('search'));
+            $q->where(function($qq) use ($name) {
+                $qq->where('name', 'like', "%{$name}%");
+            });
+        }
+        // Global search across fields
+        if ($request->filled('global')) {
+            $g = trim((string)$request->query('global'));
+            $q->where(function($qq) use ($g) {
+                $qq->where('name', 'like', "%{$g}%")
+                   ->orWhereHas('article', fn($aq) => $aq->where('name', 'like', "%{$g}%"))
+                   ->orWhereHas('brand', fn($bq) => $bq->where('name', 'like', "%{$g}%"))
+                   ->orWhereHas('type', fn($tq) => $tq->where('name', 'like', "%{$g}%"));
+            });
+        }
+
+        // Date filter: today|yesterday|date=YYYY-MM-DD
+        $created = $request->query('created');
+        $date = $request->query('date');
+        if (in_array($created, ['today','yesterday'], true) || ($created === 'date' && $date)) {
+            $today = now();
+            if ($created === 'today') {
+                $q->whereDate('created_at', $today->toDateString());
+            } elseif ($created === 'yesterday') {
+                $q->whereDate('created_at', $today->copy()->subDay()->toDateString());
+            } elseif ($created === 'date' && $date) {
+                $q->whereDate('created_at', $date);
+            }
+        }
+
+        $perPage = (int)($request->query('per_page', 20));
+        $page = (int)($request->query('page', 1));
+        $paginator = $q->paginate($perPage, ['*'], 'page', $page);
+
+        return response()->json([
+            'data' => $paginator->items(),
+            'current_page' => $paginator->currentPage(),
+            'per_page' => $paginator->perPage(),
+            'total' => $paginator->total(),
+            'next_page_url' => $paginator->nextPageUrl(),
+            'prev_page_url' => $paginator->previousPageUrl(),
+        ]);
+    }
     /**
      * Global list of all tasks with brand names and basic info.
      */
     public function all(Request $request): Response
     {
-        $tasks = Task::query()
+        $query = Task::query()
             ->with([
                 'brand:id,name',
                 'type:id,name,prefix',
                 'article:id,name',
                 'assignee:id,name',
             ])
-            ->orderByDesc('created_at')
-            ->get(['id','brand_id','task_type_id','article_id','name','status','priority','assignee_id','public_link','created_at']);
+            ->orderByDesc('created_at');
+
+        // Managers can only see tasks they created
+        $user = $request->user();
+        if ($user && method_exists($user, 'hasRole') && $user->hasRole('Manager')) {
+            $query->where('created_by', $user->id);
+        }
+
+        $tasks = $query->get(['id','brand_id','task_type_id','article_id','name','status','priority','assignee_id','public_link','created_at']);
 
         $brands = Brand::query()->orderBy('name')->get(['id','name']);
 
@@ -83,16 +161,20 @@ class TaskController extends Controller
             'task_type_id' => ['required','exists:task_types,id'],
             'article_id' => ['required','exists:articles,id'],
             'name' => ['nullable','string','max:255'],
+            'assignee_id' => ['nullable','exists:users,id'],
+            'priority' => ['nullable','in:low,medium,high,urgent'],
         ]);
 
         $article = Article::findOrFail($data['article_id']);
         $type = TaskType::findOrFail($data['task_type_id']);
         $task = Task::create([
             'brand_id' => $brand->id,
+            'created_by' => $request->user()->id,
             'task_type_id' => $type->id,
             'article_id' => $article->id,
             'name' => $data['name'] ?? $article->name,
             'assignee_id' => $data['assignee_id'] ?? null,
+            'priority' => $data['priority'] ?? 'medium',
             'status' => isset($data['assignee_id']) ? 'assigned' : 'created',
         ]);
         // Create Yandex.Disk folder
@@ -111,6 +193,7 @@ class TaskController extends Controller
             'article_id' => ['required','exists:articles,id'],
             'name' => ['nullable','string','max:255'],
             'assignee_id' => ['nullable','exists:users,id'],
+            'priority' => ['nullable','in:low,medium,high,urgent'],
         ]);
 
         $brand = Brand::findOrFail($data['brand_id']);
@@ -119,20 +202,25 @@ class TaskController extends Controller
 
         $task = Task::create([
             'brand_id' => $brand->id,
+            'created_by' => $request->user()->id,
             'task_type_id' => $type->id,
             'article_id' => $article->id,
             'name' => $data['name'] ?? $article->name,
             'assignee_id' => $data['assignee_id'] ?? null,
+            'priority' => $data['priority'] ?? 'medium',
             'status' => isset($data['assignee_id']) ? 'assigned' : 'created',
         ]);
 
+        // Create Yandex.Disk folder structure
         $this->createYandexFolderStructure($request, $brand, $task, $type, $article);
+
         return back()->with('status', 'task-created');
     }
 
-    public function update(Request $request, Brand $brand, Task $task): RedirectResponse
+    public function update(Request $request, Brand $brand, Task $task)
     {
         abort_unless($task->brand_id === $brand->id, 404);
+        
         // Normalize known legacy/alias statuses before validation
         if ($request->has('status')) {
             $normalized = $this->normalizeStatus($request->string('status'));
@@ -140,17 +228,38 @@ class TaskController extends Controller
                 $request->merge(['status' => $normalized]);
             }
         }
+        
         $data = $request->validate([
             'name' => ['sometimes','required','string','max:255'],
-            // Must match DB enum: created, assigned, on_review, rework, rejected, accepted, done
-            'status' => ['sometimes','required','in:created,assigned,on_review,rework,rejected,accepted,done'],
+            // Must match DB enum and frontend usage
+            'status' => ['sometimes','required','in:created,assigned,in_progress,on_review,rework,question,rejected,accepted,cancelled,done'],
             'priority' => ['sometimes','required','in:low,medium,high,urgent'],
             'assignee_id' => ['nullable','exists:users,id'],
             'highlighted' => ['sometimes','boolean'],
             'comment' => ['nullable','string'],
         ]);
-        $task->fill($data)->save();
-        return back()->with('status', 'task-updated');
+        
+        // Store old status for event if needed
+        $oldStatus = $task->status;
+        
+        // Update the task
+        $task->fill($data);
+        $task->save();
+        
+        // Return JSON response for API requests, Inertia response for web
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Task updated successfully',
+                'task' => $task->fresh()
+            ]);
+        }
+        
+        // For Inertia requests, return a redirect with the task data
+        return back()->with([
+            'status' => 'task-updated',
+            'task' => $task->fresh()
+        ]);
     }
 
     /**
@@ -170,8 +279,8 @@ class TaskController extends Controller
         $update = [];
         if (array_key_exists('status', $payload)) {
             $status = $this->normalizeStatus($payload['status']);
-            // Must match DB enum
-            if (!in_array($status, ['created','assigned','on_review','rework','rejected','accepted','done'], true)) {
+            // Must match DB enum and frontend usage
+            if (!in_array($status, ['created','assigned','in_progress','on_review','rework','question','rejected','accepted','cancelled','done'], true)) {
                 return response()->json(['success' => false, 'error' => 'Invalid status'], 422);
             }
             $update['status'] = $status;

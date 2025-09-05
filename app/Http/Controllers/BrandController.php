@@ -16,7 +16,7 @@ class BrandController extends Controller
             ->orderByDesc('created_at')
             ->get(['id', 'name', 'created_at']);
 
-        return Inertia::render('Brands/Index', [
+        return Inertia::render('Admin/Brands/Index', [
             'brands' => $brands,
         ]);
     }

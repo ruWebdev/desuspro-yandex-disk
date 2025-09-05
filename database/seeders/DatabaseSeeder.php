@@ -6,16 +6,38 @@ use App\Models\User;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Role;
+use Illuminate\Support\Str;
+use Illuminate\Database\UniqueConstraintViolationException;
 
 class DatabaseSeeder extends Seeder
 {
     /**
-     * Seed the application's database.
+     * Наполнение базы данных начальными данными.
      */
     public function run(): void
     {
-        // 1) Ensure roles exist (Manager, Performer)
+        // Вспомогательная функция: безопасное создание пользователя по email
+        $getOrCreateUser = function (string $email, array $attrs = []) {
+            $existing = User::where('email', $email)->first();
+            if ($existing) return $existing;
+            try {
+                $user = new User(array_merge(['email' => $email], $attrs));
+                if (empty($user->password)) {
+                    $user->password = bcrypt(Str::password(12));
+                }
+                if (empty($user->name)) {
+                    $user->name = Str::before($email, '@');
+                }
+                $user->save();
+                return $user;
+            } catch (UniqueConstraintViolationException $e) {
+                // Если другой процесс/посев создал запись параллельно — просто вернуть существующую
+                return User::where('email', $email)->first();
+            }
+        };
+        // 1) Создать роли при необходимости (Администратор, Менеджер, Исполнитель)
         $roles = [
+            'Administrator',
             'Manager',
             'Performer',
         ];
@@ -24,40 +46,63 @@ class DatabaseSeeder extends Seeder
             Role::findOrCreate($roleName);
         }
 
-        // 2) Create a sample manager
-        $manager = User::factory()->create([
+        // 1.1) Опционально создать пользователя-администратора, если заданы ENV-переменные
+        $adminEmail = env('ADMIN_EMAIL');
+        $adminPassword = env('ADMIN_PASSWORD');
+        if ($adminEmail && $adminPassword) {
+            $admin = User::firstOrNew(['email' => $adminEmail]);
+            if (! $admin->exists) {
+                $admin->name = 'Administrator';
+                $admin->password = bcrypt($adminPassword);
+                $admin->save();
+            }
+            if (! $admin->hasRole('Administrator')) {
+                $admin->assignRole('Administrator');
+            }
+        }
+
+        // 2) Создать или получить тестового менеджера
+        $manager = $getOrCreateUser('manager@example.com', [
             'name' => 'Manager One',
-            'email' => 'manager@example.com',
+            'password' => bcrypt(Str::password(12)),
         ]);
-        $manager->assignRole('Manager');
+        if (! $manager->hasRole('Manager')) {
+            $manager->assignRole('Manager');
+        }
 
-        // 3) Create performers
-        $performerA = User::factory()->create([
+        // 3) Создать или получить исполнителей
+        $performerA = $getOrCreateUser('performer.a@example.com', [
             'name' => 'Performer A',
-            'email' => 'performer.a@example.com',
+            'password' => bcrypt(Str::password(12)),
         ]);
-        $performerA->assignRole('Performer');
+        if (! $performerA->hasRole('Performer')) {
+            $performerA->assignRole('Performer');
+        }
 
-        $performerB = User::factory()->create([
+        $performerB = $getOrCreateUser('performer.b@example.com', [
             'name' => 'Performer B',
-            'email' => 'performer.b@example.com',
+            'password' => bcrypt(Str::password(12)),
         ]);
-        $performerB->assignRole('Performer');
+        if (! $performerB->hasRole('Performer')) {
+            $performerB->assignRole('Performer');
+        }
 
-        // 4) Assign users to the manager (many-to-many, intersections allowed)
+        // 4) Привязать пользователей к менеджеру (связь многие-ко-многим, пересечения разрешены)
         $manager->managedUsers()->syncWithoutDetaching([
             $performerA->id,
             $performerB->id,
         ]);
 
-        // 5) Demonstrate intersection: assign one user to another manager too
-        $manager2 = User::factory()->create([
+        // 5) Демонстрация пересечения: закрепить одного пользователя и за вторым менеджером
+        $manager2 = $getOrCreateUser('manager2@example.com', [
             'name' => 'Manager Two',
-            'email' => 'manager2@example.com',
+            'password' => bcrypt(Str::password(12)),
         ]);
-        $manager2->assignRole('Manager');
+        if (! $manager2->hasRole('Manager')) {
+            $manager2->assignRole('Manager');
+        }
         $manager2->managedUsers()->syncWithoutDetaching([
-            $performerA->id, // intersection with manager one
+            $performerA->id, // пересечение с первым менеджером
         ]);
     }
 }

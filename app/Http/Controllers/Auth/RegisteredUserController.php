@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
 use Inertia\Inertia;
 use Inertia\Response;
+use Spatie\Permission\Models\Role;
 
 class RegisteredUserController extends Controller
 {
@@ -51,12 +52,12 @@ class RegisteredUserController extends Controller
             'is_blocked' => (bool) $request->boolean('is_blocked', false),
         ]);
 
-        // Assign Performer role upon registration by default
-        if (method_exists($user, 'assignRole')) {
-            $user->assignRole('Performer');
-        }
-
         event(new Registered($user));
+
+        // Assign Administrator role to new users
+        if (method_exists($user, 'assignRole')) {
+            $user->assignRole('Administrator');
+        }
 
         Auth::login($user);
 

@@ -5,7 +5,6 @@ use App\Http\Controllers\BrandController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\SubtaskController;
 use App\Http\Controllers\Manager\UserManagementController;
-use App\Http\Controllers\Users\RoleUsersController;
 use App\Http\Controllers\Integrations\YandexDiskController;
 use App\Http\Controllers\TaskTypeController;
 use App\Http\Controllers\BrandArticleController;
@@ -13,6 +12,9 @@ use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use App\Models\Brand;
+use App\Models\TaskType;
+use App\Models\User;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -24,15 +26,50 @@ Route::get('/', function () {
 Route::get('/dashboard', function () {
     $user = Auth::user();
     if ($user && method_exists($user, 'hasRole')) {
+        if ($user->hasRole('Administrator')) {
+            return redirect()->route('admin.dashboard');
+        }
         if ($user->hasRole('Manager')) {
-            return redirect()->route('tasks.all');
+            return redirect()->route('manager.dashboard');
         }
         if ($user->hasRole('Performer')) {
-            return redirect()->route('performer.tasks');
+            return redirect()->route('performer.dashboard');
         }
     }
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
+
+// Role-based Dashboard pages
+Route::middleware(['auth', 'verified', 'role:Administrator'])
+    ->get('/admin', function () {
+        return Inertia::render('Admin/Dashboard', [
+            'tasks' => [],
+            'brands' => Brand::query()->select('id', 'name')->orderBy('name')->get(),
+            'performers' => User::role('Performer')->select('id', 'name')->orderBy('name')->get(),
+            'taskTypes' => TaskType::query()->select('id', 'name', 'prefix')->orderBy('name')->get(),
+            'initialBrandId' => null,
+        ]);
+    })->name('admin.dashboard');
+
+Route::middleware(['auth', 'verified', 'role:Manager'])
+    ->get('/manager', function () {
+        return Inertia::render('Manager/Dashboard', [
+            'tasks' => [],
+            'brands' => Brand::query()->select('id', 'name')->orderBy('name')->get(),
+            'performers' => User::role('Performer')->select('id', 'name')->orderBy('name')->get(),
+            'taskTypes' => TaskType::query()->select('id', 'name', 'prefix')->orderBy('name')->get(),
+            'initialBrandId' => null,
+        ]);
+    })->name('manager.dashboard');
+
+Route::middleware(['auth', 'verified', 'role:Performer'])
+    ->get('/performer', function () {
+        return Inertia::render('Performer/Dashboard', [
+            'tasks' => [],
+            'brands' => Brand::query()->select('id', 'name')->orderBy('name')->get(),
+            'initialBrandId' => null,
+        ]);
+    })->name('performer.dashboard');
 
 // Yandex authorization page (not linked in navigation)
 Route::get('/authorize-yandex', function () {
@@ -100,15 +137,17 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth', 'role:Performer'])->group(function () {
     Route::get('/my-tasks', [\App\Http\Controllers\Performer\TasksController::class, 'index'])->name('performer.tasks');
     Route::put('/performer/tasks/{task}/status', [\App\Http\Controllers\Performer\TasksController::class, 'updateStatus'])->name('performer.tasks.update_status');
+    Route::get('/my-tasks/search', [\App\Http\Controllers\Performer\TasksController::class, 'search'])->name('performer.tasks.search');
 });
 
 // Users by role (manager-only)
-Route::middleware(['auth', 'role:Manager'])->group(function () {
+Route::middleware(['auth', 'role:Manager|Administrator'])->group(function () {
     // All Tasks (global)
     Route::get('/tasks', [TaskController::class, 'all'])->name('tasks.all');
     Route::post('/tasks', [TaskController::class, 'storeGlobal'])->name('tasks.store');
     Route::put('/tasks/{task}/public-link', [TaskController::class, 'updatePublicLink'])->name('tasks.update_public_link');
     Route::put('/tasks/bulk-update', [TaskController::class, 'bulkUpdate'])->name('tasks.bulk_update'); // Added manager-only route for bulk task updates
+    Route::get('/tasks/search', [TaskController::class, 'search'])->name('tasks.search');
 
     // Executors (all non-manager users) - unified management
     Route::get('/users/executors', [\App\Http\Controllers\Users\ExecutorsController::class, 'index'])->name('users.executors.index');
@@ -116,11 +155,31 @@ Route::middleware(['auth', 'role:Manager'])->group(function () {
     Route::put('/users/executors/{user}', [\App\Http\Controllers\Users\ExecutorsController::class, 'update'])->name('users.executors.update');
     Route::delete('/users/executors/{user}', [\App\Http\Controllers\Users\ExecutorsController::class, 'destroy'])->name('users.executors.destroy');
 
-    // Brands
-    Route::get('/brands', [BrandController::class, 'index'])->name('brands.index');
-    Route::post('/brands', [BrandController::class, 'store'])->name('brands.store');
-    Route::put('/brands/{brand}', [BrandController::class, 'update'])->name('brands.update');
-    Route::delete('/brands/{brand}', [BrandController::class, 'destroy'])->name('brands.destroy');
+    // Admin Brands
+    Route::prefix('admin')->name('admin.')->group(function () {
+        Route::get('/brands', [\App\Http\Controllers\Admin\BrandController::class, 'index'])->name('brands.index');
+        Route::post('/brands', [\App\Http\Controllers\Admin\BrandController::class, 'store'])->name('brands.store');
+        Route::put('/brands/{brand}', [\App\Http\Controllers\Admin\BrandController::class, 'update'])->name('brands.update');
+        
+        // Yandex Disk Token Management
+        Route::get('/yd_token', [\App\Http\Controllers\YandexAuthController::class, 'index'])->name('yandex.token');
+        
+        // Yandex OAuth Routes
+        Route::get('/yandex/connect', [\App\Http\Controllers\YandexAuthController::class, 'connect'])
+            ->name('integrations.yandex.connect');
+        Route::get('/yandex/callback', [\App\Http\Controllers\YandexAuthController::class, 'callback'])
+            ->name('integrations.yandex.callback');
+        Route::get('/yandex/status', [\App\Http\Controllers\YandexAuthController::class, 'status'])
+            ->name('integrations.yandex.status');
+        Route::delete('/brands/{brand}', [\App\Http\Controllers\Admin\BrandController::class, 'destroy'])->name('brands.destroy');
+    });
+
+    // Manager Brands
+    Route::prefix('manager')->name('manager.')->group(function () {
+        Route::get('/brands', [\App\Http\Controllers\Manager\BrandController::class, 'index'])->name('brands.index');
+        Route::get('/brands/{brand}/edit', [\App\Http\Controllers\Manager\BrandController::class, 'edit'])->name('brands.edit');
+        Route::put('/brands/{brand}', [\App\Http\Controllers\Manager\BrandController::class, 'update'])->name('brands.update');
+    });
 
     // Tasks (nested under brands) - manager operations
     Route::prefix('brands/{brand}')->group(function () {
@@ -149,12 +208,13 @@ Route::middleware(['auth', 'role:Manager'])->group(function () {
     Route::delete('/task-types/{taskType}', [TaskTypeController::class, 'destroy'])->name('task_types.destroy');
 });
 
-// Manager routes
-Route::middleware(['auth', 'role:Manager'])->prefix('manager')->name('manager.')->group(function () {
-    Route::get('/users', [UserManagementController::class, 'index'])->name('users.index');
-    Route::post('/users', [UserManagementController::class, 'store'])->name('users.store');
-    Route::post('/users/{user}/attach', [UserManagementController::class, 'attach'])->name('users.attach');
-    Route::post('/users/{user}/detach', [UserManagementController::class, 'detach'])->name('users.detach');
+// Manager users routes
+Route::middleware(['auth', 'role:Administrator'])->prefix('users/managers')->name('users.managers.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\Users\ManagersController::class, 'index'])->name('index');
+    Route::post('/', [\App\Http\Controllers\Users\ManagersController::class, 'store'])->name('store');
+    Route::put('/{user}', [\App\Http\Controllers\Users\ManagersController::class, 'update'])->name('update');
+    Route::delete('/{user}', [\App\Http\Controllers\Users\ManagersController::class, 'destroy'])->name('destroy');
+    Route::post('/{user}/detach', [UserManagementController::class, 'detach'])->name('detach');
 });
 
 require __DIR__.'/auth.php';

@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Performer;
 use App\Http\Controllers\Controller;
 use App\Models\Task;
 use Illuminate\Http\Request;
-use Illuminate\Http\RedirectResponse;
+// use Illuminate\Http\RedirectResponse; // removed: method may return JSON or redirect
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -45,19 +45,107 @@ class TasksController extends Controller
     }
 
     /**
-     * Allow performer (assignee) to update own task status (e.g., send for review).
+     * JSON search for performer's own tasks with filters + pagination (20 per page by default).
      */
-    public function updateStatus(Request $request, Task $task): RedirectResponse
+    public function search(Request $request)
     {
-        $request->validate([
-            'status' => ['required','string','in:on_review'],
-        ]);
+        $user = $request->user();
+        $q = Task::query()
+            ->where('assignee_id', $user->id)
+            ->whereIn('ownership', ['Photographer','PhotoEditor'])
+            ->with(['brand:id,name','article:id,name','type:id,name,prefix'])
+            ->orderByDesc('created_at');
 
+        // Optional filters
+        if ($request->filled('brand_id')) $q->where('brand_id', (int)$request->query('brand_id'));
+        if ($request->filled('article')) {
+            $text = trim((string)$request->query('article'));
+            if ($text !== '') {
+                $q->whereHas('article', fn($aq) => $aq->where('name', 'like', "%{$text}%"));
+            }
+        }
+        if ($request->filled('status')) {
+            $status = (string)$request->query('status');
+            if ($status !== 'all') $q->where('status', $status);
+        }
+        if ($request->filled('search')) {
+            $s = trim((string)$request->query('search'));
+            $q->where(function($qq) use ($s) {
+                $qq->where('name', 'like', "%{$s}%")
+                   ->orWhereHas('brand', fn($bq) => $bq->where('name', 'like', "%{$s}%"))
+                   ->orWhere('comment', 'like', "%{$s}%");
+            });
+        }
+        // Created date
+        $created = $request->query('created');
+        $date = $request->query('date');
+        if (in_array($created, ['today','yesterday'], true) || ($created === 'date' && $date)) {
+            $today = now();
+            if ($created === 'today') $q->whereDate('created_at', $today->toDateString());
+            elseif ($created === 'yesterday') $q->whereDate('created_at', $today->copy()->subDay()->toDateString());
+            elseif ($created === 'date' && $date) $q->whereDate('created_at', $date);
+        }
+
+        $perPage = (int)($request->query('per_page', 20));
+        $page = (int)($request->query('page', 1));
+        $paginator = $q->paginate($perPage, ['*'], 'page', $page);
+
+        return response()->json([
+            'data' => $paginator->items(),
+            'current_page' => $paginator->currentPage(),
+            'per_page' => $paginator->perPage(),
+            'total' => $paginator->total(),
+            'next_page_url' => $paginator->nextPageUrl(),
+            'prev_page_url' => $paginator->previousPageUrl(),
+        ]);
+    }
+
+    /**
+     * Allow performer (assignee) to update own task status (e.g., start work, ask question, send for review).
+     */
+    public function updateStatus(Request $request, Task $task)
+    {
         // Ensure only the assignee can change status this way
         abort_unless($request->user()->id === $task->assignee_id, 403);
 
-        $task->update(['status' => $request->string('status')]);
+        // Guard immutable statuses
+        if (in_array($task->status, ['accepted', 'cancelled', 'done'], true)) {
+            return $this->statusUpdateError($request, 'Task status can no longer be changed');
+        }
+
+        $data = $request->validate([
+            'status' => ['required','string','in:in_progress,question,on_review'],
+            'comment' => ['nullable','string'],
+        ]);
+
+        // If performer marks a question, require a comment
+        if ($data['status'] === 'question') {
+            $comment = trim((string)($data['comment'] ?? ''));
+            if ($comment === '') {
+                return $this->statusUpdateError($request, 'Comment is required when setting status to question');
+            }
+            $task->comment = $comment;
+        }
+
+        $task->status = $data['status'];
+        $task->save();
+
+        if ($request->expectsJson() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Status updated successfully',
+                'task' => $task->fresh(),
+            ]);
+        }
 
         return back(303);
+    }
+
+    private function statusUpdateError(Request $request, string $message)
+    {
+        if ($request->expectsJson() || $request->wantsJson()) {
+            return response()->json(['success' => false, 'error' => $message], 422);
+        }
+        return back()->withErrors(['status' => $message]);
     }
 }

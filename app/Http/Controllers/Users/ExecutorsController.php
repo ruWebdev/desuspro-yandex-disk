@@ -17,23 +17,36 @@ class ExecutorsController extends Controller
     {
         $query = User::query()
             ->with('roles:id,name')
-            ->whereDoesntHave('roles', function($q) { $q->where('name', 'Manager'); })
+            ->whereHas('roles', function ($q) {
+                $q->where('name', 'Performer');
+            })
             ->orderBy('name');
 
         if ($search = $request->string('search')->toString()) {
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%$search%")
-                  ->orWhere('email', 'like', "%$search%")
-                  ->orWhere('last_name', 'like', "%$search%")
-                  ->orWhere('first_name', 'like', "%$search%")
-                  ->orWhere('middle_name', 'like', "%$search%")
+                    ->orWhere('email', 'like', "%$search%")
+                    ->orWhere('last_name', 'like', "%$search%")
+                    ->orWhere('first_name', 'like', "%$search%")
+                    ->orWhere('middle_name', 'like', "%$search%")
                 ;
             });
         }
 
-        $users = $query->get(['id','name','email','last_name','first_name','middle_name','is_blocked','created_at']);
+        $users = $query->get(['id', 'name', 'email', 'last_name', 'first_name', 'middle_name', 'is_blocked', 'created_at']);
 
-        return Inertia::render('Users/Executors', [
+        // Choose component based on role: Managers see Manager view; Admins see Admin view
+        $component = 'Admin/Users/Executors';
+        $authUser = $request->user();
+        if ($authUser && method_exists($authUser, 'hasRole')) {
+            $isManager = $authUser->hasRole('Manager');
+            $isAdmin = $authUser->hasRole('Administrator');
+            if ($isManager && !$isAdmin) {
+                $component = 'Manager/Users/Executors';
+            }
+        }
+
+        return Inertia::render($component, [
             'users' => $users,
             'filters' => [
                 'search' => $search,
