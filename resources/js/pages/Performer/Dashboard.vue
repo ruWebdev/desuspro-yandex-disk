@@ -3,6 +3,8 @@ import DashByteLayout from '@/layouts/DashByteLayout.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref, computed, onMounted, onUnmounted, watch, nextTick, inject } from 'vue';
 import { Offcanvas } from 'bootstrap';
+// Reference to Bootstrap's Modal component
+const Modal = window.bootstrap?.Modal;
 
 // Additional filters
 const brandFilter = ref(''); // brand id as string, empty = all
@@ -70,6 +72,69 @@ function getAvailableStatuses() {
     );
 }
 
+// Question modal state (Bootstrap)
+const questionModalEl = ref(null);
+let questionModalInstance = null;
+const questionTask = ref(null);
+const questionText = ref('');
+
+function openQuestionModal(task) {
+    questionTask.value = task ? { ...task } : null;
+    questionText.value = '';
+    if (!questionModalInstance && questionModalEl.value && Modal) {
+        try { questionModalInstance = new Modal(questionModalEl.value, { backdrop: 'static', keyboard: true }); } catch { /* noop */ }
+    }
+    if (questionModalInstance) questionModalInstance.show();
+}
+
+function closeQuestionModal() {
+    if (questionModalInstance) questionModalInstance.hide();
+    questionTask.value = null;
+    questionText.value = '';
+}
+
+async function submitQuestion() {
+    const toast = inject('toast') || window.toast;
+    const t = questionTask.value;
+    const text = (questionText.value || '').trim();
+    if (!t || !text) { return; }
+    // 1) Update status to question with comment
+    await router.put(
+        route('performer.tasks.update_status', { task: t.id }),
+        { status: 'question', comment: text },
+        {
+            preserveScroll: true,
+            onSuccess: async () => {
+                try {
+                    // 2) Persist the same text to task_source_comments
+                    const url = route('brands.tasks.source_comments.store', { brand: t.brand_id, task: t.id });
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                        },
+                        body: JSON.stringify({ content: text })
+                    });
+                    // Ignore non-OK silently, status is already updated; still proceed with UI feedback
+                    try { if (!res.ok) console.warn('Failed to store source comment'); } catch { }
+                } catch (e) { console.warn('Source comment error', e); }
+                // Refresh list and notify
+                fetchPage(true);
+                toast?.success('Вопрос отправлен проверяющему');
+            },
+            onError: (errors) => {
+                let errorMessage = 'Ошибка при обновлении статуса';
+                if (errors?.message) errorMessage = errors.message;
+                else if (errors?.status) errorMessage = `Ошибка: ${errors.status}`;
+                toast?.error(errorMessage);
+            },
+            onFinish: () => { closeQuestionModal(); }
+        }
+    );
+}
+
 function updateTaskStatus(task, status, event) {
     if (!task || !status) return;
 
@@ -91,23 +156,23 @@ function updateTaskStatus(task, status, event) {
         return;
     }
 
-    // Optimistic update
+    // If performer selects 'question', open modal to collect text and exit early
+    if (status === 'question') {
+        // Revert select dropdown visual state to previous value
+        const select = event?.target;
+        if (select) select.value = task.status;
+        openQuestionModal(task);
+        return;
+    }
+
+    // Optimistic update for other statuses
     const row = items.value.find(x => x.id === task.id);
     const prev = row ? row.status : null;
     if (row) row.status = status;
 
     // Prepare the request data
     const requestData = { status };
-    if (status === 'question') {
-        // If changing to 'question' status, include a comment
-        const comment = prompt('Пожалуйста, укажите вопрос или комментарий:');
-        if (comment === null) {
-            // User cancelled the prompt, revert the status
-            if (row && prev) row.status = prev;
-            return;
-        }
-        requestData.comment = comment;
-    }
+    // 'question' handled by modal above
 
     router.put(
         route('performer.tasks.update_status', { task: task.id }),
@@ -115,7 +180,6 @@ function updateTaskStatus(task, status, event) {
         {
             preserveScroll: true,
             onSuccess: () => {
-                toast.dismiss(toastId);
                 toast.success(`Статус изменен на: ${statusLabel}`);
                 // Refresh the task list to ensure we have the latest data
                 fetchPage(true);
@@ -123,7 +187,6 @@ function updateTaskStatus(task, status, event) {
             onError: (errors) => {
                 // Revert the optimistic update
                 if (row && prev) row.status = prev;
-                toast.dismiss(toastId);
 
                 // Show appropriate error message
                 let errorMessage = 'Ошибка при обновлении статуса';
@@ -1097,6 +1160,31 @@ function formatManagerName(manager) {
             </div>
             <div v-if="offcanvasOpen && !hasOffcanvas" class="modal-backdrop fade show" style="z-index: 1040;"
                 @click="closeOffcanvas"></div>
+        </teleport>
+
+        <!-- Question Modal (Перевод в статус "Вопрос") -->
+        <teleport to="body">
+            <div class="modal fade" ref="questionModalEl" tabindex="-1" role="dialog" aria-hidden="true">
+                <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Вопрос по задаче</h5>
+                            <button type="button" class="btn-close" aria-label="Close" @click="closeQuestionModal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Опишите ваш вопрос</label>
+                                <textarea v-model="questionText" class="form-control" rows="4"
+                                    placeholder="Введите текст вопроса для проверяющего"></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" @click="closeQuestionModal">Отмена</button>
+                            <button type="button" class="btn btn-primary" :disabled="!questionText.trim()" @click="submitQuestion">Отправить</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </teleport>
 
         <!-- Source Offcanvas (БРЕНД / Исходник) -->
