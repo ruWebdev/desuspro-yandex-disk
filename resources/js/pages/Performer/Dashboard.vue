@@ -1,7 +1,7 @@
 <script setup>
 import DashByteLayout from '@/layouts/DashByteLayout.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
-import { ref, computed, onMounted, watch, onBeforeUnmount, nextTick, inject } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick, inject } from 'vue';
 import { Offcanvas } from 'bootstrap';
 
 // Additional filters
@@ -157,15 +157,55 @@ async function fetchPage(reset = false) {
     finally { loading.value = false; }
 }
 
-function onScroll() {
-    if (!hasMore.value || loading.value) return;
-    const nearBottom = (window.innerHeight + window.scrollY) >= (document.body.offsetHeight - 200);
-    if (nearBottom) fetchPage(false);
-}
+// Scroll container reference
+const scrollContainer = ref(null);
 
-onMounted(() => {
-    fetchPage(true);
-    window.addEventListener('scroll', onScroll, { passive: true });
+// Infinite scroll handler
+const checkScroll = () => {
+    if (!hasMore.value || loading.value) return;
+
+    const container = scrollContainer.value || document.documentElement;
+    const isWindow = container === window || container === document.documentElement;
+    const scrollTop = isWindow ? window.scrollY : container.scrollTop;
+    const clientHeight = isWindow ? window.innerHeight : container.clientHeight;
+    const scrollHeight = isWindow ? document.documentElement.scrollHeight : container.scrollHeight;
+    const scrollPosition = scrollTop + clientHeight;
+    const scrollThreshold = scrollHeight - 300; // 300px from bottom
+
+    if (scrollPosition >= scrollThreshold) {
+        fetchPage(false);
+    }
+};
+
+// Debounce scroll handler
+let scrollTimeout = null;
+const handleScroll = () => {
+    if (scrollTimeout) clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(checkScroll, 100);
+};
+
+// Setup scroll listener
+const setupScrollListener = () => {
+    const container = scrollContainer.value || window;
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+};
+
+// Initialize
+onMounted(async () => {
+    await fetchPage(true);
+    // Set scroll container to the main content area
+    scrollContainer.value = document.querySelector('.main-content') || window;
+    const cleanupScroll = setupScrollListener();
+
+    // Initial check in case content doesn't fill the viewport
+    checkScroll();
+
+    // Cleanup
+    onUnmounted(() => {
+        cleanupScroll();
+        if (scrollTimeout) clearTimeout(scrollTimeout);
+    });
 });
 
 let debounceTimer = null;
@@ -174,11 +214,6 @@ watch([search, statusFilter, priorityFilter, brandFilter, articleFilter, created
     debounceTimer = setTimeout(() => {
         fetchPage(true);
     }, 300);
-});
-
-onBeforeUnmount(() => {
-    window.removeEventListener('scroll', onScroll);
-    if (debounceTimer) clearTimeout(debounceTimer);
 });
 
 function resetFilters() {
@@ -737,36 +772,45 @@ function formatManagerName(manager) {
 
 <template>
     <DashByteLayout>
+        <div class="row">
+            <div class="col-2">
+                <div class="card">
+                    <div class="card-body" id="sidebar">
+                        <h4 class="subheader">Статусы</h4>
+                        <ul class="nav nav-pills flex-column mb-4">
+                            <li class="nav-item">
+                                <a href="#" class="nav-link" :class="{ 'active': statusFilter === '' }"
+                                    @click.prevent="statusFilter = ''">
+                                    Все статусы
+                                </a>
+                            </li>
+                            <li v-for="status in statusOptions" :key="status.value" class="nav-item">
+                                <a href="#" class="nav-link" :class="{ 'active': statusFilter === status.value }"
+                                    @click.prevent="statusFilter = status.value">
+                                    {{ status.label }}
+                                </a>
+                            </li>
+                        </ul>
 
-        <div id="fileSidebar" class="file-sidebar">
-            <label class="sidebar-label mb-2">Статусы</label>
-            <nav class="nav nav-sidebar mb-4">
-                <a href="#" class="nav-link" :class="{ 'active': statusFilter === '' }"
-                    @click.prevent="statusFilter = ''">
-                    Все статусы
-                </a>
-                <a v-for="status in statusOptions" :key="status.value" href="#" class="nav-link"
-                    :class="{ 'active': statusFilter === status.value }" @click.prevent="statusFilter = status.value">
-                    {{ status.label }}
-                </a>
-            </nav>
-
-            <label class="sidebar-label mb-2">Приоритеты</label>
-            <nav class="nav nav-sidebar mb-4">
-                <a href="#" class="nav-link" :class="{ 'active': priorityFilter === '' }"
-                    @click.prevent="priorityFilter = ''">
-                    Все приоритеты
-                </a>
-                <a v-for="priority in priorityOptions" :key="priority.value" href="#" class="nav-link"
-                    :class="{ 'active': priorityFilter === priority.value }"
-                    @click.prevent="priorityFilter = priority.value">
-                    {{ priority.label }}
-                </a>
-            </nav>
-
-
-        </div><!-- file-sidebar -->
-        <div id="fileContent" class="file-content p-3 p-lg-4">
+                        <h4 class="subheader">Приоритеты</h4>
+                        <ul class="nav nav-pills flex-column mb-4">
+                            <li class="nav-item">
+                                <a href="#" class="nav-link" :class="{ 'active': priorityFilter === '' }"
+                                    @click.prevent="priorityFilter = ''">
+                                    Все приоритеты
+                                </a>
+                            </li>
+                            <li v-for="priority in priorityOptions" :key="priority.value" class="nav-item">
+                                <a href="#" class="nav-link" :class="{ 'active': priorityFilter === priority.value }"
+                                    @click.prevent="priorityFilter = priority.value">
+                                    {{ priority.label }}
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="col-10">
 
             <div class="d-md-flex align-items-center justify-content-between mb-4">
                 <div>
@@ -822,9 +866,10 @@ function formatManagerName(manager) {
                 </div>
             </div>
 
-            <div class="table-responsive">
-                <table class="table table-sm">
-                    <thead class="table-light">
+            <div class="table-wrapper" style="position: relative; height: calc(100vh - 200px);">
+                <!-- Header -->
+                <table class="table">
+                    <thead>
                         <tr>
                             <th>Создан</th>
                             <th>Наименование задачи</th>
@@ -846,7 +891,7 @@ function formatManagerName(manager) {
                             <td>{{ new Date(t.created_at).toLocaleString('ru-RU') }}</td>
                             <td>{{ t.name || t.article?.name || t.article_name || '' }}</td>
                             <td>{{ t.brand?.name || '—' }}<br />{{ t.article?.name || t.article_name || t.article || '—'
-                                }}
+                            }}
                             </td>
                             <td>{{ formatManagerName(t.creator) || '—' }}</td>
                             <td>{{ t.type?.name || t.task_type?.name || t.type_name || '—' }}</td>
@@ -879,7 +924,7 @@ function formatManagerName(manager) {
                             <td>
                                 <span class="badge text-light" :class="priorityClass(t.priority)">{{
                                     priorityLabel(t.priority)
-                                    }}</span>
+                                }}</span>
                             </td>
                             <td class="text-nowrap">
                                 <div class="btn-list d-flex flex-nowrap align-items-center gap-2">
@@ -916,7 +961,8 @@ function formatManagerName(manager) {
                     </tbody>
                 </table>
             </div>
-        </div><!-- file-content -->
+        </div>
+        </div>
 
         <!-- Right offcanvas -->
         <teleport to="body">

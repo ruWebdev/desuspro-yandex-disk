@@ -253,6 +253,9 @@ class TaskController extends Controller
             'status' => ['sometimes','required','in:created,assigned,in_progress,on_review,rework,question,rejected,accepted,cancelled,done'],
             'priority' => ['sometimes','required','in:low,medium,high,urgent'],
             'assignee_id' => ['nullable','exists:users,id'],
+            // Allow updating type and article
+            'task_type_id' => ['sometimes','required','exists:task_types,id'],
+            'article_id' => ['sometimes','required','exists:articles,id'],
             'highlighted' => ['sometimes','boolean'],
             'comment' => ['nullable','string'],
             'source_files' => ['sometimes','array'],
@@ -264,6 +267,14 @@ class TaskController extends Controller
         
         // Update the task
         $task->fill($data);
+
+        // If article changed and name not explicitly provided, sync name with article
+        if (array_key_exists('article_id', $data) && !array_key_exists('name', $data)) {
+            $article = Article::find($data['article_id']);
+            if ($article) {
+                $task->name = $article->name;
+            }
+        }
         if (array_key_exists('source_files', $data)) {
             $task->source_files = $data['source_files'];
         }

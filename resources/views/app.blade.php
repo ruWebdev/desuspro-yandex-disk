@@ -20,15 +20,17 @@
 
     <!-- DashByte CSS -->
     <link rel="stylesheet" href="/lib/remixicon/fonts/remixicon.css">
-    <link rel="stylesheet" href="/assets/css/style.min.css">
+    <link href="/dist/css/tabler.min.css" rel="stylesheet" />
 
     @routes
     @vite(['resources/js/app.js', "resources/js/pages/{$page['component']}.vue"])
     @inertiaHead
 </head>
 
-<body class="page-app sidebar-offset">
+<body class="layout-fluid">
     @inertia
+
+    <script src="/dist/js/tabler.min.js" defer></script>
 </body>
 
 </html>

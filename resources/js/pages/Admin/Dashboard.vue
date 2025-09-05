@@ -2,7 +2,6 @@
 import { ref, computed, onMounted, watch, nextTick, onUnmounted } from 'vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import DashByteLayout from '@/layouts/DashByteLayout.vue';
-import PerfectScrollbar from 'perfect-scrollbar';
 
 // Import Bootstrap Modal
 import { Modal, Offcanvas } from 'bootstrap';
@@ -47,6 +46,10 @@ const page = ref(1);
 const perPage = ref(20);
 const hasMore = ref(true);
 const loading = ref(false);
+
+// IntersectionObserver for tbody-based infinite scroll
+const infiniteSentinelEl = ref(null);
+let infiniteObserver = null;
 
 // Reset all filters to their default values
 function resetFilters() {
@@ -104,24 +107,69 @@ async function fetchPage(reset = false) {
     finally { loading.value = false; }
 }
 
-// Infinite scroll on window
-function onScroll() {
+// Infinite scroll on layout scroll container (.app-scroll)
+const scrollContainer = ref(null);
+
+const checkScroll = () => {
     if (!hasMore.value || loading.value) return;
-    const nearBottom = (window.innerHeight + window.scrollY) >= (document.body.offsetHeight - 200);
-    if (nearBottom) fetchPage(false);
-}
+    const container = scrollContainer.value || document.documentElement;
+    const isWindow = container === window || container === document.documentElement;
+    const scrollTop = isWindow ? window.scrollY : container.scrollTop;
+    const clientHeight = isWindow ? window.innerHeight : container.clientHeight;
+    const scrollHeight = isWindow ? document.documentElement.scrollHeight : container.scrollHeight;
+    if (scrollTop + clientHeight >= scrollHeight - 300) {
+        fetchPage(false);
+    }
+};
+
+let scrollTimeout = null;
+const handleScroll = () => {
+    if (scrollTimeout) clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(checkScroll, 100);
+};
+
+const cleanup = () => {
+    const container = scrollContainer.value || window;
+    container.removeEventListener('scroll', handleScroll);
+    if (scrollTimeout) clearTimeout(scrollTimeout);
+};
+
 onMounted(() => {
     fetchPage(true);
-    window.addEventListener('scroll', onScroll, { passive: true });
 
-    // Initialize PerfectScrollbar for file manager
-    const psSidebar = new PerfectScrollbar('#fileSidebar', {
-        suppressScrollX: true
-    });
+    // Resolve the scroll container to the internal table body wrapper to hide global scroll
+    scrollContainer.value = document.getElementById('tableBodyWrapper')
+        || document.querySelector('.app-scroll')
+        || null;
 
-    const psContent = new PerfectScrollbar('#fileContent', {
-        suppressScrollX: true
-    });
+    // Setup IntersectionObserver on sentinel within tbody
+    if (infiniteSentinelEl.value) {
+        try {
+            infiniteObserver = new IntersectionObserver((entries) => {
+                const entry = entries[0];
+                if (!entry) return;
+                if (entry.isIntersecting && hasMore.value && !loading.value) {
+                    fetchPage(false);
+                }
+            }, {
+                root: scrollContainer.value || null, // null falls back to viewport, else use .app-scroll
+                rootMargin: '0px 0px 200px 0px', // prefetch a bit before bottom
+                threshold: 0.01,
+            });
+            infiniteObserver.observe(infiniteSentinelEl.value);
+        } catch (e) {
+            console.error('IntersectionObserver init failed, fallback to scroll listener', e);
+            const container = scrollContainer.value || window;
+            container.addEventListener('scroll', handleScroll, { passive: true });
+            // Initial check in case content doesn't fill the viewport
+            checkScroll();
+        }
+    } else {
+        // Fallback if sentinel not yet in DOM
+        const container = scrollContainer.value || window;
+        container.addEventListener('scroll', handleScroll, { passive: true });
+        checkScroll();
+    }
 
     // Menu toggle functionality
     const menuToggle = document.getElementById('menuFileManager');
@@ -131,28 +179,13 @@ onMounted(() => {
             document.querySelector('.main-file-manager')?.classList.toggle('show');
         });
     }
-
-    // Store PerfectScrollbar instances for cleanup
-    window.psInstances = window.psInstances || [];
-    window.psInstances.push(psSidebar, psContent);
 });
 
-// Cleanup on component unmount
 onUnmounted(() => {
-    // Destroy PerfectScrollbar instances
-    if (window.psInstances && window.psInstances.length) {
-        window.psInstances.forEach(ps => {
-            try {
-                ps.destroy();
-            } catch (e) {
-                console.error('Error destroying PerfectScrollbar:', e);
-            }
-        });
-        window.psInstances = [];
-    }
-
-    // Remove scroll event listener
-    window.removeEventListener('scroll', onScroll);
+    // Cleanup IO
+    try { if (infiniteObserver) { infiniteObserver.disconnect(); infiniteObserver = null; } } catch (_) { }
+    // Cleanup scroll fallback
+    cleanup();
 });
 
 watch([search, globalSearch, brandFilter, articleFilter, performerFilter, createdFilter, createdDate], () => {
@@ -231,8 +264,11 @@ async function submitBulkAssign() {
             ids.forEach(id => {
                 const taskIndex = items.value.findIndex(t => t.id === id);
                 if (taskIndex !== -1) {
-                    items.value[taskIndex].assignee_id = uid;
-                    items.value[taskIndex].assignee = performer || null;
+                    items.value.splice(taskIndex, 1, {
+                        ...items.value[taskIndex],
+                        assignee_id: uid,
+                        assignee: performer || null
+                    });
                 }
             });
 
@@ -578,8 +614,26 @@ function closeAssign() {
 }
 async function submitAssign() {
     if (!assigningTask.value) return;
-    const payload = { assignee_id: assignUserId.value ? Number(assignUserId.value) : null, status: assignUserId.value ? 'assigned' : 'created' };
-    await router.put(route('brands.tasks.update', { brand: assigningTask.value.brand_id, task: assigningTask.value.id }), payload, { preserveScroll: true });
+    const uid = assignUserId.value ? Number(assignUserId.value) : null;
+    const payload = { assignee_id: uid, status: uid ? 'assigned' : 'created' };
+    await router.put(route('brands.tasks.update', { brand: assigningTask.value.brand_id, task: assigningTask.value.id }), payload, {
+        preserveScroll: true,
+        onSuccess: () => {
+            const taskId = assigningTask.value.id;
+            const taskIndex = items.value.findIndex(t => t.id === taskId);
+            if (taskIndex !== -1) {
+                const performer = props.performers.find(p => p.id === uid) || null;
+                items.value.splice(taskIndex, 1, {
+                    ...items.value[taskIndex],
+                    assignee_id: uid,
+                    assignee: uid ? performer : null,
+                    status: payload.status
+                });
+            }
+            // Ensure server-side filters and pagination are reflected
+            fetchPage(true);
+        }
+    });
     closeAssign();
 }
 
@@ -776,8 +830,24 @@ async function submitEdit() {
         assignee_id: editForm.value.assignee_id ? Number(editForm.value.assignee_id) : null,
     };
     if (!payload.brand_id || !payload.task_type_id || !payload.article_id) return;
-    router.put(route('brands.tasks.update', { brand: editingTask.value.brand_id, task: editingTask.value.id }), payload, { preserveScroll: true });
-    closeEdit();
+    router.put(route('brands.tasks.update', { brand: editingTask.value.brand_id, task: editingTask.value.id }), payload, {
+        preserveScroll: true,
+        onSuccess: () => {
+            // Update local state
+            const taskIndex = items.value.findIndex(t => t.id === editingTask.value.id);
+            if (taskIndex !== -1) {
+                const performer = payload.assignee_id ? props.performers.find(p => p.id === payload.assignee_id) : null;
+                items.value.splice(taskIndex, 1, {
+                    ...items.value[taskIndex],
+                    assignee_id: payload.assignee_id || null,
+                    assignee: performer
+                });
+            }
+            // Reload list to reflect backend state and filters
+            fetchPage(true);
+            closeEdit();
+        }
+    });
 }
 
 function onEditArticleSearchInput() {
@@ -1381,316 +1451,339 @@ async function deleteSourceComment(c) {
 <template>
     <DashByteLayout>
 
+        <div class="row">
+            <div class="col-2">
+                <div class="card">
+                    <div class="card-body" id="sidebar">
+                        <h4 class="subheader">Статусы</h4>
+                        <ul class="nav nav-pills flex-column mb-4">
+                            <li class="nav-item">
+                                <a href="#" class="nav-link" :class="{ 'active': statusFilter === '' }"
+                                    @click.prevent="statusFilter = ''">
+                                    Все статусы
+                                </a>
+                            </li>
+                            <li v-for="status in statusOptions" :key="status.value" class="nav-item">
+                                <a href="#" class="nav-link" :class="{ 'active': statusFilter === status.value }"
+                                    @click.prevent="statusFilter = status.value">
+                                    {{ status.label }}
+                                </a>
+                            </li>
+                        </ul>
 
-
-        <div id="fileSidebar" class="file-sidebar">
-            <label class="sidebar-label mb-2">Статусы</label>
-            <nav class="nav nav-sidebar mb-4">
-                <a href="#" class="nav-link" :class="{ 'active': statusFilter === '' }"
-                    @click.prevent="statusFilter = ''">
-                    Все статусы
-                </a>
-                <a v-for="status in statusOptions" :key="status.value" href="#" class="nav-link"
-                    :class="{ 'active': statusFilter === status.value }" @click.prevent="statusFilter = status.value">
-                    {{ status.label }}
-                </a>
-            </nav>
-
-            <label class="sidebar-label mb-2">Приоритеты</label>
-            <nav class="nav nav-sidebar mb-4">
-                <a href="#" class="nav-link" :class="{ 'active': priorityFilter === '' }"
-                    @click.prevent="priorityFilter = ''">
-                    Все приоритеты
-                </a>
-                <a v-for="priority in priorityOptions" :key="priority.value" href="#" class="nav-link"
-                    :class="{ 'active': priorityFilter === priority.value }"
-                    @click.prevent="priorityFilter = priority.value">
-                    {{ priority.label }}
-                </a>
-            </nav>
-
-
-        </div><!-- file-sidebar -->
-        <div id="fileContent" class="file-content p-3 p-lg-4">
-
-            <div class="d-md-flex align-items-center justify-content-between mb-4">
-                <div>
-                    <ol class="breadcrumb fs-sm mb-1">
-                        <li class="breadcrumb-item">Просмотр и управление всеми задачами</li>
-                    </ol>
-                    <h4 class="main-title mb-0">Список задач</h4>
-                </div>
-                <div class="d-flex gap-2 mt-3 mt-md-0">
-                    <!-- Global search -->
-                    <div class="input-group input-group-flat w-auto me-2">
-                        <span class="input-group-text"><i class="ti ti-search"></i></span>
-                        <input type="text" class="form-control form-control-sm" v-model="globalSearch"
-                            placeholder="Общий поиск..." autocomplete="off" />
+                        <h4 class="subheader">Приоритеты</h4>
+                        <ul class="nav nav-pills flex-column mb-4">
+                            <li class="nav-item">
+                                <a href="#" class="nav-link" :class="{ 'active': priorityFilter === '' }"
+                                    @click.prevent="priorityFilter = ''">
+                                    Все приоритеты
+                                </a>
+                            </li>
+                            <li v-for="priority in priorityOptions" :key="priority.value" class="nav-item">
+                                <a href="#" class="nav-link" :class="{ 'active': priorityFilter === priority.value }"
+                                    @click.prevent="priorityFilter = priority.value">
+                                    {{ priority.label }}
+                                </a>
+                            </li>
+                        </ul>
                     </div>
-                    <!-- Name search -->
-                    <div class="input-group input-group-flat w-auto me-2">
-                        <span class="input-group-text"><i class="ti ti-letter-case"></i></span>
-                        <input type="text" class="form-control form-control-sm" v-model="search"
-                            placeholder="Название..." autocomplete="off" />
-                    </div>
-                    <!-- Brand filter -->
-                    <select class="form-select form-select-sm w-auto me-2" v-model="brandFilter">
-                        <option value="">Все бренды</option>
-                        <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.name }}</option>
-                    </select>
-                    <!-- Article filter (dependent on brand) -->
-                    <select class="form-select form-select-sm w-auto me-2" v-model="articleFilter"
-                        :disabled="!brandFilter" style="display:none;">
-                        <option value="">Все артикулы</option>
-                        <option v-for="a in filterArticles" :key="a.id" :value="a.id">{{ a.name }}</option>
-                    </select>
-                    <!-- Executor filter -->
-                    <select class="form-select form-select-sm w-auto me-2" v-model="performerFilter">
-                        <option value="">Все исполнители</option>
-                        <option v-for="u in performers" :key="u.id" :value="u.id">{{ u.name }}</option>
-                    </select>
-                    <!-- Created date filter -->
-                    <select class="form-select form-select-sm w-auto me-2" v-model="createdFilter">
-                        <option value="">Все даты</option>
-                        <option value="today">Сегодня</option>
-                        <option value="yesterday">Вчера</option>
-                        <option value="date">Дата…</option>
-                    </select>
-                    <input v-if="createdFilter === 'date'" type="date" class="form-control w-auto me-2"
-                        v-model="createdDate" />
-
-                    <!-- Action buttons -->
-                    <button class="btn btn-sm btn-secondary me-2" @click="resetFilters">
-                        <i class="ti ti-filter-off me-1"></i> СБРОСИТЬ ФИЛЬТРЫ
-                    </button>
-                    <button class="btn btn-sm btn-primary" @click="openCreate" style="display:none;">
-                        <i class="ti ti-plus me-1"></i> НОВАЯ ЗАДАЧА
-                    </button>
                 </div>
+
             </div>
+            <div class="col-10">
 
-            <div class="card mb-2" v-if="anySelected">
-                <div class="card-header">
-                    <!-- Bulk actions toolbar -->
-                    <div class="row">
-                        <div class="col-12 d-flex align-items-center flex-wrap gap-2">
-                            <div class="me-3">
-                                <i class="ti ti-selector me-1"></i> Выбрано: {{ selectedIds.length }}
-                            </div>
+                <div class="d-md-flex align-items-center justify-content-between mb-4">
+                    <div>
+                        <ol class="breadcrumb fs-sm mb-1">
+                            <li class="breadcrumb-item">Просмотр и управление всеми задачами</li>
+                        </ol>
+                        <h4 class="main-title mb-0">Список задач</h4>
+                    </div>
+                    <div class="d-flex gap-2 mt-3 mt-md-0">
+                        <!-- Global search -->
+                        <div class="input-group input-group-flat w-auto me-2">
+                            <span class="input-group-text"><i class="ti ti-search"></i></span>
+                            <input type="text" class="form-control form-control-sm" v-model="globalSearch"
+                                placeholder="Общий поиск..." autocomplete="off" />
+                        </div>
+                        <!-- Name search -->
+                        <div class="input-group input-group-flat w-auto me-2">
+                            <span class="input-group-text"><i class="ti ti-letter-case"></i></span>
+                            <input type="text" class="form-control form-control-sm" v-model="search"
+                                placeholder="Название..." autocomplete="off" />
+                        </div>
+                        <!-- Brand filter -->
+                        <select class="form-select form-select-sm w-auto me-2" v-model="brandFilter">
+                            <option value="">Все бренды</option>
+                            <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.name }}</option>
+                        </select>
+                        <!-- Article filter (dependent on brand) -->
+                        <select class="form-select form-select-sm w-auto me-2" v-model="articleFilter"
+                            :disabled="!brandFilter" style="display:none;">
+                            <option value="">Все артикулы</option>
+                            <option v-for="a in filterArticles" :key="a.id" :value="a.id">{{ a.name }}</option>
+                        </select>
+                        <!-- Executor filter -->
+                        <select class="form-select form-select-sm w-auto me-2" v-model="performerFilter">
+                            <option value="">Все исполнители</option>
+                            <option v-for="u in performers" :key="u.id" :value="u.id">{{ u.name }}</option>
+                        </select>
+                        <!-- Created date filter -->
+                        <select class="form-select form-select-sm w-auto me-2" v-model="createdFilter">
+                            <option value="">Все даты</option>
+                            <option value="today">Сегодня</option>
+                            <option value="yesterday">Вчера</option>
+                            <option value="date">Дата…</option>
+                        </select>
+                        <input v-if="createdFilter === 'date'" type="date" class="form-control w-auto me-2"
+                            v-model="createdDate" />
 
-                            <!-- Bulk assign performer -->
-                            <button class="btn btn-sm btn-outline-primary" @click="openBulkAssign">
-                                <i class="ti ti-user-plus me-1"></i> Добавить исполнителя
-                            </button>
+                        <!-- Action buttons -->
+                        <button class="btn btn-sm btn-secondary me-2" @click="resetFilters">
+                            <i class="ti ti-filter-off me-1"></i> СБРОСИТЬ ФИЛЬТРЫ
+                        </button>
+                        <button class="btn btn-sm btn-primary" @click="openCreate" style="display:none;">
+                            <i class="ti ti-plus me-1"></i> НОВАЯ ЗАДАЧА
+                        </button>
+                    </div>
+                </div>
 
-                            <!-- Bulk status change -->
-                            <div class="d-flex align-items-center gap-1">
-                                <span class="text-secondary small">Статус:</span>
-                                <select class="form-select form-select-sm w-auto"
-                                    @change="(e) => bulkUpdateStatus(e.target.value)">
-                                    <option value="" selected disabled>Выбрать…</option>
-                                    <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}
-                                    </option>
-                                </select>
-                            </div>
+                <div class="card mb-2" v-if="anySelected">
+                    <div class="card-header">
+                        <!-- Bulk actions toolbar -->
+                        <div class="row">
+                            <div class="col-12 d-flex align-items-center flex-wrap gap-2">
+                                <div class="me-3">
+                                    <i class="ti ti-selector me-1"></i> Выбрано: {{ selectedIds.length }}
+                                </div>
 
-                            <!-- Bulk priority change -->
-                            <div class="d-flex align-items-center gap-1">
-                                <span class="text-secondary small">Приоритет:</span>
-                                <select class="form-select form-select-sm w-auto"
-                                    @change="(e) => bulkUpdatePriority(e.target.value)">
-                                    <option value="" selected disabled>Выбрать…</option>
-                                    <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{ p.label
+                                <!-- Bulk assign performer -->
+                                <button class="btn btn-sm btn-outline-primary" @click="openBulkAssign">
+                                    <i class="ti ti-user-plus me-1"></i> Добавить исполнителя
+                                </button>
+
+                                <!-- Bulk status change -->
+                                <div class="d-flex align-items-center gap-1">
+                                    <span class="text-secondary small">Статус:</span>
+                                    <select class="form-select form-select-sm w-auto"
+                                        @change="(e) => bulkUpdateStatus(e.target.value)">
+                                        <option value="" selected disabled>Выбрать…</option>
+                                        <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}
+                                        </option>
+                                    </select>
+                                </div>
+
+                                <!-- Bulk priority change -->
+                                <div class="d-flex align-items-center gap-1">
+                                    <span class="text-secondary small">Приоритет:</span>
+                                    <select class="form-select form-select-sm w-auto"
+                                        @change="(e) => bulkUpdatePriority(e.target.value)">
+                                        <option value="" selected disabled>Выбрать…</option>
+                                        <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{ p.label
                                         }}</option>
-                                </select>
-                            </div>
+                                    </select>
+                                </div>
 
-                            <div class="ms-auto">
-                                <button class="btn btn-sm btn-outline-secondary me-2" @click="clearSelection">
-                                    <i class="ti ti-x me-1"></i> Снять выделение
-                                </button>
-                                <button class="btn btn-sm btn-outline-danger" @click="openBulkDelete">
-                                    <i class="ti ti-trash me-1"></i> Удалить
-                                </button>
+                                <div class="ms-auto">
+                                    <button class="btn btn-sm btn-outline-secondary me-2" @click="clearSelection">
+                                        <i class="ti ti-x me-1"></i> Снять выделение
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" @click="openBulkDelete">
+                                        <i class="ti ti-trash me-1"></i> Удалить
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="table-responsive">
-                <table class="table table-sm">
-                    <thead>
-                        <tr>
-                            <th class="w-1"><input type="checkbox" class="form-check-input"
-                                    v-model="selectAllVisible" />
-                            </th>
-                            <th class="text-start">Создан</th>
-                            <th class="text-start">Наименование задачи</th>
-                            <th class="text-start">Бренд, Артикул</th>
-                            <th class="text-start">Тип</th>
-                            <th class="text-center">Исполнитель</th>
-                            <th class="text-center">Исходник</th>
-                            <th class="text-center">Результат</th>
-                            <th class="text-start">Статус</th>
-                            <th class="text-start">Приоритет</th>
-                            <th class="text-end"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-if="displayedTasks.length === 0">
-                            <td colspan="12" class="text-center text-secondary py-4">Нет задач</td>
-                        </tr>
-                        <tr v-for="t in displayedTasks" :key="t.id" style="font-size: 13px !important">
-                            <td style="vertical-align: middle;">
-                                <input type="checkbox" class="form-check-input" :checked="isSelected(t.id)"
-                                    @change="toggleRow(t.id)" />
-                            </td>
-                            <td style="vertical-align: middle;">{{ new Date(t.created_at).toLocaleString('ru-RU') }}
-                            </td>
-                            <td class="text-start" style="vertical-align: middle;">{{ t.name || t.article?.name || '' }}
-                            </td>
-                            <td class="text-truncate" style="vertical-align: middle;">
-                                {{t.brand?.name || (brands.find(b => b.id === t.brand_id)?.name)}}<br />{{
-                                    t.article?.name || '' }}</td>
-                            <td style="vertical-align: middle;">{{ t.type?.name || '' }}</td>
-                            <td class="text-center" style="vertical-align: middle;">
-                                <div class="d-flex justify-content-center gap-2">
-                                    <span v-if="t.assignee?.name" class="text-secondary">{{ t.assignee.name }}</span>
-                                    <button class="btn btn-sm btn-outline-primary" @click="openAssign(t)">
-                                        {{ t.assignee?.name ? 'Изменить' : 'Назначить' }}
-                                    </button>
-                                </div>
-                            </td>
-                            <td class="text-center" style="vertical-align: middle;">
-                                <div class="d-flex gap-1">
-                                    <button class="btn btn-icon btn-ghost-secondary"
-                                        @click="openSourceCommentsOffcanvas(t)"><svg xmlns="http://www.w3.org/2000/svg"
-                                            width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                                            class="icon icon-tabler icons-tabler-outline icon-tabler-message">
-                                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                            <path d="M8 9h8" />
-                                            <path d="M8 13h6" />
-                                            <path
-                                                d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z" />
-                                        </svg></button>
-                                    <!-- <button class="btn btn-sm btn-outline-primary" @click="openFolder(t)">ФАЙЛЫ (скрыто)</button> -->
-                                </div>
-                            </td>
-                            <td>
-                                <div class="d-flex gap-1">
-                                    <button class="btn btn-icon btn-ghost-secondary"
-                                        @click="openCommentsOffcanvas(t)"><svg xmlns="http://www.w3.org/2000/svg"
-                                            width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                                            class="icon icon-tabler icons-tabler-outline icon-tabler-message">
-                                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                            <path d="M8 9h8" />
-                                            <path d="M8 13h6" />
-                                            <path
-                                                d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z" />
-                                        </svg></button>
-                                    <button class="btn btn-icon btn-ghost-primary" @click="openFilesOffcanvas(t)"><svg
-                                            xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                            stroke-linecap="round" stroke-linejoin="round"
-                                            class="icon icon-tabler icons-tabler-outline icon-tabler-files">
-                                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                            <path d="M15 3v4a1 1 0 0 0 1 1h4" />
-                                            <path
-                                                d="M18 17h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h4l5 5v7a2 2 0 0 1 -2 2z" />
-                                            <path d="M16 17v2a2 2 0 0 1 -2 2h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h2" />
-                                        </svg></button>
-                                </div>
-                            </td>
-                            <td style="vertical-align: middle;">
-                                <div class="d-flex align-items-center gap-2">
-                                    <select class="form-select form-select-sm w-auto" :value="t.status"
-                                        @change="(e) => updateTaskStatus(t, e.target.value)">
-                                        <option v-for="s in statusOptions" :key="s.value" :value="s.value">
-                                            {{ s.label }}</option>
-                                    </select>
-                                </div>
-                            </td>
-                            <td style="vertical-align: middle;">
-                                <div class="d-flex align-items-center gap-2">
-                                    <select class="form-select form-select-sm w-auto" :value="t.priority || 'medium'"
-                                        @change="(e) => updateTaskPriority(t, e.target.value)">
-                                        <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{
-                                            p.label }}</option>
-                                    </select>
-                                </div>
-                            </td>
-                            <td class="text-end">
-                                <div class="d-flex gap-1 justify-content-end">
-                                    <!-- Copy Link Button -->
-                                    <button class="btn btn-icon btn-ghost-primary btn-sm" @click="copyTaskPublicLink(t)"
-                                        v-tooltip="'Копировать ссылку'" type="button">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                            stroke-linecap="round" stroke-linejoin="round"
-                                            class="icon icon-tabler icons-tabler-outline icon-tabler-copy">
-                                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                            <path
-                                                d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
-                                            <path
-                                                d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
-                                        </svg>
-                                    </button>
+                <div class="table-wrapper" style="position: relative; height: calc(100vh - 200px);">
+                    <!-- Header -->
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th class="text-center"><input type="checkbox" class="form-check-input"
+                                        v-model="selectAllVisible" /></th>
+                                <th>Создан</th>
+                                <th>Наимен. задачи</th>
+                                <th>Бренд, Артикул</th>
+                                <th>Тип</th>
+                                <th>Исполнитель</th>
+                                <th>Исходник</th>
+                                <th>Результат</th>
+                                <th>Статус</th>
+                                <th>Приоритет</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-if="displayedTasks.length === 0">
+                                <td colspan="12" class="text-center text-secondary py-4">Нет задач</td>
+                            </tr>
+                            <tr v-for="t in displayedTasks" :key="t.id" style="font-size: 13px !important;">
+                                <td class="text-center" style="vertical-align: middle;">
+                                    <input type="checkbox" class="form-check-input" :checked="isSelected(t.id)"
+                                        @change="toggleRow(t.id)" />
+                                </td>
+                                <td class="text-start" style="vertical-align: middle;">{{ new
+                                    Date(t.created_at).toLocaleString('ru-RU') }}
+                                </td>
+                                <td style="vertical-align: middle;">{{ t.name || t.article?.name || ''
+                                    }}</td>
+                                <td style="vertical-align: middle;">
+                                    {{t.brand?.name || (brands.find(b => b.id ===
+                                        t.brand_id)?.name)}}<br />{{ t.article?.name || '' }}</td>
+                                <td style="vertical-align: middle;">{{ t.type?.name || '' }}</td>
+                                <td style="vertical-align: middle;">
+                                    <div class="d-flex justify-content-center gap-2">
+                                        <span v-if="t.assignee?.name" class="text-secondary">{{ t.assignee.name
+                                            }}</span>
+                                        <button class="btn btn-sm btn-outline-primary" @click="openAssign(t)">
+                                            {{ t.assignee?.name ? 'Изменить' : 'Назначить' }}
+                                        </button>
+                                    </div>
+                                </td>
+                                <td style="vertical-align: middle;">
+                                    <div class="d-flex gap-1">
+                                        <button class="btn btn-icon btn-ghost-secondary"
+                                            @click="openSourceCommentsOffcanvas(t)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                                stroke-linecap="round" stroke-linejoin="round"
+                                                class="icon icon-tabler icons-tabler-outline icon-tabler-message">
+                                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                                <path d="M8 9h8" />
+                                                <path d="M8 13h6" />
+                                                <path
+                                                    d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
+                                <td style="vertical-align: middle;">
+                                    <div class="d-flex gap-1">
+                                        <button class="btn btn-icon btn-ghost-secondary"
+                                            @click="openCommentsOffcanvas(t)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                                stroke-linecap="round" stroke-linejoin="round"
+                                                class="icon icon-tabler icons-tabler-outline icon-tabler-message">
+                                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                                <path d="M8 9h8" />
+                                                <path d="M8 13h6" />
+                                                <path
+                                                    d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z" />
+                                            </svg>
+                                        </button>
+                                        <button class="btn btn-icon btn-ghost-primary" @click="openFilesOffcanvas(t)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                                stroke-linecap="round" stroke-linejoin="round"
+                                                class="icon icon-tabler icons-tabler-outline icon-tabler-files">
+                                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                                <path d="M15 3v4a1 1 0 0 0 1 1h4" />
+                                                <path
+                                                    d="M18 17h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h4l5 5v7a2 2 0 0 1 -2 2z" />
+                                                <path
+                                                    d="M16 17v2a2 2 0 0 1 -2 2h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h2" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
+                                <td style="vertical-align: middle;">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <select class="form-select form-select-sm w-auto" :value="t.status"
+                                            @change="(e) => updateTaskStatus(t, e.target.value)">
+                                            <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{
+                                                s.label }}</option>
+                                        </select>
+                                    </div>
+                                </td>
+                                <td style="vertical-align: middle;">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <select class="form-select form-select-sm w-auto"
+                                            :value="t.priority || 'medium'"
+                                            @change="(e) => updateTaskPriority(t, e.target.value)">
+                                            <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{
+                                                p.label }}</option>
+                                        </select>
+                                    </div>
+                                </td>
+                                <td style="vertical-align: middle;">
+                                    <div class="d-flex gap-1 justify-content-end">
+                                        <button class="btn btn-icon btn-ghost-primary" @click="copyTaskPublicLink(t)"
+                                            v-tooltip="'Копировать ссылку'" type="button">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                                stroke-linecap="round" stroke-linejoin="round"
+                                                class="icon icon-tabler icons-tabler-outline icon-tabler-copy">
+                                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                                <path
+                                                    d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
+                                                <path
+                                                    d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
+                                            </svg>
+                                        </button>
+                                        <button class="btn btn-icon btn-ghost-primary" @click="openTaskPublicLink(t)"
+                                            v-tooltip="'Открыть ссылку'" type="button">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                                stroke-linecap="round" stroke-linejoin="round"
+                                                class="icon icon-tabler icons-tabler-outline icon-tabler-link">
+                                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                                <path d="M9 15l6 -6" />
+                                                <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />
+                                                <path
+                                                    d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463" />
+                                            </svg>
+                                        </button>
+                                        <button class="btn btn-icon btn-ghost-primary" @click="onEditTask(t)"
+                                            v-tooltip="'Редактировать'" type="button">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                                stroke-linecap="round" stroke-linejoin="round"
+                                                class="icon icon-tabler icons-tabler-outline icon-tabler-edit">
+                                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                                <path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" />
+                                                <path
+                                                    d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" />
+                                                <path d="M16 5l3 3" />
+                                            </svg>
+                                        </button>
+                                        <button class="btn btn-icon btn-ghost-danger" @click="onDeleteTask(t)"
+                                            v-tooltip="'Удалить'" type="button">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                                stroke-linecap="round" stroke-linejoin="round"
+                                                class="icon icon-tabler icons-tabler-outline icon-tabler-trash">
+                                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                                <path d="M4 7l16 0" />
+                                                <path d="M10 11l0 6" />
+                                                <path d="M14 11l0 6" />
+                                                <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" />
+                                                <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <!-- Loading indicator -->
+                            <tr v-if="loading && displayedTasks.length">
+                                <td colspan="12" class="text-center py-2 text-secondary">
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                    Загрузка...
+                                </td>
+                            </tr>
+                            <!-- Sentinel -->
+                            <tr ref="infiniteSentinelEl" style="height: 1px; visibility: hidden;"></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div><!-- table-wrapper -->
 
-                                    <!-- Open Link Button -->
-                                    <button class="btn btn-icon btn-ghost-primary btn-sm" @click="openTaskPublicLink(t)"
-                                        v-tooltip="'Открыть ссылку'" type="button">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                            stroke-linecap="round" stroke-linejoin="round"
-                                            class="icon icon-tabler icons-tabler-outline icon-tabler-link">
-                                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                            <path d="M9 15l6 -6" />
-                                            <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />
-                                            <path
-                                                d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463" />
-                                        </svg>
-                                    </button>
+        </div>
 
-                                    <!-- Edit Button -->
-                                    <button class="btn btn-icon btn-ghost-primary btn-sm" @click="onEditTask(t)"
-                                        v-tooltip="'Редактировать'" type="button">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                            stroke-linecap="round" stroke-linejoin="round"
-                                            class="icon icon-tabler icons-tabler-outline icon-tabler-edit">
-                                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                            <path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" />
-                                            <path
-                                                d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" />
-                                            <path d="M16 5l3 3" />
-                                        </svg>
-                                    </button>
 
-                                    <!-- Delete Button -->
-                                    <button class="btn btn-icon btn-ghost-danger btn-sm" @click="onDeleteTask(t)"
-                                        v-tooltip="'Удалить'" type="button">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                            stroke-linecap="round" stroke-linejoin="round"
-                                            class="icon icon-tabler icons-tabler-outline icon-tabler-trash">
-                                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                            <path d="M4 7l16 0" />
-                                            <path d="M10 11l0 6" />
-                                            <path d="M14 11l0 6" />
-                                            <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" />
-                                            <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div><!-- table-responsive -->
-        </div><!-- file-content -->
 
         <!-- Delete Task Modal -->
         <teleport to="body">
