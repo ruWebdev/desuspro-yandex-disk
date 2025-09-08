@@ -1,5 +1,17 @@
+<script>
+
+// Импорт разметки для проекта
+import MainLayout from '@/Layouts/MainLayout.vue';
+import axios from 'axios';
+
+export default {
+    layout: MainLayout
+};
+
+</script>
+
 <script setup>
-import DashByteLayout from '@/Layouts/DashByteLayout.vue';
+import ContentLayout from '@/Layouts/ContentLayout.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref, computed, onMounted, onUnmounted, watch, nextTick, inject } from 'vue';
 import { Offcanvas } from 'bootstrap';
@@ -836,163 +848,74 @@ function formatManagerName(manager) {
 </script>
 
 <template>
-    <DashByteLayout>
+    <ContentLayout>
 
-        <template #header>
-            <header class="navbar-expand-md">
-                <div class="collapse navbar-collapse" id="navbar-menu">
-                    <div class="navbar">
-                        <div class="container-xl">
-                            <div class="d-md-flex align-items-center justify-content-between">
-                                <div class="d-flex gap-2 mt-3 mt-md-0">
-                                    <!-- Global search -->
-                                    <div class="input-group input-group-flat w-auto me-2">
-                                        <span class="input-group-text">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                                                stroke-linecap="round" stroke-linejoin="round" class="icon icon-1">
-                                                <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
-                                                <path d="M21 21l-6 -6" />
-                                            </svg>
-                                        </span>
-                                        <input v-model="search" type="text" class="form-control"
-                                            placeholder="Поиск..." />
-                                    </div>
-                                    <select v-model="statusFilter" class="form-select w-auto me-2"
-                                        style="display:none;">
-                                        <option value="all">Все статусы</option>
-                                        <option value="assigned">Назначено</option>
-                                        <option value="on_review">На проверке</option>
-                                        <option value="rework">На доработку</option>
-                                        <option value="accepted">Принято</option>
-                                    </select>
-
-                                    <select v-model="brandFilter" class="form-select w-auto me-2">
-                                        <option value="">Все бренды</option>
-                                        <option v-for="b in availableBrands" :key="b.id" :value="b.id">{{ b.name }}
-                                        </option>
-                                    </select>
-                                    <div class="input-group input-group-flat w-auto me-2">
-                                        <span class="input-group-text">Артикул</span>
-                                        <input v-model="articleFilter" type="text" class="form-control"
-                                            placeholder="Поиск по артикулу" />
-                                    </div>
-
-                                    <div class="d-flex align-items-center gap-2 flex-wrap">
-                                        <select v-model="createdFilter" class="form-select w-auto">
-                                            <option value="">Любая дата</option>
-                                            <option value="today">Сегодня</option>
-                                            <option value="yesterday">Вчера</option>
-                                            <option value="date">Дата…</option>
-                                        </select>
-                                        <input v-if="createdFilter === 'date'" v-model="createdDate" type="date"
-                                            class="form-control form-control-sm w-auto" />
-                                        <button class="btn btn-outline-secondary" @click="resetFilters"
-                                            :disabled="loading">Сбросить
-                                            фильтры</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+        <template #TopButtons>
+            <div class="d-flex w-100">
+                <div class="p-1 flex-fill">
+                    <input type="text" class="form-control" v-model="globalSearch" placeholder="Общий поиск..."
+                        autocomplete="off" />
                 </div>
-            </header>
+                <div class="p-1 flex-fill">
+                    <input type="text" class="form-control" v-model="search" placeholder="Название..."
+                        autocomplete="off" />
+                </div>
+                <div class="p-1 flex-fill">
+                    <!-- Brand filter -->
+                    <select class="form-select" v-model="brandFilter">
+                        <option value="">Все бренды</option>
+                        <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.name }}</option>
+                    </select>
+                </div>
+                <div class="p-1 flex-fill">
+                    <!-- Status filter -->
+                    <select class="form-select" v-model="statusFilter">
+                        <option value="">Все статусы</option>
+                        <option v-for="status in statusOptions" :key="status.value" :value="status.value">
+                            {{ status.label }}
+                        </option>
+                    </select>
+                </div>
+                <div class="p-1 flex-fill">
+                    <!-- Priority filter -->
+                    <select class="form-select" v-model="priorityFilter">
+                        <option value="">Все приоритеты</option>
+                        <option value="low">Низкий</option>
+                        <option value="medium">Средний</option>
+                        <option value="high">Срочный</option>
+                    </select>
+                </div>
+                <div class="p-1 flex-fill" style="display:none;">
+                    <!-- Article filter (dependent on brand) -->
+                    <select class="form-select" v-model="articleFilter" :disabled="!brandFilter">
+                        <option value="">Все артикулы</option>
+                        <option v-for="a in filterArticles" :key="a.id" :value="a.id">{{ a.name }}
+                        </option>
+                    </select>
+                </div>
+                <div class="p-1 flex-fill">
+                    <!-- Created date filter -->
+                    <select class="form-select" v-model="createdFilter">
+                        <option value="">Все даты</option>
+                        <option value="today">Сегодня</option>
+                        <option value="yesterday">Вчера</option>
+                        <option value="date">Дата…</option>
+                    </select>
+                </div>
+                <div class="p-1 flex-fill" v-if="createdFilter === 'date'">
+                    <input type="date" class="form-control" v-model="createdDate" />
+                </div>
+                <div class="p-1 flex-fill">
+                    <!-- Action buttons -->
+                    <button class="btn btn-secondary w-100" @click="resetFilters">
+                        СБРОСИТЬ ФИЛЬТРЫ
+                    </button>
+                </div>
+            </div>
         </template>
 
         <div class="row">
-            <div class="col-2">
-                <div class="card">
-                    <div class="card-body" id="sidebar">
-                        <h4 class="subheader">Статусы</h4>
-                        <ul class="nav nav-pills flex-column mb-4">
-                            <li class="nav-item">
-                                <a href="#" class="nav-link" :class="{ 'active': statusFilter === '' }"
-                                    @click.prevent="statusFilter = ''">
-                                    Все статусы
-                                </a>
-                            </li>
-                            <li v-for="status in statusOptions" :key="status.value" class="nav-item">
-                                <a href="#" class="nav-link" :class="{ 'active': statusFilter === status.value }"
-                                    @click.prevent="statusFilter = status.value">
-                                    {{ status.label }}
-                                </a>
-                            </li>
-                        </ul>
-
-                        <h4 class="subheader">Приоритеты</h4>
-                        <ul class="nav nav-pills flex-column mb-4">
-                            <li class="nav-item">
-                                <a href="#" class="nav-link" :class="{ 'active': priorityFilter === '' }"
-                                    @click.prevent="priorityFilter = ''">
-                                    Все приоритеты
-                                </a>
-                            </li>
-                            <li v-for="priority in priorityOptions" :key="priority.value" class="nav-item">
-                                <a href="#" class="nav-link" :class="{ 'active': priorityFilter === priority.value }"
-                                    @click.prevent="priorityFilter = priority.value">
-                                    {{ priority.label }}
-                                </a>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-            <div class="col-10">
-
-                <div class="d-md-flex align-items-center justify-content-between mb-4">
-                    <div>
-                        <ol class="breadcrumb fs-sm mb-1">
-                            <li class="breadcrumb-item">Список задач, назначенных вам</li>
-                        </ol>
-                        <h4 class="main-title mb-0">Назначенные мне задачи</h4>
-                    </div>
-                    <div class="d-flex gap-2 mt-3 mt-md-0 flex-wrap">
-                        <div class="input-group input-group-flat w-auto me-2">
-                            <span class="input-group-text">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round" class="icon icon-1">
-                                    <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
-                                    <path d="M21 21l-6 -6" />
-                                </svg>
-                            </span>
-                            <input v-model="search" type="text" class="form-control form-control-sm"
-                                placeholder="Поиск..." />
-                        </div>
-                        <select v-model="statusFilter" class="form-select form-select-sm w-auto me-2"
-                            style="display:none;">
-                            <option value="all">Все статусы</option>
-                            <option value="assigned">Назначено</option>
-                            <option value="on_review">На проверке</option>
-                            <option value="rework">На доработку</option>
-                            <option value="accepted">Принято</option>
-                        </select>
-
-                        <select v-model="brandFilter" class="form-select form-select-sm w-auto me-2">
-                            <option value="">Все бренды</option>
-                            <option v-for="b in availableBrands" :key="b.id" :value="b.id">{{ b.name }}</option>
-                        </select>
-                        <div class="input-group input-group-flat w-auto me-2">
-                            <span class="input-group-text">Артикул</span>
-                            <input v-model="articleFilter" type="text" class="form-control form-control-sm"
-                                placeholder="Поиск по артикулу" />
-                        </div>
-
-                        <div class="d-flex align-items-center gap-2 flex-wrap">
-                            <select v-model="createdFilter" class="form-select form-select-sm w-auto">
-                                <option value="">Любая дата</option>
-                                <option value="today">Сегодня</option>
-                                <option value="yesterday">Вчера</option>
-                                <option value="date">Дата…</option>
-                            </select>
-                            <input v-if="createdFilter === 'date'" v-model="createdDate" type="date"
-                                class="form-control form-control-sm w-auto" />
-                            <button class="btn btn-sm btn-outline-secondary" @click="resetFilters"
-                                :disabled="loading">Сбросить
-                                фильтры</button>
-                        </div>
-                    </div>
-                </div>
+            <div class="col-12">
 
                 <div class="table-wrapper" style="position: relative; height: calc(100vh - 200px);">
                     <!-- Header -->
@@ -1328,7 +1251,7 @@ function formatManagerName(manager) {
                 </div>
             </div>
         </teleport>
-    </DashByteLayout>
+    </ContentLayout>
 </template>
 
 <style scoped>
