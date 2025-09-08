@@ -1795,7 +1795,7 @@ const copySourcePublicLink = async (task) => {
                                         @change="(e) => bulkUpdatePriority(e.target.value)">
                                         <option value="" selected disabled>Выбрать…</option>
                                         <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{ p.label
-                                        }}</option>
+                                            }}</option>
                                     </select>
                                 </div>
 
@@ -1851,7 +1851,7 @@ const copySourcePublicLink = async (task) => {
                                 <td style="vertical-align: middle;">{{ t.type?.name || '' }}</td>
                                 <td style="vertical-align: middle;" class="text-end">
                                     <span v-if="t.assignee?.name" class="text-secondary me-2">{{ t.assignee.name
-                                    }}</span>
+                                        }}</span>
                                     <button class="btn btn-sm btn-outline-primary" @click="openAssign(t)">
                                         {{ t.assignee?.name ? 'Изменить' : 'Назначить' }}
                                     </button>
@@ -2211,25 +2211,6 @@ const copySourcePublicLink = async (task) => {
                                         </option>
                                     </select>
                                 </div>
-                                <div class="col-12 mt-2">
-                                    <label class="form-label d-flex align-items-center justify-content-between">
-                                        <span>ФАЙЛ(ы)</span>
-                                        <div>
-                                            <button type="button" class="btn btn-sm btn-outline-primary"
-                                                @click="addEditSourceFileField">+
-                                            </button>
-                                        </div>
-                                    </label>
-                                    <div v-for="(f, idx) in editForm.source_files" :key="idx" class="input-group mb-2">
-                                        <input type="text" class="form-control" v-model="editForm.source_files[idx]"
-                                            placeholder="Укажите ссылку или название файла" />
-                                        <button type="button" class="btn btn-outline-danger"
-                                            @click="removeEditSourceFileField(idx)"
-                                            :disabled="editForm.source_files.length <= 1">-</button>
-                                    </div>
-                                    <div class="form-text">Добавляйте текстовые значения (например ссылки) для связанных
-                                        файлов.</div>
-                                </div>
                             </div>
                         </div>
                         <div class="modal-footer">
@@ -2409,8 +2390,8 @@ const copySourcePublicLink = async (task) => {
                                             placeholder="Новый комментарий…"></textarea>
                                     </div>
                                     <div class="mb-2">
-                                        <input type="file" ref="commentImageInput" accept="image/*" multiple class="form-control"
-                                            @change="onCommentImagesSelected" />
+                                        <input type="file" ref="commentImageInput" accept="image/*" multiple
+                                            class="form-control" @change="onCommentImagesSelected" />
                                         <small class="text-secondary">Максимальный размер: 5MB на файл</small>
                                     </div>
                                     <div class="d-flex justify-content-end">
@@ -2494,8 +2475,8 @@ const copySourcePublicLink = async (task) => {
                                             placeholder="Новый комментарий…"></textarea>
                                     </div>
                                     <div class="mb-2">
-                                        <input type="file" ref="commentImageInput" accept="image/*" multiple class="form-control"
-                                            @change="onCommentImagesSelected" />
+                                        <input type="file" ref="commentImageInput" accept="image/*" multiple
+                                            class="form-control" @change="onCommentImagesSelected" />
                                         <small class="text-secondary">Максимальный размер: 5MB на файл</small>
                                     </div>
                                     <div class="d-flex justify-content-end">
