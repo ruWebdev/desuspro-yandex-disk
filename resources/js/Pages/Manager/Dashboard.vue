@@ -114,39 +114,39 @@ function buildQueryParams(resetPage = false) {
 
 async function fetchPage(reset = false) {
     if (loading.value) return;
-    
+
     // Save scroll position before making changes
     saveScrollPosition();
-    
+
     loading.value = true;
     try {
-        if (reset) { 
-            page.value = 1; 
-            hasMore.value = true; 
-            items.value = []; 
+        if (reset) {
+            page.value = 1;
+            hasMore.value = true;
+            items.value = [];
         } else {
             // Only increment page if this is a subsequent load
             page.value++;
         }
-        
+
         const params = buildQueryParams();
         const url = route('tasks.search') + '?' + new URLSearchParams(params).toString();
-        const res = await fetch(url, { 
-            headers: { 
+        const res = await fetch(url, {
+            headers: {
                 'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest' 
+                'X-Requested-With': 'XMLHttpRequest'
             },
             credentials: 'same-origin'
         });
-        
+
         if (!res.ok) {
             const errorData = await res.json().catch(() => ({}));
             throw new Error(errorData.message || `HTTP ${res.status}`);
         }
-        
+
         const data = await res.json();
         const list = Array.isArray(data?.data) ? data.data : [];
-        
+
         // Update items in a way that preserves reactivity without full re-render
         if (reset) {
             items.value = list;
@@ -157,31 +157,31 @@ async function fetchPage(reset = false) {
                 items.value = [...items.value, ...newItems];
             }
         }
-        
+
         hasMore.value = Boolean(data?.next_page_url);
-        
+
         if (list.length < perPage.value) {
             hasMore.value = false;
         }
-        
+
         // Restore scroll position after DOM updates
         nextTick(() => {
             restoreScrollPosition();
         });
-        
-    } catch (e) { 
+
+    } catch (e) {
         console.error('Error fetching tasks:', e);
         if (typeof window.toastService?.error === 'function') {
             window.toastService.error('Ошибка загрузки задач: ' + (e.message || 'Неизвестная ошибка'));
         }
-        
+
         if (!reset) page.value--;
-        
+
         // Still try to restore scroll position on error
         nextTick(restoreScrollPosition);
-    } finally { 
-        loading.value = false; 
-        
+    } finally {
+        loading.value = false;
+
         if (hasMore.value) {
             // Small delay before next check to prevent rapid firing
             setTimeout(() => {
@@ -202,7 +202,7 @@ const isRestoringScroll = ref(false);
 // Save current scroll position
 const saveScrollPosition = () => {
     if (isRestoringScroll.value) return;
-    
+
     const containerEl = scrollContainer.value || document.documentElement;
     const isWindow = containerEl === window || containerEl === document.documentElement;
     scrollPosition.value = isWindow ? window.scrollY : containerEl.scrollTop;
@@ -211,19 +211,19 @@ const saveScrollPosition = () => {
 // Restore scroll position
 const restoreScrollPosition = () => {
     if (!scrollPosition.value || isRestoringScroll.value) return;
-    
+
     isRestoringScroll.value = true;
-    
+
     nextTick(() => {
         const containerEl = scrollContainer.value || document.documentElement;
         const isWindow = containerEl === window || containerEl === document.documentElement;
-        
+
         if (isWindow) {
             window.scrollTo(0, scrollPosition.value);
         } else {
             containerEl.scrollTop = scrollPosition.value;
         }
-        
+
         // Reset the flag after a short delay
         setTimeout(() => {
             isRestoringScroll.value = false;
@@ -240,7 +240,7 @@ const checkScroll = () => {
     const scrollTop = isWindow ? window.scrollY : containerEl.scrollTop;
     const clientHeight = isWindow ? window.innerHeight : containerEl.clientHeight;
     const scrollHeight = isWindow ? document.documentElement.scrollHeight : containerEl.scrollHeight;
-    
+
     // Load more when within 500px of bottom
     if (scrollTop + clientHeight >= scrollHeight - 500) {
         saveScrollPosition();
@@ -252,9 +252,9 @@ const checkScroll = () => {
 let scrollTimeout = null;
 const handleScroll = () => {
     if (isRestoringScroll.value) return;
-    
+
     saveScrollPosition();
-    
+
     if (scrollTimeout) clearTimeout(scrollTimeout);
     scrollTimeout = setTimeout(() => {
         if (!isRestoringScroll.value) {
@@ -265,12 +265,12 @@ const handleScroll = () => {
 
 // Setup scroll listener
 const setupScrollListener = () => {
-    if (scrollListenerAttached.value) return () => {};
-    
+    if (scrollListenerAttached.value) return () => { };
+
     const container = scrollContainer.value || window;
     container.addEventListener('scroll', handleScroll, { passive: true });
     scrollListenerAttached.value = true;
-    
+
     return () => {
         container.removeEventListener('scroll', handleScroll);
         scrollListenerAttached.value = false;
@@ -282,37 +282,37 @@ onMounted(async () => {
     try {
         // Set scroll container first to ensure it's available
         scrollContainer.value = document.querySelector('.app-scroll') || window;
-        
+
         // Setup scroll listener before any data loads
         const cleanupScroll = setupScrollListener();
-        
+
         // Initial data load
         await fetchPage(true);
-        
+
         // Check if we need to load more to fill the viewport
         const checkViewport = () => {
             if (isRestoringScroll.value) {
                 setTimeout(checkViewport, 50);
                 return;
             }
-            
+
             const containerEl = scrollContainer.value || document.documentElement;
             const isWindow = containerEl === window || containerEl === document.documentElement;
             const clientHeight = isWindow ? window.innerHeight : containerEl.clientHeight;
             const scrollHeight = isWindow ? document.documentElement.scrollHeight : containerEl.scrollHeight;
-            
+
             // If content is less than viewport and we have more to load
             if (scrollHeight < clientHeight * 1.5 && hasMore.value && !loading.value) {
                 fetchPage(false);
             }
         };
-        
+
         // Initial check
         checkViewport();
-        
+
         // Check again after content is rendered
         const viewportCheckTimeout = setTimeout(checkViewport, 300);
-        
+
         // Cleanup on unmount
         onUnmounted(() => {
             cleanupScroll();
@@ -1623,6 +1623,29 @@ async function deleteSourceComment(c) {
     } catch (e) { console.error(e); }
 }
 
+// Add this function to handle copying source file link to clipboard
+const copySourcePublicLink = (task) => {
+    if (!task.source_files || !task.source_files.length || !task.source_files[0]) {
+        return;
+    }
+
+    const link = task.source_files[0];
+    navigator.clipboard.writeText(link).then(() => {
+        // Show toast notification
+        if (typeof window.toastService?.success === 'function') {
+            toast.success('Задание обновлено');
+        } else {
+            // Fallback if toast service is not available
+            alert('Ссылка скопирована в буфер обмена');
+        }
+    }).catch(err => {
+        console.error('Failed to copy link:', err);
+        if (typeof window.toastService?.error === 'function') {
+            window.toastService.error('Не удалось скопировать ссылку');
+        }
+    });
+};
+
 </script>
 
 <template>
@@ -1767,9 +1790,9 @@ async function deleteSourceComment(c) {
                                 <th class="text-start">Наименование задачи</th>
                                 <th class="text-start">Бренд, Артикул</th>
                                 <th class="text-start">Тип</th>
-                                <th class="text-center">Исполнитель</th>
-                                <th class="text-center">Исходник</th>
-                                <th class="text-center">Результат</th>
+                                <th class="text-end">Исполнитель</th>
+                                <th class="text-center w-1">Исходник</th>
+                                <th class="text-center w-1">Результат</th>
                                 <th class="text-start">Статус</th>
                                 <th class="text-start">Приоритет</th>
                                 <th class="text-end">Действия</th>
@@ -1827,6 +1850,22 @@ async function deleteSourceComment(c) {
                                                 <path
                                                     d="M16 17v2a2 2 0 0 1 -2 2h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h2" />
                                             </svg></button>
+                                        <button class="btn btn-icon btn-ghost-secondary"
+                                            @click="copySourcePublicLink(t)"
+                                            :disabled="!t.source_files || !t.source_files.length || !t.source_files[0]"
+                                            :class="{ 'opacity-50': !t.source_files || !t.source_files.length || !t.source_files[0] }"
+                                            title="Копировать ссылку">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                                stroke-linecap="round" stroke-linejoin="round"
+                                                class="icon icon-tabler icons-tabler-outline icon-tabler-copy">
+                                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                                <path
+                                                    d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
+                                                <path
+                                                    d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
+                                            </svg>
+                                        </button>
                                         <!-- <button class="btn btn-sm btn-outline-primary" @click="openFolder(t)">ФАЙЛЫ (скрыто)</button> -->
                                     </div>
                                 </td>
