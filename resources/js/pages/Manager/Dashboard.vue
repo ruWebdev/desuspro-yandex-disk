@@ -517,6 +517,10 @@ const filteredArticles = computed(() => {
 });
 
 function onArticleSearchInput() {
+    // User is typing manually: clear previously selected article to enforce a fresh selection
+    if (createForm.value.article_id) {
+        createForm.value.article_id = '';
+    }
     showArticleDropdown.value = true;
 }
 
@@ -650,6 +654,13 @@ function openCreate() {
 }
 
 async function submitCreate() {
+    // Check if the selected article exists in the list of available articles
+    const selectedArticle = brandArticles.value.find(a => a.id == createForm.value.article_id);
+    if (!selectedArticle) {
+        alert('Пожалуйста, выберите артикул из списка. Ручной ввод не допускается.');
+        return;
+    }
+
     const payload = {
         brand_id: createForm.value.brand_id ? Number(createForm.value.brand_id) : null,
         task_type_id: createForm.value.task_type_id ? Number(createForm.value.task_type_id) : null,
@@ -1374,52 +1385,54 @@ async function deleteSourceComment(c) {
                 <div class="collapse navbar-collapse" id="navbar-menu">
                     <div class="navbar">
                         <div class="container-xl">
-                            <div class="d-md-flex align-items-center justify-content-between">
-                                <div class="d-flex gap-2 mt-3 mt-md-0">
-                                    <!-- Global search -->
-                                    <div class="input-group input-group-flat w-auto me-2">
-                                        <span class="input-group-text"><i class="ti ti-search"></i></span>
-                                        <input type="text" class="form-control" v-model="globalSearch"
-                                            placeholder="Общий поиск..." autocomplete="off" />
-                                    </div>
-                                    <!-- Name search -->
-                                    <div class="input-group input-group-flat w-auto me-2">
-                                        <span class="input-group-text"><i class="ti ti-letter-case"></i></span>
-                                        <input type="text" class="form-control" v-model="search"
-                                            placeholder="Название..." autocomplete="off" />
-                                    </div>
-                                    <!-- Brand filter -->
-                                    <select class="form-select w-auto me-2" v-model="brandFilter">
+                            <div class="d-flex flex-wrap align-items-center gap-2 p-2">
+                                <div class="flex-fill">
+                                    <input type="text" class="form-control form-control-sm" v-model="globalSearch"
+                                        placeholder="Общий поиск..." autocomplete="off" />
+                                </div>
+                                <div class="flex-fill">
+                                    <input type="text" class="form-control form-control-sm" v-model="search"
+                                        placeholder="Название..." autocomplete="off" />
+                                </div>
+                                <div class="flex-fill">
+                                    <select class="form-select form-select-sm w-100" v-model="brandFilter">
                                         <option value="">Все бренды</option>
                                         <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.name }}</option>
                                     </select>
-                                    <!-- Article filter (dependent on brand) -->
-                                    <select class="form-select w-auto me-2" v-model="articleFilter"
-                                        :disabled="!brandFilter" style="display:none;">
+                                </div>
+                                <div class="flex-fill" style="display:none;">
+                                    <select class="form-select form-select-sm w-100" v-model="articleFilter"
+                                        :disabled="!brandFilter">
                                         <option value="">Все артикулы</option>
                                         <option v-for="a in filterArticles" :key="a.id" :value="a.id">{{ a.name }}
                                         </option>
                                     </select>
-                                    <!-- Executor filter -->
-                                    <select class="form-select w-auto me-2" v-model="performerFilter">
+                                </div>
+                                <div class="flex-fill">
+                                    <select class="form-select form-select-sm w-100" v-model="performerFilter">
                                         <option value="">Все исполнители</option>
                                         <option v-for="u in performers" :key="u.id" :value="u.id">{{ u.name }}</option>
                                     </select>
-                                    <!-- Created date filter -->
-                                    <select class="form-select w-auto me-2" v-model="createdFilter">
+                                </div>
+                                <div class="flex-fill">
+                                    <select class="form-select form-select-sm w-100" v-model="createdFilter">
                                         <option value="">Все даты</option>
                                         <option value="today">Сегодня</option>
                                         <option value="yesterday">Вчера</option>
                                         <option value="date">Дата…</option>
                                     </select>
-                                    <input v-if="createdFilter === 'date'" type="date" class="form-control w-auto me-2"
-                                        v-model="createdDate" />
-
-                                    <!-- Action buttons -->
-                                    <button class="btn btn-secondary me-2" @click="resetFilters">
+                                </div>
+                                <div class="flex-fill">
+                                    <input v-if="createdFilter === 'date'" type="date"
+                                        class="form-control form-control-sm w-100" v-model="createdDate" />
+                                </div>
+                                <div class="flex-fill">
+                                    <button class="btn btn-sm btn-secondary w-100" @click="resetFilters">
                                         <i class="ti ti-filter-off me-1"></i> СБРОСИТЬ ФИЛЬТРЫ
                                     </button>
-                                    <button class="btn btn-primary" @click="openCreate" style="display:none;">
+                                </div>
+                                <div class="flex-fill">
+                                    <button class="btn btn-primary btn-sm w-100" @click="openCreate">
                                         <i class="ti ti-plus me-1"></i> НОВАЯ ЗАДАЧА
                                     </button>
                                 </div>
@@ -1502,7 +1515,7 @@ async function deleteSourceComment(c) {
                                         @change="(e) => bulkUpdatePriority(e.target.value)">
                                         <option value="" selected disabled>Выбрать…</option>
                                         <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{ p.label
-                                            }}</option>
+                                        }}</option>
                                     </select>
                                 </div>
 
@@ -1559,7 +1572,7 @@ async function deleteSourceComment(c) {
                                 <td class="text-center" style="vertical-align: middle;">
                                     <div class="d-flex justify-content-center gap-2">
                                         <span v-if="t.assignee?.name" class="text-secondary">{{ t.assignee.name
-                                            }}</span>
+                                        }}</span>
                                         <button class="btn btn-sm btn-outline-primary" @click="openAssign(t)">
                                             {{ t.assignee?.name ? 'Изменить' : 'Назначить' }}
                                         </button>
@@ -1609,30 +1622,6 @@ async function deleteSourceComment(c) {
                                                 <path
                                                     d="M16 17v2a2 2 0 0 1 -2 2h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h2" />
                                             </svg></button>
-                                    </div>
-                                </td>
-                                <td style="vertical-align: middle;">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <select class="form-select form-select-sm w-auto" :value="t.status"
-                                            @change="(e) => updateTaskStatus(t, e.target.value)">
-                                            <option v-for="s in statusOptions" :key="s.value" :value="s.value">
-                                                {{ s.label }}</option>
-                                        </select>
-                                    </div>
-                                </td>
-                                <td style="vertical-align: middle;">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <select class="form-select form-select-sm w-auto"
-                                            :value="t.priority || 'medium'"
-                                            @change="(e) => updateTaskPriority(t, e.target.value)">
-                                            <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{
-                                                p.label }}</option>
-                                        </select>
-                                    </div>
-                                </td>
-                                <td class="text-nowrap">
-                                    <div
-                                        class="btn-list d-flex flex-nowrap align-items-center justify-content-end gap-2">
                                         <button class="btn btn-icon btn-ghost-secondary" @click="copyTaskPublicLink(t)"
                                             title="Копировать ссылку">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
@@ -1659,6 +1648,30 @@ async function deleteSourceComment(c) {
                                                     d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463" />
                                             </svg>
                                         </button>
+                                    </div>
+                                </td>
+                                <td style="vertical-align: middle;">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <select class="form-select form-select-sm w-auto" :value="t.status"
+                                            @change="(e) => updateTaskStatus(t, e.target.value)">
+                                            <option v-for="s in statusOptions" :key="s.value" :value="s.value">
+                                                {{ s.label }}</option>
+                                        </select>
+                                    </div>
+                                </td>
+                                <td style="vertical-align: middle;">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <select class="form-select form-select-sm w-auto"
+                                            :value="t.priority || 'medium'"
+                                            @change="(e) => updateTaskPriority(t, e.target.value)">
+                                            <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{
+                                                p.label }}</option>
+                                        </select>
+                                    </div>
+                                </td>
+                                <td class="text-nowrap">
+                                    <div
+                                        class="btn-list d-flex flex-nowrap align-items-center justify-content-end gap-2">
                                         <button class="btn btn-icon btn-ghost-primary" @click="onEditTask(t)"
                                             title="Редактировать">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24"
