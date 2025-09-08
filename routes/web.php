@@ -160,10 +160,10 @@ Route::middleware(['auth', 'role:Manager|Administrator'])->group(function () {
         Route::get('/brands', [\App\Http\Controllers\Admin\BrandController::class, 'index'])->name('brands.index');
         Route::post('/brands', [\App\Http\Controllers\Admin\BrandController::class, 'store'])->name('brands.store');
         Route::put('/brands/{brand}', [\App\Http\Controllers\Admin\BrandController::class, 'update'])->name('brands.update');
-        
+
         // Yandex Disk Token Management
         Route::get('/yd_token', [\App\Http\Controllers\YandexAuthController::class, 'index'])->name('yandex.token');
-        
+
         // Yandex OAuth Routes
         Route::get('/yandex/connect', [\App\Http\Controllers\YandexAuthController::class, 'connect'])
             ->name('integrations.yandex.connect');
@@ -218,4 +218,4 @@ Route::middleware(['auth', 'role:Administrator'])->prefix('users/managers')->nam
     Route::post('/{user}/detach', [UserManagementController::class, 'detach'])->name('detach');
 });
 
-require __DIR__.'/auth.php';
+require __DIR__ . '/auth.php';

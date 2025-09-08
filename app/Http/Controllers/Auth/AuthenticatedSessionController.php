@@ -16,8 +16,24 @@ class AuthenticatedSessionController extends Controller
     /**
      * Display the login view.
      */
-    public function create(): Response
+    public function create(): Response|RedirectResponse
     {
+        // If user is already authenticated, send to their dashboard based on role
+        if (Auth::check()) {
+            /** @var \App\Models\User $user */
+            $user = Auth::user();
+            if ($user && $user->hasRole('Administrator')) {
+                return redirect()->to(route('admin.dashboard'));
+            }
+            if ($user && $user->hasRole('Manager')) {
+                return redirect()->to(route('manager.dashboard'));
+            }
+            if ($user && $user->hasRole('Performer')) {
+                return redirect()->to(route('performer.dashboard'));
+            }
+            return redirect()->to(route('admin.dashboard'));
+        }
+
         return Inertia::render('Auth/Login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => session('status'),
@@ -33,8 +49,20 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        // Always redirect to dashboard; dashboard will route users by role.
-        return redirect()->route('dashboard');
+        // Get the authenticated user
+        $user = $request->user();
+
+        // Redirect based on user role
+        if ($user->hasRole('Administrator')) {
+            return redirect()->intended(route('admin.dashboard'));
+        } elseif ($user->hasRole('Manager')) {
+            return redirect()->intended(route('manager.dashboard'));
+        } elseif ($user->hasRole('Performer')) {
+            return redirect()->intended(route('performer.dashboard'));
+        }
+
+        // Default fallback - redirect to admin dashboard if no specific role matches
+        return redirect()->intended(route('admin.dashboard'));
     }
 
     /**

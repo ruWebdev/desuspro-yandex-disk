@@ -1,36 +1,27 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" data-bs-theme="light">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <meta name="turbo-visit-control" content="reload">
 
     <title inertia>{{ config('app.name', 'Laravel') }}</title>
 
-    <!-- Favicon -->
-    <link rel="icon" href="/favicon.ico">
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#206bc4">
-    <meta name="msapplication-TileColor" content="#206bc4">
-    <meta name="theme-color" content="#206bc4">
-
-    <!-- DashByte CSS -->
-    <link rel="stylesheet" href="/lib/remixicon/fonts/remixicon.css">
     <link href="/dist/css/tabler.min.css" rel="stylesheet" />
 
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.bunny.net">
+    <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
+
+    <!-- Scripts -->
     @routes
-    @vite(['resources/js/app.js', "resources/js/pages/{$page['component']}.vue"])
+    @vite(['resources/js/app.js', "resources/js/Pages/{$page['component']}.vue"])
     @inertiaHead
 </head>
 
-<body class="layout-fluid">
+<body class="d-flex flex-column h-100">
     @inertia
-
-    <script src="/dist/js/tabler.min.js" defer></script>
+    <script src="/dist/js/tabler.min.js"></script>
 </body>
 
 </html>
