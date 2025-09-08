@@ -26,6 +26,11 @@ const props = defineProps({
     initialBrandId: { type: [Number, String], default: null },
 });
 
+// Helper to safely get CSRF token
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+}
+
 // Filters
 // Name search (existing)
 const search = ref('');
@@ -992,9 +997,9 @@ const comments = ref([]);
 const newComment = ref('');
 const submitting = ref(false);
 
-// Comment image upload
+// Comment image upload (multiple)
 const commentImageInput = ref(null);
-const selectedCommentImage = ref(null);
+const selectedCommentImages = ref([]);
 
 // Bootstrap Offcanvas integration
 const offcanvasEl = ref(null);
@@ -1079,52 +1084,51 @@ async function loadComments() {
 }
 
 async function addComment() {
-    if (!oc.value.taskId || (!newComment.value.trim() && !selectedCommentImage.value)) return;
+    if (!oc.value.taskId || (!newComment.value.trim() && (!selectedCommentImages?.value || selectedCommentImages.value.length === 0))) return;
     submitting.value = true;
     try {
-        const url = route('brands.tasks.comments.store', { brand: oc.value.brandId, task: oc.value.taskId });
+        const baseUrl = route('brands.tasks.comments.store', { brand: oc.value.brandId, task: oc.value.taskId });
+        const headersBase = { 'Accept': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() };
 
-        let body;
-        let headers = {
-            'Accept': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        };
-
-        if (selectedCommentImage.value) {
-            // Use FormData for file upload
-            const formData = new FormData();
-            formData.append('content', newComment.value.trim() || ''); // Allow empty content
-            formData.append('image', selectedCommentImage.value);
-            body = formData;
-        } else {
-            // Use JSON for text-only comments
-            headers['Content-Type'] = 'application/json';
-            body = JSON.stringify({ content: newComment.value.trim() });
-        }
-
-        const res = await fetch(url, {
-            method: 'POST',
-            headers,
-            body,
-        });
-
-        if (!res.ok) {
-            const errorData = await res.json();
-            if (errorData.errors && errorData.errors.content) {
-                alert(errorData.errors.content[0]);
-                return;
+        const files = Array.isArray(selectedCommentImages?.value) ? selectedCommentImages.value : [];
+        if (files.length > 0) {
+            for (let i = 0; i < files.length; i++) {
+                const formData = new FormData();
+                formData.append('content', i === 0 ? (newComment.value.trim() || '') : '');
+                formData.append('image', files[i]);
+                const res = await fetch(baseUrl, { method: 'POST', headers: headersBase, body: formData });
+                if (!res.ok) {
+                    const errorData = await res.json().catch(() => ({}));
+                    if (errorData?.errors?.content?.[0]) { alert(errorData.errors.content[0]); return; }
+                    throw new Error(`HTTP ${res.status}`);
+                }
+                const data = await res.json();
+                if (data?.comment) comments.value.push(data.comment);
             }
-            throw new Error(`HTTP ${res.status}`);
+            clearCommentForm();
+        } else {
+            const headers = { ...headersBase, 'Content-Type': 'application/json' };
+            const body = JSON.stringify({ content: newComment.value.trim() });
+            const res = await fetch(baseUrl, { method: 'POST', headers, body });
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                if (errorData?.errors?.content?.[0]) { alert(errorData.errors.content[0]); return; }
+                throw new Error(`HTTP ${res.status}`);
+            }
+            const data = await res.json();
+            if (data?.comment) comments.value.push(data.comment);
+            clearCommentForm();
         }
-
-        const data = await res.json();
-        if (data && data.comment) comments.value.push(data.comment);
-        clearCommentForm();
     } catch (e) {
         console.error(e);
         alert('Ошибка при добавлении комментария. Попробуйте ещё раз.');
     }
     finally { submitting.value = false; }
+}
+
+function onCommentImagesSelected(event) {
+    const files = event.target.files;
+    selectedCommentImages.value = files ? Array.from(files) : [];
 }
 
 function onCommentImageSelected(event) {
@@ -1136,7 +1140,7 @@ function onCommentImageSelected(event) {
 
 function clearCommentForm() {
     newComment.value = '';
-    selectedCommentImage.value = null;
+    selectedCommentImages.value = [];
     if (commentImageInput.value) {
         commentImageInput.value.value = null;
     }
@@ -1146,7 +1150,7 @@ async function deleteComment(c) {
     if (!oc.value.taskId) return;
     const url = route('brands.tasks.comments.destroy', { brand: oc.value.brandId, task: oc.value.taskId, comment: c.id });
     try {
-        await fetch(url, { method: 'DELETE', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') } });
+        await fetch(url, { method: 'DELETE', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() } });
         comments.value = comments.value.filter(x => x.id !== c.id);
     } catch (e) { console.error(e); }
 }
@@ -1440,40 +1444,41 @@ async function loadSourceComments() {
 }
 
 async function addSourceComment() {
-    if (!sourceOc.value.taskId || (!newSourceComment.value.trim() && !selectedCommentImage.value)) return;
+    if (!sourceOc.value.taskId || (!newSourceComment.value.trim() && (!selectedCommentImages?.value || selectedCommentImages.value.length === 0))) return;
     sourceSubmitting.value = true;
     try {
-        const url = route('brands.tasks.source_comments.store', { brand: sourceOc.value.brandId, task: sourceOc.value.taskId });
+        const baseUrl = route('brands.tasks.source_comments.store', { brand: sourceOc.value.brandId, task: sourceOc.value.taskId });
+        const headersBase = { 'Accept': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() };
 
-        let body;
-        let headers = {
-            'Accept': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        };
-
-        if (selectedCommentImage.value) {
-            const formData = new FormData();
-            formData.append('content', newSourceComment.value.trim() || '');
-            formData.append('image', selectedCommentImage.value);
-            body = formData;
-        } else {
-            headers['Content-Type'] = 'application/json';
-            body = JSON.stringify({ content: newSourceComment.value.trim() });
-        }
-
-        const res = await fetch(url, { method: 'POST', headers, body });
-        if (!res.ok) {
-            const errorData = await res.json();
-            if (errorData.errors && errorData.errors.content) {
-                alert(errorData.errors.content[0]);
-                return;
+        const files = Array.isArray(selectedCommentImages?.value) ? selectedCommentImages.value : [];
+        if (files.length > 0) {
+            for (let i = 0; i < files.length; i++) {
+                const formData = new FormData();
+                formData.append('content', i === 0 ? (newSourceComment.value.trim() || '') : '');
+                formData.append('image', files[i]);
+                const res = await fetch(baseUrl, { method: 'POST', headers: headersBase, body: formData });
+                if (!res.ok) {
+                    const errorData = await res.json().catch(() => ({}));
+                    if (errorData?.errors?.content?.[0]) { alert(errorData.errors.content[0]); return; }
+                    throw new Error(`HTTP ${res.status}`);
+                }
+                const data = await res.json();
+                if (data?.comment) sourceComments.value.push(data.comment);
             }
-            throw new Error(`HTTP ${res.status}`);
+            clearSourceCommentForm();
+        } else {
+            const headers = { ...headersBase, 'Content-Type': 'application/json' };
+            const body = JSON.stringify({ content: newSourceComment.value.trim() });
+            const res = await fetch(baseUrl, { method: 'POST', headers, body });
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                if (errorData?.errors?.content?.[0]) { alert(errorData.errors.content[0]); return; }
+                throw new Error(`HTTP ${res.status}`);
+            }
+            const data = await res.json();
+            if (data?.comment) sourceComments.value.push(data.comment);
+            clearSourceCommentForm();
         }
-
-        const data = await res.json();
-        if (data && data.comment) sourceComments.value.push(data.comment);
-        clearSourceCommentForm();
     } catch (e) {
         console.error(e);
         alert('Ошибка при добавлении комментария. Попробуйте ещё раз.');
@@ -1482,7 +1487,7 @@ async function addSourceComment() {
 
 function clearSourceCommentForm() {
     newSourceComment.value = '';
-    selectedCommentImage.value = null;
+    selectedCommentImages.value = [];
     if (commentImageInput.value) {
         commentImageInput.value.value = null;
     }
@@ -1492,7 +1497,7 @@ async function deleteSourceComment(c) {
     if (!sourceOc.value.taskId) return;
     const url = route('brands.tasks.source_comments.destroy', { brand: sourceOc.value.brandId, task: sourceOc.value.taskId, comment: c.id });
     try {
-        await fetch(url, { method: 'DELETE', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') } });
+        await fetch(url, { method: 'DELETE', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() } });
         sourceComments.value = sourceComments.value.filter(x => x.id !== c.id);
     } catch (e) { console.error(e); }
 }
@@ -1640,16 +1645,16 @@ async function deleteSourceComment(c) {
                             <tr>
                                 <th class="text-center"><input type="checkbox" class="form-check-input"
                                         v-model="selectAllVisible" /></th>
-                                <th>Создан</th>
-                                <th>Наимен. задачи</th>
-                                <th>Бренд, Артикул</th>
-                                <th>Тип</th>
+                                <th class="text-start">Создан</th>
+                                <th class="text-start">Наименование задачи</th>
+                                <th class="text-start">Бренд, Артикул</th>
+                                <th class="text-start">Тип</th>
                                 <th class="text-end">Исполнитель</th>
-                                <th>Исходник</th>
-                                <th>Результат</th>
-                                <th>Статус</th>
-                                <th>Приоритет</th>
-                                <th>Действия</th>
+                                <th class="text-center w-1">Исходник</th>
+                                <th class="text-center w-1">Результат</th>
+                                <th class="text-start">Статус</th>
+                                <th class="text-start">Приоритет</th>
+                                <th class="text-end">Действия</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -2250,15 +2255,15 @@ async function deleteSourceComment(c) {
                                             placeholder="Новый комментарий…"></textarea>
                                     </div>
                                     <div class="mb-2">
-                                        <input type="file" ref="commentImageInput" accept="image/*" class="form-control"
-                                            @change="onCommentImageSelected" />
-                                        <small class="text-secondary">Максимальный размер: 5MB</small>
+                                        <input type="file" ref="commentImageInput" accept="image/*" multiple class="form-control"
+                                            @change="onCommentImagesSelected" />
+                                        <small class="text-secondary">Максимальный размер: 5MB на файл</small>
                                     </div>
                                     <div class="d-flex justify-content-end">
                                         <button type="button" class="btn btn-secondary me-2"
                                             @click="clearCommentForm">Очистить</button>
                                         <button type="submit" class="btn btn-primary"
-                                            :disabled="!newComment.trim() && !selectedCommentImage || submitting">
+                                            :disabled="!newComment.trim() && (!selectedCommentImages || selectedCommentImages.length === 0) || submitting">
                                             Добавить
                                         </button>
                                     </div>
@@ -2328,15 +2333,15 @@ async function deleteSourceComment(c) {
                                             placeholder="Новый комментарий…"></textarea>
                                     </div>
                                     <div class="mb-2">
-                                        <input type="file" ref="commentImageInput" accept="image/*" class="form-control"
-                                            @change="onCommentImageSelected" />
-                                        <small class="text-secondary">Максимальный размер: 5MB</small>
+                                        <input type="file" ref="commentImageInput" accept="image/*" multiple class="form-control"
+                                            @change="onCommentImagesSelected" />
+                                        <small class="text-secondary">Максимальный размер: 5MB на файл</small>
                                     </div>
                                     <div class="d-flex justify-content-end">
                                         <button type="button" class="btn btn-secondary me-2"
                                             @click="clearSourceCommentForm">Очистить</button>
                                         <button type="submit" class="btn btn-primary"
-                                            :disabled="!newSourceComment.trim() && !selectedCommentImage || sourceSubmitting">
+                                            :disabled="!newSourceComment.trim() && (!selectedCommentImages || selectedCommentImages.length === 0) || sourceSubmitting">
                                             Добавить
                                         </button>
                                     </div>
