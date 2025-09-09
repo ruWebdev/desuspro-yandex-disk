@@ -36,10 +36,16 @@ class TaskController extends Controller
             ->with(['brand:id,name','type:id,name,prefix','article:id,name','assignee:id,name'])
             ->orderByDesc('created_at');
 
-        // Managers can only see tasks they created
+        // Role-based filtering
         $user = $request->user();
-        if ($user && method_exists($user, 'hasRole') && $user->hasRole('Manager')) {
-            $q->where('created_by', $user->id);
+        if ($user && method_exists($user, 'hasRole')) {
+            if ($user->hasRole('Administrator') || $user->hasRole('admin')) {
+                // Administrator sees all tasks (no filter)
+            } elseif ($user->hasRole('Manager') || $user->hasRole('manager')) {
+                $q->where('created_by', $user->id);
+            } elseif ($user->hasRole('Performer') || $user->hasRole('performer')) {
+                $q->where('assignee_id', $user->id);
+            }
         }
 
         // Filters
@@ -117,10 +123,16 @@ class TaskController extends Controller
             ])
             ->orderByDesc('created_at');
 
-        // Managers can only see tasks they created
+        // Role-based filtering
         $user = $request->user();
-        if ($user && method_exists($user, 'hasRole') && $user->hasRole('Manager')) {
-            $query->where('created_by', $user->id);
+        if ($user && method_exists($user, 'hasRole')) {
+            if ($user->hasRole('Administrator') || $user->hasRole('admin')) {
+                // Administrator sees all tasks (no filter)
+            } elseif ($user->hasRole('Manager') || $user->hasRole('manager')) {
+                $query->where('created_by', $user->id);
+            } elseif ($user->hasRole('Performer') || $user->hasRole('performer')) {
+                $query->where('assignee_id', $user->id);
+            }
         }
 
         $tasks = $query->get(['id','brand_id','task_type_id','article_id','name','status','priority','assignee_id','public_link','created_at']);
@@ -141,15 +153,28 @@ class TaskController extends Controller
 
     public function index(Request $request, Brand $brand): Response
     {
-        $tasks = Task::query()
+        $query = Task::query()
             ->where('brand_id', $brand->id)
             ->with([
                 'type:id,name,prefix',
                 'article:id,name',
                 'assignee:id,name',
             ])
-            ->orderByDesc('created_at')
-            ->get([ 'id','brand_id','task_type_id','article_id','name','status','assignee_id','public_link','highlighted','comment','size','created_at' ]);
+            ->orderByDesc('created_at');
+
+        // Role-based filtering
+        $user = $request->user();
+        if ($user && method_exists($user, 'hasRole')) {
+            if ($user->hasRole('Administrator') || $user->hasRole('admin')) {
+                // Administrator sees all tasks (no filter)
+            } elseif ($user->hasRole('Manager') || $user->hasRole('manager')) {
+                $query->where('created_by', $user->id);
+            } elseif ($user->hasRole('Performer') || $user->hasRole('performer')) {
+                $query->where('assignee_id', $user->id);
+            }
+        }
+
+        $tasks = $query->get([ 'id','brand_id','task_type_id','article_id','name','status','assignee_id','public_link','highlighted','comment','size','created_at' ]);
 
         $performers = User::role('Performer')->get(['id','name','is_blocked']);
         $taskTypes = TaskType::query()->orderBy('name')->get(['id','name','prefix']);

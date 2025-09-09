@@ -14,6 +14,18 @@ export default {
 import { ref, computed, onMounted, watch, nextTick, onUnmounted } from 'vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import ContentLayout from '@/Layouts/ContentLayout.vue';
+import TasksTable from '@/Pages/Dashboard/Partials/TasksTable.vue';
+
+// Import modal components
+import DeleteTaskModal from '@/Pages/Dashboard/Modals/DeleteTaskModal.vue';
+import CreateTaskModal from '@/Pages/Dashboard/Modals/CreateTaskModal.vue';
+import AssignPerformerModal from '@/Pages/Dashboard/Modals/AssignPerformerModal.vue';
+import BulkAssignModal from '@/Pages/Dashboard/Modals/BulkAssignModal.vue';
+import EditTaskModal from '@/Pages/Dashboard/Modals/EditTaskModal.vue';
+import RenameTaskModal from '@/Pages/Dashboard/Modals/RenameTaskModal.vue';
+import LightboxModal from '@/Pages/Dashboard/Modals/LightboxModal.vue';
+import TaskOffcanvas from '@/Pages/Dashboard/Modals/TaskOffcanvas.vue';
+import SourceOffcanvas from '@/Pages/Dashboard/Modals/SourceOffcanvas.vue';
 
 // Import Bootstrap Modal
 import { Modal, Offcanvas } from 'bootstrap';
@@ -24,6 +36,7 @@ const props = defineProps({
     performers: { type: Array, default: () => [] },
     taskTypes: { type: Array, default: () => [] },
     initialBrandId: { type: [Number, String], default: null },
+    currentUser: { type: Object, default: null },
 });
 
 // Helper to safely get CSRF token
@@ -89,6 +102,24 @@ function buildQueryParams(resetPage = false) {
     if (performerFilter.value) params.performer_id = performerFilter.value;
     if (createdFilter.value) params.created_filter = createdFilter.value;
     if (createdDate.value) params.created_date = createdDate.value;
+
+    // Role-based filtering
+    if (props.currentUser) {
+        const user = props.currentUser;
+        // Check if user has admin role (assuming role name or permission)
+        const isAdmin = user.roles?.some(role => role.name === 'admin') || user.is_admin;
+        const isManager = user.roles?.some(role => role.name === 'manager') || user.is_manager;
+        const isPerformer = user.roles?.some(role => role.name === 'performer') || user.is_performer;
+
+        if (isManager && !isAdmin) {
+            // Manager sees only tasks they created
+            params.created_by = user.id;
+        } else if (isPerformer && !isAdmin && !isManager) {
+            // Performer sees only tasks assigned to them
+            params.assignee_id = user.id;
+        }
+        // Admin sees all tasks (no additional filtering)
+    }
 
     // Pagination
     if (resetPage) {
@@ -1621,7 +1652,7 @@ async function deleteSourceComment(c) {
                                         @change="(e) => bulkUpdatePriority(e.target.value)">
                                         <option value="" selected disabled>Выбрать…</option>
                                         <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{ p.label
-                                            }}</option>
+                                        }}</option>
                                     </select>
                                 </div>
 
@@ -1638,7 +1669,7 @@ async function deleteSourceComment(c) {
                     </div>
                 </div>
 
-                <div class="table-wrapper" style="position: relative; height: calc(100vh - 200px);">
+                <div class="table-wrapper" style="position: relative; height: 100vh;">
                     <!-- Header -->
                     <table class="table">
                         <thead>
@@ -1670,14 +1701,14 @@ async function deleteSourceComment(c) {
                                     Date(t.created_at).toLocaleString('ru-RU') }}
                                 </td>
                                 <td style="vertical-align: middle;">{{ t.name || t.article?.name || ''
-                                }}</td>
+                                    }}</td>
                                 <td style="vertical-align: middle;">
                                     {{t.brand?.name || (brands.find(b => b.id ===
                                         t.brand_id)?.name)}}<br />{{ t.article?.name || '' }}</td>
                                 <td style="vertical-align: middle;">{{ t.type?.name || '' }}</td>
                                 <td style="vertical-align: middle;" class="text-end">
                                     <span v-if="t.assignee?.name" class="text-secondary me-2">{{ t.assignee.name
-                                        }}</span>
+                                    }}</span>
                                     <button class="btn btn-sm btn-outline-primary" @click="openAssign(t)">
                                         {{ t.assignee?.name ? 'Изменить' : 'Назначить' }}
                                     </button>
@@ -2255,8 +2286,8 @@ async function deleteSourceComment(c) {
                                             placeholder="Новый комментарий…"></textarea>
                                     </div>
                                     <div class="mb-2">
-                                        <input type="file" ref="commentImageInput" accept="image/*" multiple class="form-control"
-                                            @change="onCommentImagesSelected" />
+                                        <input type="file" ref="commentImageInput" accept="image/*" multiple
+                                            class="form-control" @change="onCommentImagesSelected" />
                                         <small class="text-secondary">Максимальный размер: 5MB на файл</small>
                                     </div>
                                     <div class="d-flex justify-content-end">
@@ -2333,8 +2364,8 @@ async function deleteSourceComment(c) {
                                             placeholder="Новый комментарий…"></textarea>
                                     </div>
                                     <div class="mb-2">
-                                        <input type="file" ref="commentImageInput" accept="image/*" multiple class="form-control"
-                                            @change="onCommentImagesSelected" />
+                                        <input type="file" ref="commentImageInput" accept="image/*" multiple
+                                            class="form-control" @change="onCommentImagesSelected" />
                                         <small class="text-secondary">Максимальный размер: 5MB на файл</small>
                                     </div>
                                     <div class="d-flex justify-content-end">

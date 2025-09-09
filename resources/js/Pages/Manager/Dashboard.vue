@@ -94,12 +94,12 @@ function removeEditSourceFileField(idx) {
     editForm.value.source_files.splice(idx, 1);
 }
 
-function buildQueryParams(resetPage = false) {
+function buildQueryParams() {
     const params = new URLSearchParams();
-    if (!resetPage) params.set('page', String(page.value)); else params.set('page', '1');
+    params.set('page', String(page.value));
     params.set('per_page', String(perPage.value));
     if (search.value.trim()) params.set('search', search.value.trim());
-    if (globalSearch.value.trim()) params.set('global', globalSearch.value.trim());
+    if (globalSearch.value.trim()) params.set('global_search', globalSearch.value.trim());
     if (statusFilter.value) params.set('status', statusFilter.value);
     if (priorityFilter.value) params.set('priority', priorityFilter.value);
     if (brandFilter.value) params.set('brand_id', String(brandFilter.value));
@@ -114,10 +114,6 @@ function buildQueryParams(resetPage = false) {
 
 async function fetchPage(reset = false) {
     if (loading.value) return;
-
-    // Save scroll position before making changes
-    saveScrollPosition();
-
     loading.value = true;
     try {
         if (reset) {
@@ -125,71 +121,21 @@ async function fetchPage(reset = false) {
             hasMore.value = true;
             items.value = [];
         } else {
-            // Only increment page if this is a subsequent load
             page.value++;
         }
-
         const params = buildQueryParams();
-        const url = route('tasks.search') + '?' + new URLSearchParams(params).toString();
-        const res = await fetch(url, {
-            headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            credentials: 'same-origin'
-        });
-
-        if (!res.ok) {
-            const errorData = await res.json().catch(() => ({}));
-            throw new Error(errorData.message || `HTTP ${res.status}`);
-        }
-
+        const url = route('tasks.search') + '?' + params.toString();
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const list = Array.isArray(data?.data) ? data.data : [];
-
-        // Update items in a way that preserves reactivity without full re-render
-        if (reset) {
-            items.value = list;
-        } else {
-            const existingIds = new Set(items.value.map(item => item.id));
-            const newItems = list.filter(item => !existingIds.has(item.id));
-            if (newItems.length > 0) {
-                items.value = [...items.value, ...newItems];
-            }
-        }
-
+        if (reset) items.value = list; else items.value = [...items.value, ...list];
         hasMore.value = Boolean(data?.next_page_url);
-
-        if (list.length < perPage.value) {
-            hasMore.value = false;
-        }
-
-        // Restore scroll position after DOM updates
-        nextTick(() => {
-            restoreScrollPosition();
-        });
-
     } catch (e) {
         console.error('Error fetching tasks:', e);
-        if (typeof window.toastService?.error === 'function') {
-            window.toastService.error('Ошибка загрузки задач: ' + (e.message || 'Неизвестная ошибка'));
-        }
-
         if (!reset) page.value--;
-
-        // Still try to restore scroll position on error
-        nextTick(restoreScrollPosition);
     } finally {
         loading.value = false;
-
-        if (hasMore.value) {
-            // Small delay before next check to prevent rapid firing
-            setTimeout(() => {
-                if (!isRestoringScroll.value) {
-                    checkScroll();
-                }
-            }, 150);
-        }
     }
 }
 
@@ -279,53 +225,34 @@ const setupScrollListener = () => {
 
 // Initialize
 onMounted(async () => {
-    try {
-        // Set scroll container first to ensure it's available
-        scrollContainer.value = document.querySelector('.app-scroll') || window;
+    await nextTick();
+    // Use the same global scroll container as Admin/Performer
+    scrollContainer.value = document.querySelector('.app-scroll') || window;
+    const cleanupScroll = setupScrollListener();
 
-        // Setup scroll listener before any data loads
-        const cleanupScroll = setupScrollListener();
+    // Load first page then check whether more should be loaded immediately
+    await fetchPage(true);
+    checkScroll();
 
-        // Initial data load
-        await fetchPage(true);
-
-        // Check if we need to load more to fill the viewport
-        const checkViewport = () => {
-            if (isRestoringScroll.value) {
-                setTimeout(checkViewport, 50);
-                return;
-            }
-
-            const containerEl = scrollContainer.value || document.documentElement;
-            const isWindow = containerEl === window || containerEl === document.documentElement;
-            const clientHeight = isWindow ? window.innerHeight : containerEl.clientHeight;
-            const scrollHeight = isWindow ? document.documentElement.scrollHeight : containerEl.scrollHeight;
-
-            // If content is less than viewport and we have more to load
-            if (scrollHeight < clientHeight * 1.5 && hasMore.value && !loading.value) {
-                fetchPage(false);
-            }
-        };
-
-        // Initial check
-        checkViewport();
-
-        // Check again after content is rendered
-        const viewportCheckTimeout = setTimeout(checkViewport, 300);
-
-        // Cleanup on unmount
-        onUnmounted(() => {
-            cleanupScroll();
-            if (scrollTimeout) clearTimeout(scrollTimeout);
-            if (viewportCheckTimeout) clearTimeout(viewportCheckTimeout);
-        });
-    } catch (error) {
-        console.error('Error initializing dashboard:', error);
-        if (typeof window.toastService?.error === 'function') {
-            window.toastService.error('Ошибка инициализации: ' + (error.message || 'Неизвестная ошибка'));
-        }
-    }
+    onUnmounted(() => {
+        cleanupScroll();
+        if (scrollTimeout) clearTimeout(scrollTimeout);
+    });
 });
+
+// Load more to fill the viewport (when content is shorter than screen)
+const checkViewport = () => {
+    const containerEl = scrollContainer.value || document.documentElement;
+    const isWindow = containerEl === window || containerEl === document.documentElement;
+    const clientHeight = isWindow ? window.innerHeight : containerEl.clientHeight;
+    const scrollHeight = isWindow ? document.documentElement.scrollHeight : containerEl.scrollHeight;
+    if (scrollHeight < clientHeight * 1.5 && hasMore.value && !loading.value) {
+        fetchPage(false);
+    }
+};
+
+// Initial extra checks after mount
+setTimeout(() => { checkViewport(); }, 300);
 
 watch([search, globalSearch, statusFilter, priorityFilter, brandFilter, articleFilter, performerFilter, createdFilter, createdDate], () => {
     // Debounce not strictly necessary here; simple immediate fetch reset
@@ -1998,9 +1925,11 @@ const copySourcePublicLink = async (task) => {
                             <tr v-if="loading && displayedTasks.length">
                                 <td colspan="12" class="text-center py-2 text-secondary">
                                     <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-                                    <span>Загрузка...</span>
+                                    Загрузка...
                                 </td>
                             </tr>
+                            <!-- Sentinel -->
+                            <tr ref="infiniteSentinelEl" style="height: 1px; visibility: hidden;"></tr>
                         </tbody>
                     </table>
                 </div>

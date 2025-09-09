@@ -24,50 +24,58 @@ Route::get('/', function () {
 });
 
 Route::get('/dashboard', function () {
-    $user = Auth::user();
-    if ($user && method_exists($user, 'hasRole')) {
-        if ($user->hasRole('Administrator')) {
-            return redirect()->route('admin.dashboard');
-        }
-        if ($user->hasRole('Manager')) {
-            return redirect()->route('manager.dashboard');
-        }
-        if ($user->hasRole('Performer')) {
-            return redirect()->route('performer.dashboard');
-        }
-    }
-    return Inertia::render('Dashboard');
+    $brands = Brand::query()->orderBy('name')->get(['id','name']);
+    $performers = User::role('Performer')->get(['id','name','is_blocked']);
+    $taskTypes = TaskType::query()->orderBy('name')->get(['id','name','prefix']);
+    return Inertia::render('Dashboard/Dashboard', [
+        'brands' => $brands,
+        'performers' => $performers,
+        'taskTypes' => $taskTypes,
+        'tasks' => [],
+        'currentUser' => auth()->user(),
+    ]);
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 // Role-based Dashboard pages
 Route::middleware(['auth', 'verified', 'role:Administrator'])
     ->get('/admin', function () {
-        return Inertia::render('Admin/Dashboard', [
+        $brands = Brand::query()->orderBy('name')->get(['id','name']);
+        $performers = User::role('Performer')->get(['id','name','is_blocked']);
+        $taskTypes = TaskType::query()->orderBy('name')->get(['id','name','prefix']);
+        return Inertia::render('Dashboard/Dashboard', [
+            'brands' => $brands,
+            'performers' => $performers,
+            'taskTypes' => $taskTypes,
             'tasks' => [],
-            'brands' => Brand::query()->select('id', 'name')->orderBy('name')->get(),
-            'performers' => User::role('Performer')->select('id', 'name')->orderBy('name')->get(),
-            'taskTypes' => TaskType::query()->select('id', 'name', 'prefix')->orderBy('name')->get(),
-            'initialBrandId' => null,
+            'currentUser' => auth()->user(),
         ]);
     })->name('admin.dashboard');
 
 Route::middleware(['auth', 'verified', 'role:Manager'])
     ->get('/manager', function () {
-        return Inertia::render('Manager/Dashboard', [
+        $brands = Brand::query()->orderBy('name')->get(['id','name']);
+        $performers = User::role('Performer')->get(['id','name','is_blocked']);
+        $taskTypes = TaskType::query()->orderBy('name')->get(['id','name','prefix']);
+        return Inertia::render('Dashboard/Dashboard', [
+            'brands' => $brands,
+            'performers' => $performers,
+            'taskTypes' => $taskTypes,
             'tasks' => [],
-            'brands' => Brand::query()->select('id', 'name')->orderBy('name')->get(),
-            'performers' => User::role('Performer')->select('id', 'name')->orderBy('name')->get(),
-            'taskTypes' => TaskType::query()->select('id', 'name', 'prefix')->orderBy('name')->get(),
-            'initialBrandId' => null,
+            'currentUser' => auth()->user(),
         ]);
     })->name('manager.dashboard');
 
 Route::middleware(['auth', 'verified', 'role:Performer'])
     ->get('/performer', function () {
-        return Inertia::render('Performer/Dashboard', [
+        $brands = Brand::query()->orderBy('name')->get(['id','name']);
+        $performers = User::role('Performer')->get(['id','name','is_blocked']);
+        $taskTypes = TaskType::query()->orderBy('name')->get(['id','name','prefix']);
+        return Inertia::render('Dashboard/Dashboard', [
+            'brands' => $brands,
+            'performers' => $performers,
+            'taskTypes' => $taskTypes,
             'tasks' => [],
-            'brands' => Brand::query()->select('id', 'name')->orderBy('name')->get(),
-            'initialBrandId' => null,
+            'currentUser' => auth()->user(),
         ]);
     })->name('performer.dashboard');
 
@@ -140,8 +148,8 @@ Route::middleware(['auth', 'role:Performer'])->group(function () {
     Route::get('/my-tasks/search', [\App\Http\Controllers\Performer\TasksController::class, 'search'])->name('performer.tasks.search');
 });
 
-// Users by role (manager-only)
-Route::middleware(['auth', 'role:Manager|Administrator'])->group(function () {
+// Users by role (manager/admin/performer)
+Route::middleware(['auth', 'role:Manager|Administrator|Performer'])->group(function () {
     // All Tasks (global)
     Route::get('/tasks', [TaskController::class, 'all'])->name('tasks.all');
     Route::post('/tasks', [TaskController::class, 'storeGlobal'])->name('tasks.store');

@@ -32,27 +32,11 @@
     </div>
 
 
-    <div class="page-body mt-0 page-body-no-overflow" id="main-content-area" style="height: 1px; margin-bottom: 52px;">
+    <div class="page-body mt-0 page-body-no-overflow" id="main-content-area" style="height: 1px; margin-bottom: 0px;">
         <div class="container-xl h-100 main-content-container-overflow" id="main-content-container">
             <slot />
 
         </div>
-    </div>
-
-
-    <div class="footer">
-        <div class="pt-2 pe-3 pb-2 ps-3">
-            <div class="d-flex justify-content-between">
-                <div>
-                    <slot name="LeftContent"></slot>
-                </div>
-                <div>
-                    <slot name="RightButtons"></slot>
-                </div>
-            </div>
-
-        </div>
-
     </div>
 </template>
 

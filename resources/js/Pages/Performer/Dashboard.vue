@@ -34,10 +34,10 @@ const perPage = ref(20);
 const hasMore = ref(true);
 const loading = ref(false);
 
-function buildQueryParams(resetPage = false) {
+function buildQueryParams() {
     const params = new URLSearchParams();
     params.set('per_page', String(perPage.value));
-    params.set('page', resetPage ? '1' : String(page.value));
+    params.set('page', String(page.value));
     // Merge articleFilter into search to reduce API complexity
     const q = [search.value, articleFilter.value].filter(Boolean).join(' ').trim();
     if (q) params.set('search', q);
@@ -222,8 +222,14 @@ async function fetchPage(reset = false) {
     if (loading.value) return;
     loading.value = true;
     try {
-        if (reset) { page.value = 1; hasMore.value = true; items.value = []; }
-        const params = buildQueryParams(reset);
+        if (reset) {
+            page.value = 1;
+            hasMore.value = true;
+            items.value = [];
+        } else {
+            page.value++;
+        }
+        const params = buildQueryParams();
         const url = route('performer.tasks.search') + `?${params.toString()}`;
         const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -231,7 +237,6 @@ async function fetchPage(reset = false) {
         const list = Array.isArray(data?.data) ? data.data : [];
         if (reset) items.value = list; else items.value = [...items.value, ...list];
         hasMore.value = Boolean(data?.next_page_url);
-        if (!reset) page.value = page.value + 1;
     } catch (e) { console.error(e); }
     finally { loading.value = false; }
 }
@@ -272,12 +277,13 @@ const setupScrollListener = () => {
 
 // Initialize
 onMounted(async () => {
-    await fetchPage(true);
-    // Set scroll container to the main content area
-    scrollContainer.value = document.querySelector('.main-content') || window;
+    await nextTick();
+    // Use the same global scroll container as Admin: .app-scroll (PerfectScrollbar wrapper)
+    scrollContainer.value = document.querySelector('.app-scroll') || window;
     const cleanupScroll = setupScrollListener();
 
-    // Initial check in case content doesn't fill the viewport
+    // Load first page then check whether more should be loaded immediately
+    await fetchPage(true);
     checkScroll();
 
     // Cleanup
@@ -943,7 +949,7 @@ function formatManagerName(manager) {
                                 <td>{{ t.name || t.article?.name || t.article_name || '' }}</td>
                                 <td>{{ t.brand?.name || '—' }}<br />{{ t.article?.name || t.article_name || t.article ||
                                     '—'
-                                    }}
+                                }}
                                 </td>
                                 <td>{{ formatManagerName(t.creator) || '—' }}</td>
                                 <td>{{ t.type?.name || t.task_type?.name || t.type_name || '—' }}</td>
@@ -976,7 +982,7 @@ function formatManagerName(manager) {
                                 <td>
                                     <span class="badge text-light" :class="priorityClass(t.priority)">{{
                                         priorityLabel(t.priority)
-                                        }}</span>
+                                    }}</span>
                                 </td>
                                 <td class="text-nowrap">
                                     <div class="btn-list d-flex flex-nowrap align-items-center gap-2">
@@ -1010,6 +1016,15 @@ function formatManagerName(manager) {
                                     </div>
                                 </td>
                             </tr>
+                            <!-- Loading indicator -->
+                            <tr v-if="loading && displayedTasks.length">
+                                <td colspan="12" class="text-center py-2 text-secondary">
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                    Загрузка...
+                                </td>
+                            </tr>
+                            <!-- Sentinel -->
+                            <tr ref="infiniteSentinelEl" style="height: 1px; visibility: hidden;"></tr>
                         </tbody>
                     </table>
                 </div>
