@@ -13,7 +13,7 @@ export default {
 <script setup>
 import { onMounted, ref } from 'vue'
 import { Head } from '@inertiajs/vue3'
-import DashByteLayout from '@/Layouts/DashByteLayout.vue';
+import ContentLayout from '@/Layouts/ContentLayout.vue';
 
 const items = ref([])
 const loading = ref(false)
@@ -90,83 +90,80 @@ onMounted(load)
 <template>
 
   <Head title="Типы задач" />
-  <DashByteLayout>
+  <ContentLayout>
 
-    <div class="row row-deck">
-      <div class="col-12">
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Справочник типов задач</div>
-              <div class="card-subtitle">Создание, редактирование и удаление типов задач.</div>
-            </div>
-            <div class="card-actions d-flex flex-wrap">
-              <button class="btn btn-primary" @click="showCreate = true">
-                <i class="ti ti-plus"></i>
-                Новый тип задачи
-              </button>
-            </div>
-          </div>
-
-          <!-- creation moved to modal -->
-
-          <div class="table-responsive">
-            <table class="table table-vcenter">
-              <thead>
-                <tr>
-                  <th class="w-1">#</th>
-                  <th>Наименование</th>
-                  <th>Префикс</th>
-                  <th class="w-1"></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-if="loading">
-                  <td colspan="4" class="text-center text-secondary py-4">Загрузка...</td>
-                </tr>
-                <tr v-else-if="items.length === 0">
-                  <td colspan="4" class="text-center text-secondary py-4">Нет данных</td>
-                </tr>
-                <tr v-for="(it, i) in items" :key="it.id">
-                  <td>{{ i + 1 }}</td>
-                  <td>
-                    <template v-if="editing?.id === it.id">
-                      <input v-model="editName" type="text" class="form-control" @keyup.enter="saveEdit" />
-                      <div class="text-danger small" v-if="errors.name">{{ errors.name }}</div>
-                    </template>
-                    <template v-else>
-                      {{ it.name }}
-                    </template>
-                  </td>
-                  <td>
-                    <template v-if="editing?.id === it.id">
-                      <input v-model="editPrefix" type="text" class="form-control" placeholder="Префикс" />
-                      <div class="text-danger small" v-if="errors.prefix">{{ errors.prefix }}</div>
-                    </template>
-                    <template v-else>
-                      {{ it.prefix || '—' }}
-                    </template>
-                  </td>
-                  <td class="text-end">
-                    <div class="btn-list flex-nowrap">
-                      <template v-if="editing?.id === it.id">
-                        <button class="btn btn-sm btn-primary" @click="saveEdit">Сохранить</button>
-                        <button class="btn btn-sm" @click="cancelEdit">Отмена</button>
-                      </template>
-                      <template v-else>
-                        <button class="btn btn-sm" @click="startEdit(it)">Изменить</button>
-                        <button class="btn btn-sm btn-danger" @click="remove(it)">Удалить</button>
-                      </template>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+    <template #TopButtons>
+      <div class="d-flex w-100">
+        <div class="p-1 flex-fill">
+          <input v-model="search" type="text" class="form-control" autocomplete="off" placeholder="Поиск по названию..."
+            @keyup.enter="onSearch" />
+        </div>
+        <div class="p-1">
+          <button class="btn btn-primary" @click="showCreate = true">
+            <i class="ti ti-plus"></i>
+            Новый тип задачи
+          </button>
         </div>
       </div>
+    </template>
+
+
+    <div class="table-responsive">
+      <table class="table table-vcenter">
+        <thead>
+          <tr>
+            <th class="w-1">#</th>
+            <th>Наименование</th>
+            <th>Префикс</th>
+            <th class="w-1"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="loading">
+            <td colspan="4" class="text-center text-secondary py-4">Загрузка...</td>
+          </tr>
+          <tr v-else-if="items.length === 0">
+            <td colspan="4" class="text-center text-secondary py-4">Нет данных</td>
+          </tr>
+          <tr v-for="(it, i) in items" :key="it.id">
+            <td>{{ i + 1 }}</td>
+            <td>
+              <template v-if="editing?.id === it.id">
+                <input v-model="editName" type="text" class="form-control" @keyup.enter="saveEdit" />
+                <div class="text-danger small" v-if="errors.name">{{ errors.name }}</div>
+              </template>
+              <template v-else>
+                {{ it.name }}
+              </template>
+            </td>
+            <td>
+              <template v-if="editing?.id === it.id">
+                <input v-model="editPrefix" type="text" class="form-control" placeholder="Префикс" />
+                <div class="text-danger small" v-if="errors.prefix">{{ errors.prefix }}</div>
+              </template>
+              <template v-else>
+                {{ it.prefix || '—' }}
+              </template>
+            </td>
+            <td class="text-end">
+              <div class="btn-list flex-nowrap">
+                <template v-if="editing?.id === it.id">
+                  <button class="btn btn-sm btn-primary" @click="saveEdit">Сохранить</button>
+                  <button class="btn btn-sm" @click="cancelEdit">Отмена</button>
+                </template>
+                <template v-else>
+                  <button class="btn btn-sm" @click="startEdit(it)">Изменить</button>
+                  <button class="btn btn-sm btn-danger" @click="remove(it)">Удалить</button>
+                </template>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
-  </DashByteLayout>
+
+
+  </ContentLayout>
 
   <!-- Create Modal -->
   <teleport to="body">

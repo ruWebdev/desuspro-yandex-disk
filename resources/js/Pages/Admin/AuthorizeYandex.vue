@@ -11,7 +11,7 @@ export default {
 </script>
 
 <script setup>
-import DashByteLayout from '@/Layouts/DashByteLayout.vue';
+import ContentLayout from '@/Layouts/ContentLayout.vue';
 import { Head } from '@inertiajs/vue3';
 import { ref, onMounted } from 'vue';
 
@@ -45,7 +45,7 @@ onMounted(checkYandexStatus);
 
     <Head title="Токен Яндекс.Диска" />
 
-    <DashByteLayout>
+    <ContentLayout>
         <div class="page-header d-print-none">
             <div class="container-xl">
                 <div class="row g-2 align-items-center">
@@ -108,7 +108,7 @@ onMounted(checkYandexStatus);
                 </div>
             </div>
         </div>
-    </DashByteLayout>
+    </ContentLayout>
 </template>
 
 <style scoped>

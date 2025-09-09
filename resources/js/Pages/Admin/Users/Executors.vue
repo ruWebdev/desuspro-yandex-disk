@@ -157,63 +157,43 @@ function submitDelete() {
       </div>
     </template>
 
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <div class="card-title">Исполнители</div>
-          <div class="card-subtitle">Создание, редактирование и удаление исполнителей.</div>
-        </div>
-        <div class="card-actions d-flex flex-wrap">
-          <div class="input-group input-group-flat w-auto me-2">
-            <span class="input-group-text"><i class="ti ti-search"></i></span>
-            <input v-model="search" type="text" class="form-control" autocomplete="off"
-              placeholder="Поиск по имени или e-mail..." @keyup.enter="onSearch" />
-          </div>
-          <button class="btn btn-primary" @click="openCreate">
-            <i class="ti ti-plus"></i>
-            Новый исполнитель
-          </button>
-        </div>
-      </div>
-
-      <div class="table-responsive">
-        <table class="table table-vcenter">
-          <thead>
-            <tr>
-              <th>ФИО</th>
-              <th>E-mail</th>
-              <th>Заблокирован</th>
-              <th class="w-1"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="u in props.users" :key="u.id">
-              <td>
-                <div class="fw-bold">{{ u.name }}</div>
-                <div class="text-secondary">
-                  {{ [u.last_name, u.first_name, u.middle_name].filter(Boolean).join(' ') }}
-                </div>
-              </td>
-              <td>{{ u.email }}</td>
-              <td>
-                <span :class="['badge', 'text-light', u.is_blocked ? 'bg-red' : 'bg-green']">{{ u.is_blocked ? 'Да' :
-                  'Нет'
-                  }}</span>
-              </td>
-              <td class="text-end">
-                <div class="btn-list flex-nowrap">
-                  <button class="btn btn-sm" @click="openEdit(u)"><i class="ti ti-edit"></i> Изменить</button>
-                  <button class="btn btn-sm btn-danger" @click="openDelete(u)"><i class="ti ti-trash"></i>
-                    Удалить</button>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="props.users.length === 0">
-              <td colspan="4" class="text-center text-secondary py-5">Нет данных</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+    <div class="table-responsive">
+      <table class="table table-vcenter">
+        <thead>
+          <tr>
+            <th>ФИО</th>
+            <th>E-mail</th>
+            <th>Заблокирован</th>
+            <th class="w-1"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="u in props.users" :key="u.id">
+            <td>
+              <div class="fw-bold">{{ u.name }}</div>
+              <div class="text-secondary">
+                {{ [u.last_name, u.first_name, u.middle_name].filter(Boolean).join(' ') }}
+              </div>
+            </td>
+            <td>{{ u.email }}</td>
+            <td>
+              <span :class="['badge', 'text-light', u.is_blocked ? 'bg-red' : 'bg-green']">{{ u.is_blocked ? 'Да' :
+                'Нет'
+                }}</span>
+            </td>
+            <td class="text-end">
+              <div class="btn-list flex-nowrap">
+                <button class="btn btn-sm" @click="openEdit(u)"><i class="ti ti-edit"></i> Изменить</button>
+                <button class="btn btn-sm btn-danger" @click="openDelete(u)"><i class="ti ti-trash"></i>
+                  Удалить</button>
+              </div>
+            </td>
+          </tr>
+          <tr v-if="props.users.length === 0">
+            <td colspan="4" class="text-center text-secondary py-5">Нет данных</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </ContentLayout>
 
