@@ -252,8 +252,9 @@ function updateBodyScrollClass() {
             <table class="table">
                 <thead>
                     <tr>
-                        <th class="text-center"><input type="checkbox" class="form-check-input"
-                                v-model="selectAllVisible" /></th>
+                        <th v-if="!isPerformer" class="text-center">
+                            <input type="checkbox" class="form-check-input" v-model="selectAllVisible" />
+                        </th>
                         <th class="text-start">Создан</th>
                         <th class="text-start">Наименование задачи</th>
                         <th class="text-start">Бренд, Артикул</th>
@@ -271,7 +272,7 @@ function updateBodyScrollClass() {
                         <td :colspan="isPerformer ? 11 : 12" class="text-center text-secondary py-4">Нет задач</td>
                     </tr>
                     <tr v-for="t in tasks" :key="t.id" style="font-size: 13px !important;">
-                        <td class="text-center" style="vertical-align: middle;">
+                        <td v-if="!isPerformer" class="text-center" style="vertical-align: middle;">
                             <input type="checkbox" class="form-check-input" :checked="isSelected(t.id)"
                                 @change="emit('toggle-row', t.id)" />
                         </td>

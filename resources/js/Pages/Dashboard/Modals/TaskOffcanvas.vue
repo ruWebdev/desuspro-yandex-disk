@@ -21,6 +21,14 @@ const isPerformer = computed(() => {
     );
 });
 
+const isManager = computed(() => {
+    return props.currentUser?.roles?.some(r => 
+        r.name.toLowerCase() === 'manager' || 
+        r.name.toLowerCase() === 'менеджер' ||
+        props.currentUser.is_manager
+    );
+});
+
 // React to parent-controlled visibility
 watch(() => props.show, async (val) => {
     await nextTick();
@@ -570,7 +578,7 @@ async function viewYandexItemInLightbox(item) {
                         </div>
                     </div>
 
-                    <div class="mt-3 d-flex align-items-center gap-2">
+                    <div v-if="!isManager" class="mt-3 d-flex align-items-center gap-2">
                         <input type="file" accept="image/*" multiple ref="fileInputRef" class="d-none"
                             @change="onFilesChosen" />
                         <button class="btn btn-primary" :disabled="uploading" @click="openUploader">
