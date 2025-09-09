@@ -302,6 +302,12 @@ async function loadYandexFiles() {
         const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+
+        // Set the public URL from the API response
+        if (data && data.public_url) {
+            publicFolderUrl.value = data.public_url;
+        }
+
         yandexItems.value = (data && data._embedded && Array.isArray(data._embedded.items)) ? data._embedded.items : [];
     } catch (e) {
         console.error(e);
