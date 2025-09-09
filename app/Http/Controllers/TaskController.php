@@ -33,7 +33,7 @@ class TaskController extends Controller
     public function search(Request $request)
     {
         $q = Task::query()
-            ->with(['brand:id,name','type:id,name,prefix','article:id,name','assignee:id,name'])
+            ->with(['brand:id,name','type:id,name,prefix','article:id,name','assignee:id,name','creator:id,name'])
             ->orderByDesc('created_at');
 
         // Role-based filtering
@@ -120,6 +120,7 @@ class TaskController extends Controller
                 'type:id,name,prefix',
                 'article:id,name',
                 'assignee:id,name',
+                'creator:id,name',
             ])
             ->orderByDesc('created_at');
 
@@ -159,6 +160,7 @@ class TaskController extends Controller
                 'type:id,name,prefix',
                 'article:id,name',
                 'assignee:id,name',
+                'creator:id,name',
             ])
             ->orderByDesc('created_at');
 

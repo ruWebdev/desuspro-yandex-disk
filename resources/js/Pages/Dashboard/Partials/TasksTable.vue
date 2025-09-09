@@ -258,7 +258,7 @@ function updateBodyScrollClass() {
                         <th class="text-start">Наименование задачи</th>
                         <th class="text-start">Бренд, Артикул</th>
                         <th class="text-start">Тип</th>
-                        <th class="text-end">Исполнитель</th>
+                        <th class="text-end">{{ isPerformer ? 'Принимающий' : 'Исполнитель' }}</th>
                         <th class="text-center w-1">Исходник</th>
                         <th class="text-center w-1">Результат</th>
                         <th class="text-start">Статус</th>
@@ -284,10 +284,18 @@ function updateBodyScrollClass() {
                         </td>
                         <td style="vertical-align: middle;">{{ t.type?.name || '' }}</td>
                         <td style="vertical-align: middle;" class="text-end">
-                            <span v-if="t.assignee?.name" class="text-secondary me-2">{{ t.assignee.name }}</span>
-                            <button class="btn btn-sm btn-outline-primary" @click="emit('open-assign', t)">
-                                {{ t.assignee?.name ? 'Изменить' : 'Назначить' }}
-                            </button>
+                            <template v-if="isPerformer">
+                                <span v-if="t.creator" class="text-secondary">
+                                    {{ [t.creator.last_name, t.creator.first_name, t.creator.middle_name].filter(Boolean).join(' ') || t.creator.name || 'Не указан' }}
+                                </span>
+                                <span v-else class="text-muted">Не указан</span>
+                            </template>
+                            <template v-else>
+                                <span v-if="t.assignee?.name" class="text-secondary me-2">{{ t.assignee.name }}</span>
+                                <button class="btn btn-sm btn-outline-primary" @click="emit('open-assign', t)">
+                                    {{ t.assignee?.name ? 'Изменить' : 'Назначить' }}
+                                </button>
+                            </template>
                         </td>
                         <td style="vertical-align: middle;" class="text-center">
                             <div class="d-flex gap-1">
