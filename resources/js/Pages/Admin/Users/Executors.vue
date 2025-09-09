@@ -13,7 +13,7 @@ export default {
 <script setup>
 import { ref, computed } from 'vue'
 import { Head, useForm, router } from '@inertiajs/vue3'
-import DashByteLayout from '@/Layouts/DashByteLayout.vue';
+import ContentLayout from '@/Layouts/ContentLayout.vue';
 
 const props = defineProps({
   users: { type: Array, default: () => [] },
@@ -141,7 +141,21 @@ function submitDelete() {
 <template>
 
   <Head title="Исполнители" />
-  <DashByteLayout>
+  <ContentLayout>
+
+    <template #TopButtons>
+      <div class="d-flex w-100">
+        <div class="p-1 flex-fill">
+          <input v-model="search" type="text" class="form-control" autocomplete="off"
+            placeholder="Поиск по имени или e-mail..." @keyup.enter="onSearch" />
+        </div>
+        <div class="p-1">
+          <button class="btn btn-primary" @click="openCreate">
+            Новый менеджер
+          </button>
+        </div>
+      </div>
+    </template>
 
     <div class="card">
       <div class="card-header">
@@ -201,7 +215,7 @@ function submitDelete() {
         </table>
       </div>
     </div>
-  </DashByteLayout>
+  </ContentLayout>
 
   <!-- Create Modal -->
   <div class="modal modal-blur fade" :class="{ show: showCreate }" :style="showCreate ? 'display: block;' : ''"

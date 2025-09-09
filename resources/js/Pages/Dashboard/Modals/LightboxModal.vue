@@ -32,16 +32,16 @@ const emit = defineEmits(['close']);
 <style>
 /* Ensure lightbox is always above offcanvas/backdrops */
 #lightboxModal {
-    z-index: 3000 !important;
+    z-index: 10003000 !important;
 }
 
 #lightboxModal .modal-dialog,
 #lightboxModal .modal-content {
-    z-index: 3001 !important;
+    z-index: 10003001 !important;
 }
 
 /* Its backdrop should also sit above offcanvas backdrop (Bootstrap offcanvas uses ~1040-1045) */
 .modal-backdrop.show {
-    z-index: 2995 !important;
+    z-index: 10002995 !important;
 }
 </style>
