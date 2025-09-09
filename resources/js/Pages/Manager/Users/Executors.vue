@@ -98,9 +98,13 @@ function openEdit(user) {
   selected.value = user;
   editForm.reset();
   editForm.email = user.email;
-  editForm.last_name = user.last_name;
-  editForm.first_name = user.first_name;
-  editForm.middle_name = user.middle_name;
+
+  // Parse full name into separate fields
+  const nameParts = (user.name || '').split(' ').filter(Boolean);
+  editForm.last_name = nameParts[0] || '';
+  editForm.first_name = nameParts[1] || '';
+  editForm.middle_name = nameParts[2] || '';
+
   editForm.is_blocked = !!user.is_blocked;
   passwordError.value = '';
   const modal = new bootstrap.Modal(document.getElementById('modal-edit-executor'));
@@ -246,7 +250,7 @@ function submitDelete() {
               <td>
                 <span :class="['badge', 'text-light', u.is_blocked ? 'bg-red' : 'bg-green']">{{ u.is_blocked ? 'Да' :
                   'Нет'
-                }}</span>
+                  }}</span>
               </td>
               <td class="text-end">
                 <div class="btn-list flex-nowrap">
