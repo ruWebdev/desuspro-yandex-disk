@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch, nextTick } from 'vue';
+import { ref, onMounted, watch, nextTick, computed } from 'vue';
 import { useToast } from 'vue-toastification';
 import { Offcanvas } from 'bootstrap';
 
@@ -13,10 +13,21 @@ const props = defineProps({
 
 const toast = useToast();
 
+// Role helpers
+const isPerformer = computed(() => {
+    return props.currentUser && (
+        props.currentUser.roles?.some(r => r.name === 'Performer' || r.name === 'performer') ||
+        props.currentUser.is_performer
+    );
+});
+
 // React to parent-controlled visibility
 watch(() => props.show, async (val) => {
     await nextTick();
     if (val) {
+        // Set public folder URL from task
+        publicFolderUrl.value = props.task?.public_link || '';
+
         if (offcanvasInstance) {
             offcanvasInstance.show();
         }
@@ -33,7 +44,14 @@ watch(() => props.show, async (val) => {
     }
 });
 
-const emit = defineEmits(['close', 'update-tab']);
+const emit = defineEmits(['close', 'update-tab', 'open-lightbox']);
+
+// Watch for tab changes to ensure publicFolderUrl is set
+watch(() => props.activeTab, (newTab) => {
+    if (newTab === 'files' && props.task?.public_link && !publicFolderUrl.value) {
+        publicFolderUrl.value = props.task.public_link;
+    }
+});
 
 const offcanvasEl = ref(null);
 let offcanvasInstance = null;
@@ -223,6 +241,10 @@ function getCsrfToken() {
 
 async function copyFolderPath() {
     const text = publicFolderUrl.value;
+    if (!text) {
+        toast.error('URL папки не найден');
+        return;
+    }
     try {
         if (navigator.clipboard?.writeText) {
             await navigator.clipboard.writeText(text);
@@ -234,12 +256,19 @@ async function copyFolderPath() {
             document.execCommand('copy');
             document.body.removeChild(ta);
         }
-    } catch (e) { console.error('Copy failed', e); }
+        toast.success('URL скопирован в буфер обмена');
+    } catch (e) {
+        console.error('Copy failed', e);
+        toast.error('Не удалось скопировать URL');
+    }
 }
 
 function openFolderUrl() {
     const url = publicFolderUrl.value;
-    if (!url) return;
+    if (!url) {
+        toast.error('URL папки не найден');
+        return;
+    }
     window.open(url, '_blank');
 }
 
@@ -343,26 +372,87 @@ function isImageName(name) {
     return /\.(jpe?g|png|gif|webp|bmp|svg|heic|heif)$/i.test(name || '');
 }
 
+// Prefer best preview URL from item.sizes, then preview/file
+function getBestSizeUrl(item) {
+    const sizes = Array.isArray(item?.sizes) ? item.sizes : [];
+    if (sizes.length) {
+        const pref = ['ORIGINAL', 'XXXL', 'XXL', 'XL', 'L', 'M', 'DEFAULT'];
+        for (const name of pref) {
+            const found = sizes.find(s => s?.name === name && s?.url);
+            if (found?.url) return found.url;
+        }
+        if (sizes[0]?.url) return sizes[0].url;
+    }
+    if (item?.preview) return item.preview;
+    if (item?.file) return item.file;
+    return null;
+}
+
 async function viewYandexItemInLightbox(item) {
     if (!item || item.type !== 'file') return;
-    if (!isImageName(item.name)) {
-        return downloadYandexItem(item);
-    }
-    let reqPath = item.path;
-    if (!reqPath) {
-        const folder = yandexFolderPath();
-        if (!folder) return;
-        reqPath = `${folder}/${item.name}`;
-    }
-    const url = route('integrations.yandex.download_url') + `?path=${encodeURIComponent(reqPath)}`;
+    // Try resolver-based approach first
     try {
-        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (data && data.href) {
-            emit('open-lightbox', data.href);
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+        const res = await fetch(route('integrations.yandex.resolve_from_item'), {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
+            },
+            body: JSON.stringify({ item })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            const href = data?.href;
+            if (href) {
+                // Pipe via temp public download for safe inline viewing and cleanup
+                const tempRes = await fetch(route('integrations.yandex.download_public_to_temp'), {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
+                    },
+                    body: JSON.stringify({ direct_url: href })
+                });
+                if (tempRes.ok) {
+                    const temp = await tempRes.json();
+                    if (temp?.url) { emit('open-lightbox', temp.url, { id: temp.id, path: temp.path }); return; }
+                }
+                emit('open-lightbox', href);
+                return;
+            }
         }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.warn('resolve_from_item failed, trying direct URL', e);
+    }
+
+    // Fallback: try direct sizes URL
+    const direct = getBestSizeUrl(item);
+    if (direct) {
+        try {
+            const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+            const tempRes = await fetch(route('integrations.yandex.download_public_to_temp'), {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
+                },
+                body: JSON.stringify({ direct_url: direct })
+            });
+            if (tempRes.ok) {
+                const temp = await tempRes.json();
+                if (temp?.url) { emit('open-lightbox', temp.url, { id: temp.id, path: temp.path }); return; }
+            }
+        } catch { }
+        emit('open-lightbox', direct);
+        return;
+    }
+
+    // Final fallback: backend public download url flow for non-image or unknown types
+    return downloadYandexItem(item);
 }
 </script>
 
@@ -423,9 +513,13 @@ async function viewYandexItemInLightbox(item) {
                                         <span v-if="it.size && it.type === 'file'" class="text-secondary small">{{
                                             (it.size / 1024 / 1024).toFixed(2) }} MB</span>
                                     </div>
-                                    <div>
+                                    <div class="d-flex gap-2">
                                         <button v-if="it.type === 'file'" class="btn btn-sm btn-outline-primary"
                                             @click="() => viewYandexItemInLightbox(it)">ПОСМОТРЕТЬ</button>
+                                        <button v-if="it.type === 'file' && isPerformer"
+                                            class="btn btn-sm btn-outline-danger"
+                                            :disabled="props.task?.status === 'accepted'"
+                                            @click="() => deleteYandexItem(it)">УДАЛИТЬ</button>
                                     </div>
                                 </li>
                             </ul>

@@ -500,8 +500,37 @@ function handleSourceFilesUpdated(data) {
 const showLightbox = ref(false);
 const lightboxSrc = ref('');
 const lightboxType = ref('image');
-function openLightbox(url) { lightboxType.value = 'image'; lightboxSrc.value = url; showLightbox.value = true; }
-function closeLightbox() { showLightbox.value = false; setTimeout(() => { lightboxSrc.value = ''; lightboxType.value = 'image'; }, 150); }
+const lightboxMeta = ref(null); // { id, path } for temp cleanup
+function openLightbox(url, meta = null) {
+    lightboxType.value = 'image';
+    lightboxSrc.value = url;
+    lightboxMeta.value = meta || null;
+    showLightbox.value = true;
+}
+function closeLightbox() {
+    showLightbox.value = false;
+    const meta = lightboxMeta.value;
+    lightboxMeta.value = null;
+    setTimeout(() => {
+        lightboxSrc.value = '';
+        lightboxType.value = 'image';
+    }, 150);
+    // Cleanup temp file if meta present
+    try {
+        if (meta?.path || meta?.id) {
+            const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+            fetch(route('integrations.yandex.delete_temp'), {
+                method: 'DELETE',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
+                },
+                body: JSON.stringify({ path: meta.path, id: meta.id })
+            });
+        }
+    } catch (e) { console.warn('Temp cleanup failed', e); }
+}
 
 </script>
 
@@ -539,7 +568,8 @@ function closeLightbox() { showLightbox.value = false; setTimeout(() => { lightb
                                     <select class="form-select form-select-sm w-auto"
                                         @change="(e) => bulkUpdateStatus(e.target.value)">
                                         <option value="" selected disabled>Выбрать…</option>
-                                        <option v-for="s in userStatusOptions" :key="s.value" :value="s.value">{{ s.label }}
+                                        <option v-for="s in userStatusOptions" :key="s.value" :value="s.value">{{
+                                            s.label }}
                                         </option>
                                     </select>
                                 </div>
@@ -549,7 +579,7 @@ function closeLightbox() { showLightbox.value = false; setTimeout(() => { lightb
                                         @change="(e) => bulkUpdatePriority(e.target.value)">
                                         <option value="" selected disabled>Выбрать…</option>
                                         <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{ p.label
-                                            }}
+                                        }}
                                         </option>
                                     </select>
                                 </div>
@@ -564,7 +594,7 @@ function closeLightbox() { showLightbox.value = false; setTimeout(() => { lightb
                 </div>
 
                 <TasksTable :tasks="displayedTasks" :brands="brands" :selectedIds="selectedIds"
-                    :statusOptions="statusOptions" :priorityOptions="priorityOptions" :loading="loading"
+                    :statusOptions="userStatusOptions" :priorityOptions="priorityOptions" :loading="loading"
                     :currentUser="currentUser" :hideScroll="true" @toggle-row="toggleRow" @select-all="onSelectAll"
                     @update-status="onUpdateStatus" @update-priority="updateTaskPriority" @open-assign="openAssign"
                     @open-source-comments="openSourceCommentsOffcanvas" @open-source-files="openSourceFilesOffcanvas"

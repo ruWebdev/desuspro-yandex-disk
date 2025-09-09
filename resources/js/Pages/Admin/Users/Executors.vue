@@ -1,3 +1,15 @@
+<script>
+
+// Импорт разметки для проекта
+import MainLayout from '@/Layouts/MainLayout.vue';
+import axios from 'axios';
+
+export default {
+  layout: MainLayout
+};
+
+</script>
+
 <script setup>
 import { ref, computed } from 'vue'
 import { Head, useForm, router } from '@inertiajs/vue3'
@@ -172,7 +184,7 @@ function submitDelete() {
               <td>
                 <span :class="['badge', 'text-light', u.is_blocked ? 'bg-red' : 'bg-green']">{{ u.is_blocked ? 'Да' :
                   'Нет'
-                }}</span>
+                  }}</span>
               </td>
               <td class="text-end">
                 <div class="btn-list flex-nowrap">

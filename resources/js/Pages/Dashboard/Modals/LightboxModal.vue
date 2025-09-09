@@ -30,16 +30,18 @@ const emit = defineEmits(['close']);
 </template>
 
 <style>
- /* Ensure lightbox is always above offcanvas/backdrops */
- #lightboxModal {
-   z-index: 2000 !important;
- }
- #lightboxModal .modal-dialog,
- #lightboxModal .modal-content {
-   z-index: 2001 !important;
- }
- /* Its backdrop should also sit above offcanvas backdrop (Bootstrap offcanvas uses ~1040-1045) */
- .modal-backdrop.show {
-   z-index: 1995 !important;
- }
+/* Ensure lightbox is always above offcanvas/backdrops */
+#lightboxModal {
+    z-index: 3000 !important;
+}
+
+#lightboxModal .modal-dialog,
+#lightboxModal .modal-content {
+    z-index: 3001 !important;
+}
+
+/* Its backdrop should also sit above offcanvas backdrop (Bootstrap offcanvas uses ~1040-1045) */
+.modal-backdrop.show {
+    z-index: 2995 !important;
+}
 </style>

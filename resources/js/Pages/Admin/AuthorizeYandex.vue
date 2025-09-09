@@ -1,3 +1,15 @@
+<script>
+
+// Импорт разметки для проекта
+import MainLayout from '@/Layouts/MainLayout.vue';
+import axios from 'axios';
+
+export default {
+    layout: MainLayout
+};
+
+</script>
+
 <script setup>
 import DashByteLayout from '@/Layouts/DashByteLayout.vue';
 import { Head } from '@inertiajs/vue3';
