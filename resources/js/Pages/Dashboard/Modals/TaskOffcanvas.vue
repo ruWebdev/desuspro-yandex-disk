@@ -335,6 +335,44 @@ async function downloadYandexItem(item) {
     } catch (e) { console.error(e); }
 }
 
+// Delete a single file from Yandex.Disk
+async function deleteYandexItem(item) {
+    if (!item || item.type !== 'file') return;
+    try {
+        // Confirm deletion
+        if (!confirm(`Удалить файл «${item.name}» из Яндекс.Диска?`)) return;
+
+        // Determine path
+        let reqPath = item.path;
+        if (!reqPath) {
+            const folder = yandexFolderPath();
+            if (!folder) return;
+            reqPath = `${folder}/${item.name}`;
+        }
+
+        const res = await fetch(route('integrations.yandex.delete'), {
+            method: 'DELETE',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            },
+            body: JSON.stringify({ path: reqPath, permanently: false })
+        });
+
+        if (!res.ok) {
+            const txt = await res.text().catch(() => '');
+            throw new Error(`Ошибка удаления (${res.status}): ${txt}`);
+        }
+
+        toast.success('Файл удалён');
+        await loadYandexFiles();
+    } catch (e) {
+        console.error('deleteYandexItem failed', e);
+        toast.error('Не удалось удалить файл. Попробуйте ещё раз.');
+    }
+}
+
 function openUploader() {
     uploadError.value = '';
     if (fileInputRef.value) fileInputRef.value.value = null;

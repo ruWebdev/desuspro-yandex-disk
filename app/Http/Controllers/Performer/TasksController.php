@@ -81,12 +81,18 @@ class TasksController extends Controller
                 $q->where('priority', $priority);
             }
         }
-        if ($request->filled('search')) {
-            $s = trim((string)$request->query('search'));
+        // Handle both 'search' and 'global_search' parameters
+        $searchTerm = $request->filled('global_search') 
+            ? $request->query('global_search') 
+            : ($request->filled('search') ? $request->query('search') : null);
+            
+        if ($searchTerm) {
+            $s = trim((string)$searchTerm);
             $q->where(function($qq) use ($s) {
                 $qq->where('name', 'like', "%{$s}%")
                    ->orWhereHas('brand', fn($bq) => $bq->where('name', 'like', "%{$s}%"))
-                   ->orWhere('comment', 'like', "%{$s}%");
+                   ->orWhere('comment', 'like', "%{$s}%")
+                   ->orWhereHas('article', fn($aq) => $aq->where('name', 'like', "%{$s}%"));
             });
         }
         // Created date
