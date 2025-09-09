@@ -220,7 +220,7 @@ function submitDelete() {
         </div>
         <div class="p-1">
           <button class="btn btn-primary" @click="openCreate">
-            Новый менеджер
+            Новый исполнитель
           </button>
         </div>
       </div>
@@ -246,7 +246,7 @@ function submitDelete() {
               <td>
                 <span :class="['badge', 'text-light', u.is_blocked ? 'bg-red' : 'bg-green']">{{ u.is_blocked ? 'Да' :
                   'Нет'
-                  }}</span>
+                }}</span>
               </td>
               <td class="text-end">
                 <div class="btn-list flex-nowrap">
