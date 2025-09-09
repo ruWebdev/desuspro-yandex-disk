@@ -269,7 +269,7 @@ function updateBodyScrollClass() {
                 </thead>
                 <tbody>
                     <tr v-if="tasks.length === 0">
-                        <td :colspan="isPerformer ? 11 : 12" class="text-center text-secondary py-4">Нет задач</td>
+                        <td :colspan="isPerformer ? 10 : 11" class="text-center text-secondary py-4">Нет задач</td>
                     </tr>
                     <tr v-for="t in tasks" :key="t.id" style="font-size: 13px !important;">
                         <td v-if="!isPerformer" class="text-center" style="vertical-align: middle;">
@@ -458,7 +458,7 @@ function updateBodyScrollClass() {
                         </td>
                     </tr>
                     <tr v-if="loading && tasks.length">
-                        <td :colspan="isPerformer ? 11 : 12" class="text-center py-2 text-secondary">
+                        <td :colspan="isPerformer ? 10 : 11" class="text-center py-2 text-secondary">
                             <span class="spinner-border spinner-border-sm me-2" role="status"></span>
                             Загрузка...
                         </td>

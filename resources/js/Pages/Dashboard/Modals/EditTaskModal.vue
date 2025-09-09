@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue';
+import { useToast } from 'vue-toastification';
 import axios from 'axios';
 
 const props = defineProps({
@@ -119,8 +120,29 @@ function close() {
     emit('close');
 }
 
+const toast = useToast();
+
 async function submitEdit() {
     if (!props.editingTask) return;
+
+    // Validate required fields first
+    if (!editForm.value.brand_id || !editForm.value.task_type_id) {
+        toast.error('Пожалуйста, заполните все обязательные поля: бренд и тип задачи.');
+        return;
+    }
+
+    // Validate article selection - must be selected from dropdown
+    if (!editForm.value.article_id) {
+        toast.error('Пожалуйста, выберите артикул из списка. Ручной ввод не допускается.');
+        return;
+    }
+
+    const selected = editBrandArticles.value.find(a => a.id == editForm.value.article_id);
+    if (!selected) {
+        toast.error('Пожалуйста, выберите артикул из списка. Ручной ввод не допускается.');
+        return;
+    }
+
     const payload = {
         brand_id: editForm.value.brand_id ? Number(editForm.value.brand_id) : null,
         task_type_id: editForm.value.task_type_id ? Number(editForm.value.task_type_id) : null,
@@ -138,7 +160,7 @@ async function submitEdit() {
             })()
             : { source_files: [] })
     };
-    if (!payload.brand_id || !payload.task_type_id || !payload.article_id) return;
+
     editing.value = true;
     try {
         await axios.put(route('brands.tasks.update', { brand: props.editingTask.brand_id, task: props.editingTask.id }), payload);
@@ -146,6 +168,7 @@ async function submitEdit() {
         close();
     } catch (error) {
         console.error('Error updating task:', error);
+        toast.error('Произошла ошибка при сохранении задачи.');
     } finally {
         editing.value = false;
     }
@@ -153,6 +176,14 @@ async function submitEdit() {
 
 function onEditArticleSearchInput() {
     showEditArticleDropdown.value = true;
+    // Clear article_id if user is typing manually (not selecting from dropdown)
+    const currentSearch = editArticleSearch.value.trim();
+    const matchingArticle = editBrandArticles.value.find(a =>
+        a.name.toLowerCase() === currentSearch.toLowerCase()
+    );
+    if (!matchingArticle) {
+        editForm.value.article_id = '';
+    }
 }
 
 function hideEditDropdown() {
@@ -160,7 +191,7 @@ function hideEditDropdown() {
 }
 
 function selectEditArticle(article) {
-    editForm.value.article_id = article.id;
+    editForm.value.article_id = String(article.id);
     editArticleSearch.value = article.name;
     showEditArticleDropdown.value = false;
 }
