@@ -594,7 +594,7 @@ function closeLightbox() {
                 </div>
 
                 <TasksTable :tasks="displayedTasks" :brands="brands" :selectedIds="selectedIds"
-                    :statusOptions="userStatusOptions" :priorityOptions="priorityOptions" :loading="loading"
+                    :statusOptions="statusOptions" :priorityOptions="priorityOptions" :loading="loading"
                     :currentUser="currentUser" :hideScroll="true" @toggle-row="toggleRow" @select-all="onSelectAll"
                     @update-status="onUpdateStatus" @update-priority="updateTaskPriority" @open-assign="openAssign"
                     @open-source-comments="openSourceCommentsOffcanvas" @open-source-files="openSourceFilesOffcanvas"

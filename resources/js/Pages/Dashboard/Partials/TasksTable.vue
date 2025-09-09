@@ -388,10 +388,17 @@ function updateBodyScrollClass() {
                         </td>
                         <td style="vertical-align: middle;">
                             <div class="d-flex align-items-center gap-2">
-                                <select class="form-select form-select-sm w-auto" :value="t.status"
-                                    @change="(e) => emit('update-status', t, e.target.value)">
+                                <select class="form-select form-select-sm w-auto" :value="t.status" @change="(e) => {
+                                    if (isAllowedStatusValue(e.target.value)) {
+                                        emit('update-status', t, e.target.value);
+                                    } else {
+                                        e.target.value = t.status; // Reset to current value if not allowed
+                                    }
+                                }">
                                     <option v-for="s in statusOptions" :key="s.value" :value="s.value"
-                                        :disabled="!isAllowedStatusValue(s.value)">{{ s.label }}
+                                        :disabled="!isAllowedStatusValue(s.value)">
+                                        {{ s.label }}
+                                        {{ !isAllowedStatusValue(s.value) ? '' : '' }}
                                     </option>
                                 </select>
                             </div>
