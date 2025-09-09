@@ -281,7 +281,7 @@ class TaskController extends Controller
     public function update(Request $request, Brand $brand, Task $task)
     {
         abort_unless($task->brand_id === $brand->id, 404);
-        
+
         // Normalize known legacy/alias statuses before validation
         if ($request->has('status')) {
             $normalized = $this->normalizeStatus($request->string('status'));
@@ -289,7 +289,7 @@ class TaskController extends Controller
                 $request->merge(['status' => $normalized]);
             }
         }
-        
+
         $data = $request->validate([
             'name' => ['sometimes','required','string','max:255'],
             // Must match DB enum and frontend usage
@@ -306,10 +306,15 @@ class TaskController extends Controller
             'source_files' => ['sometimes','array'],
             'source_files.*' => ['nullable','string','max:2048'],
         ]);
-        
+
         // Store old status for event if needed
         $oldStatus = $task->status;
-        
+
+        // If assignee_id is being set and status is not explicitly provided, set status to 'assigned'
+        if (array_key_exists('assignee_id', $data) && $data['assignee_id'] && !array_key_exists('status', $data)) {
+            $data['status'] = 'assigned';
+        }
+
         // Update the task
         $task->fill($data);
         // If brand_id was provided, persist it explicitly (fill already covers it, but this clarifies intent)
@@ -328,7 +333,7 @@ class TaskController extends Controller
             $task->source_files = $data['source_files'];
         }
         $task->save();
-        
+
         // Return JSON response for API requests, Inertia response for web
         if ($request->wantsJson()) {
             return response()->json([
@@ -337,7 +342,7 @@ class TaskController extends Controller
                 'task' => $task->fresh()
             ]);
         }
-        
+
         // For Inertia requests, return a redirect with the task data
         return back()->with([
             'status' => 'task-updated',

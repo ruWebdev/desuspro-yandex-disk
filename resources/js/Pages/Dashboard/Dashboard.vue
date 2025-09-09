@@ -398,7 +398,7 @@ async function submitBulkAssign(uid) {
     await router.put(route('tasks.bulk_update'), { ids, assignee_id: uid }, {
         preserveScroll: true,
         onSuccess: () => {
-            ids.forEach(id => { const i = items.value.findIndex(t => t.id === id); if (i !== -1) { const perf = props.performers.find(p => p.id === uid); items.value.splice(i, 1, { ...items.value[i], assignee_id: uid, assignee: perf || null }); } });
+            ids.forEach(id => { const i = items.value.findIndex(t => t.id === id); if (i !== -1) { const perf = props.performers.find(p => p.id === uid); items.value.splice(i, 1, { ...items.value[i], assignee_id: uid, assignee: perf || null, status: 'assigned' }); } });
             toast.success(`Назначено ${ids.length} задач`, { position: 'top-right', timeout: 3000 });
             clearSelection(); closeBulkAssign();
         },
@@ -560,7 +560,8 @@ function closeLightbox() {
                                 <div class="me-3">
                                     <i class="ti ti-selector me-1"></i> Выбрано: {{ selectedIds.length }}
                                 </div>
-                                <button class="btn btn-sm btn-outline-primary" @click="openBulkAssign">
+                                <button class="btn btn-sm btn-outline-primary" @click="openBulkAssign"
+                                    v-if="!isPerformer">
                                     <i class="ti ti-user-plus me-1"></i> Добавить исполнителя
                                 </button>
                                 <div class="d-flex align-items-center gap-1">
@@ -573,13 +574,13 @@ function closeLightbox() {
                                         </option>
                                     </select>
                                 </div>
-                                <div class="d-flex align-items-center gap-1">
+                                <div class="d-flex align-items-center gap-1" v-if="!isPerformer">
                                     <span class="text-secondary small">Приоритет:</span>
                                     <select class="form-select form-select-sm w-auto"
                                         @change="(e) => bulkUpdatePriority(e.target.value)">
                                         <option value="" selected disabled>Выбрать…</option>
                                         <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{ p.label
-                                        }}
+                                            }}
                                         </option>
                                     </select>
                                 </div>
