@@ -45,7 +45,7 @@ watch(() => props.show, async (val) => {
     }
 });
 
-const emit = defineEmits(['close', 'source-files-updated', 'openLightbox']);
+const emit = defineEmits(['close', 'source-files-updated', 'open-lightbox']);
 
 const isPerformer = computed(() => {
     return props.currentUser && (
@@ -124,13 +124,58 @@ function removeSourceFilesField(idx) {
     sourceFiles.value.splice(idx, 1);
 }
 
+// Prevent duplicate entries and values equal to task.public_link
+watch(() => sourceFiles.value, (arr) => {
+    try {
+        if (!Array.isArray(arr)) return;
+        const normalized = arr.map(v => (v ?? '').toString().trim());
+        const seen = new Set();
+        const taskPublicLink = (props.task?.public_link ?? '').toString().trim();
+
+        normalized.forEach((val, idx) => {
+            if (!val) return; // allow empty
+
+            // Disallow equality to task public_link
+            if (taskPublicLink && val === taskPublicLink) {
+                sourceFiles.value[idx] = '';
+                toast.warning('Значение не может совпадать с публичной ссылкой задачи');
+                return;
+            }
+
+            // Disallow duplicates across fields
+            if (seen.has(val)) {
+                sourceFiles.value[idx] = '';
+                toast.warning('Дубликаты значений в "Файл(ы) исходника" недопустимы');
+            } else {
+                seen.add(val);
+            }
+        });
+    } catch (e) { console.error(e); }
+}, { deep: true });
+
 async function saveSourceFiles() {
     if (!sourceOc.value.taskId) return;
 
+    // Normalize and validate values
+    const normalized = (Array.isArray(sourceFiles.value) ? sourceFiles.value : [])
+        .map(v => (v ?? '').toString().trim());
+    const taskPublicLink = (props.task?.public_link ?? '').toString().trim();
+    const seen = new Set();
+    for (const val of normalized) {
+        if (!val) continue;
+        if (taskPublicLink && val === taskPublicLink) {
+            toast.error('Значение не может совпадать с публичной ссылкой задачи');
+            return;
+        }
+        if (seen.has(val)) {
+            toast.error('Дубликаты значений в "Файл(ы) исходника" недопустимы');
+            return;
+        }
+        seen.add(val);
+    }
+
     // Only send non-empty trimmed strings
-    const files = (Array.isArray(sourceFiles.value) ? sourceFiles.value : [])
-        .map(v => (v ?? '').toString().trim())
-        .filter(v => v.length > 0);
+    const files = normalized.filter(v => v.length > 0);
 
     const payload = { source_files: files };
 
