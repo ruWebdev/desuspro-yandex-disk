@@ -45,7 +45,7 @@ watch(() => props.show, async (val) => {
     }
 });
 
-const emit = defineEmits(['close', 'source-files-updated']);
+const emit = defineEmits(['close', 'source-files-updated', 'openLightbox']);
 
 const isPerformer = computed(() => {
     return props.currentUser && (

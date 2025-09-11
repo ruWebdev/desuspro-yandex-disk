@@ -1,5 +1,5 @@
 import axios from 'axios';
 
-// Make axios available globally
+// Сделать axios доступным глобально
 window.axios = axios;
 window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';

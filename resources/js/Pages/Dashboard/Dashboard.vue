@@ -13,11 +13,11 @@ import { Head, useForm, router } from '@inertiajs/vue3';
 import { useToast } from 'vue-toastification';
 import ContentLayout from '@/Layouts/ContentLayout.vue';
 
-// Partials
+// Части
 import Filters from '@/Pages/Dashboard/Partials/Filters.vue';
 import TasksTable from '@/Pages/Dashboard/Partials/TasksTable.vue';
 
-// Modals / Offcanvas
+// Модалы / Offcanvas
 import DeleteTaskModal from '@/Pages/Dashboard/Modals/DeleteTaskModal.vue';
 import CreateTaskModal from '@/Pages/Dashboard/Modals/CreateTaskModal.vue';
 import AssignPerformerModal from '@/Pages/Dashboard/Modals/AssignPerformerModal.vue';
@@ -38,7 +38,7 @@ const props = defineProps({
     currentUser: { type: Object, default: null },
 });
 
-// Role helpers
+// Помощники ролей
 const isAdmin = computed(() => {
     const u = props.currentUser; if (!u) return false;
     return (u.roles?.some(r => r.name === 'Administrator' || r.name === 'admin') || u.is_admin) === true;
@@ -58,7 +58,7 @@ function getCsrfToken() {
     return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 }
 
-// Filters
+// Фильтры
 const search = ref('');
 const globalSearch = ref('');
 const brandFilter = ref('');
@@ -71,14 +71,14 @@ const createdFilter = ref('');
 const createdDate = ref('');
 if (props.initialBrandId) brandFilter.value = String(props.initialBrandId);
 
-// Server-side list state
+// Состояние списка на стороне сервера
 const items = ref([]);
 const page = ref(1);
 const perPage = ref(20);
 const hasMore = ref(true);
 const loading = ref(false);
 
-// Reset filters
+// Сбросить фильтры
 function resetFilters() {
     search.value = '';
     globalSearch.value = '';
@@ -258,10 +258,10 @@ function updateTaskStatus(task, status) {
         onSuccess: () => {
             const i = items.value.findIndex(t => t.id === task.id);
             if (i !== -1) items.value[i].status = status;
-            toast.success('Статус задачи обновлен', { position: 'top-right', timeout: 2500 });
+            toast.success('Статус задачи обновлен', { timeout: 2500 });
         },
         onError: () => {
-            toast.error('Не удалось обновить статус задачи', { position: 'top-right', timeout: 2500 });
+            toast.error('Не удалось обновить статус задачи', { timeout: 2500 });
         }
     });
 }
@@ -321,10 +321,10 @@ function updateTaskPriority(task, priority) {
         onSuccess: () => {
             const i = items.value.findIndex(t => t.id === task.id);
             if (i !== -1) items.value[i].priority = priority;
-            toast.success('Приоритет задачи обновлен', { position: 'top-right', timeout: 2500 });
+            toast.success('Приоритет задачи обновлен', { position: 'bottom-right', timeout: 2500 });
         },
         onError: () => {
-            toast.error('Не удалось обновить приоритет задачи', { position: 'top-right', timeout: 2500 });
+            toast.error('Не удалось обновить приоритет задачи', { position: 'bottom-right', timeout: 2500 });
         }
     });
 }
@@ -382,7 +382,7 @@ async function submitAssign(uid) {
         },
         onError: () => {
             const t = items.value.find(t => t.id === id); if (t) openAssign(t);
-            toast.error('Не удалось обновить исполнителя', { position: 'top-right', timeout: 3000 });
+            toast.error('Не удалось обновить исполнителя', { position: 'bottom-right', timeout: 3000 });
         }
     });
 }
@@ -399,10 +399,10 @@ async function submitBulkAssign(uid) {
         preserveScroll: true,
         onSuccess: () => {
             ids.forEach(id => { const i = items.value.findIndex(t => t.id === id); if (i !== -1) { const perf = props.performers.find(p => p.id === uid); items.value.splice(i, 1, { ...items.value[i], assignee_id: uid, assignee: perf || null, status: 'assigned' }); } });
-            toast.success(`Назначено ${ids.length} задач`, { position: 'top-right', timeout: 3000 });
+            toast.success(`Назначено ${ids.length} задач`, { position: 'bottom-right', timeout: 3000 });
             clearSelection(); closeBulkAssign();
         },
-        onError: () => { toast.error('Не удалось назначить задачи', { position: 'top-right', timeout: 3000 }); }
+        onError: () => { toast.error('Не удалось назначить задачи', { position: 'bottom-right', timeout: 3000 }); }
     });
 }
 
@@ -423,16 +423,16 @@ async function bulkUpdateStatusProceed(value) {
     const ids = [...selectedIds.value];
     await router.put(route('tasks.bulk_update'), { ids, status: value }, {
         preserveScroll: true,
-        onSuccess: () => { ids.forEach(id => { const i = items.value.findIndex(t => t.id === id); if (i !== -1) items.value[i].status = value; }); clearSelection(); toast.success('Статусы обновлены', { position: 'top-right', timeout: 2500 }); },
-        onError: () => { toast.error('Не удалось обновить статусы', { position: 'top-right', timeout: 2500 }); }
+        onSuccess: () => { ids.forEach(id => { const i = items.value.findIndex(t => t.id === id); if (i !== -1) items.value[i].status = value; }); clearSelection(); toast.success('Статусы обновлены', { position: 'bottom-right', timeout: 2500 }); },
+        onError: () => { toast.error('Не удалось обновить статусы', { position: 'bottom-right', timeout: 2500 }); }
     });
 }
 async function bulkUpdatePriority(value) {
     if (!value) return; const ids = [...selectedIds.value];
     await router.put(route('tasks.bulk_update'), { ids, priority: value }, {
         preserveScroll: true,
-        onSuccess: () => { ids.forEach(id => { const i = items.value.findIndex(t => t.id === id); if (i !== -1) items.value[i].priority = value; }); clearSelection(); toast.success('Приоритеты обновлены', { position: 'top-right', timeout: 2500 }); },
-        onError: () => { toast.error('Не удалось обновить приоритеты', { position: 'top-right', timeout: 2500 }); }
+        onSuccess: () => { ids.forEach(id => { const i = items.value.findIndex(t => t.id === id); if (i !== -1) items.value[i].priority = value; }); clearSelection(); toast.success('Приоритеты обновлены', { position: 'bottom-right', timeout: 2500 }); },
+        onError: () => { toast.error('Не удалось обновить приоритеты', { position: 'bottom-right', timeout: 2500 }); }
     });
 }
 
@@ -632,3 +632,9 @@ function closeLightbox() {
         <QuestionModal :show="showQuestion" @close="() => showQuestion = false" @submit="submitQuestion" />
     </ContentLayout>
 </template>
+
+<style>
+.Vue-Toastification__container {
+    z-index: 999999999 !important;
+}
+</style>

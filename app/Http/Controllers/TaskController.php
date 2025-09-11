@@ -24,11 +24,11 @@ class TaskController extends Controller
 {
     public function __construct(private readonly YandexDiskService $disk)
     {
-        // Ensure routes using this controller require auth in routes if needed.
+        // Убедиться, что маршруты, использующие этот контроллер, требуют аутентификации в маршрутах, если необходимо.
     }
 
     /**
-     * JSON search endpoint for manager: server-side filters + pagination (default 20 per page).
+     * Конечная точка поиска JSON для менеджера: фильтры на стороне сервера + пагинация (по умолчанию 20 на страницу).
      */
     public function search(Request $request)
     {
@@ -36,11 +36,11 @@ class TaskController extends Controller
             ->with(['brand:id,name','type:id,name,prefix','article:id,name','assignee:id,name','creator:id,name'])
             ->orderByDesc('created_at');
 
-        // Role-based filtering
+        // Фильтрация на основе ролей
         $user = $request->user();
         if ($user && method_exists($user, 'hasRole')) {
             if ($user->hasRole('Administrator') || $user->hasRole('admin')) {
-                // Administrator sees all tasks (no filter)
+                // Администратор видит все задачи (без фильтра)
             } elseif ($user->hasRole('Manager') || $user->hasRole('manager')) {
                 $q->where('created_by', $user->id);
             } elseif ($user->hasRole('Performer') || $user->hasRole('performer')) {
@@ -48,7 +48,7 @@ class TaskController extends Controller
             }
         }
 
-        // Filters
+        // Фильтры
         if ($request->filled('brand_id')) $q->where('brand_id', (int)$request->query('brand_id'));
         if ($request->filled('article_id')) $q->where('article_id', (int)$request->query('article_id'));
         if ($request->filled('assignee_id')) $q->where('assignee_id', (int)$request->query('assignee_id'));
@@ -64,7 +64,7 @@ class TaskController extends Controller
             $q->where('status', $status);
         }
 
-        // Name search
+        // Поиск по имени
         if ($request->filled('search')) {
             $name = trim((string)$request->query('search'));
             $q->where(function($qq) use ($name) {

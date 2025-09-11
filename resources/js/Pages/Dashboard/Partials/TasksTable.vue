@@ -350,7 +350,7 @@ function updateBodyScrollClass() {
                                 <button class="btn btn-icon btn-ghost-primary" @click="openSourceFileLink(t)"
                                     :disabled="!t.source_files || !t.source_files.length || !t.source_files[0]"
                                     :class="{ 'opacity-50': !t.source_files || !t.source_files.length || !t.source_files[0] }"
-                                    v-tooltip="'Открыть исходный файл в новом окне'" type="button">
+                                    type="button">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
                                         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                         stroke-linejoin="round"
@@ -390,7 +390,7 @@ function updateBodyScrollClass() {
                                     </svg>
                                 </button>
                                 <button class="btn btn-icon btn-ghost-primary" @click="emit('copy-link', t)"
-                                    v-tooltip="'Копировать ссылку'" type="button">
+                                    type="button">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
                                         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                         stroke-linejoin="round"
@@ -403,7 +403,7 @@ function updateBodyScrollClass() {
                                     </svg>
                                 </button>
                                 <button class="btn btn-icon btn-ghost-primary" @click="emit('open-link', t)"
-                                    v-tooltip="'Открыть ссылку'" type="button">
+                                    type="button">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
                                         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                         stroke-linejoin="round"
@@ -449,7 +449,7 @@ function updateBodyScrollClass() {
                         <td v-if="!isPerformer" style="vertical-align: middle;">
                             <div class="d-flex gap-1 justify-content-end">
                                 <button class="btn btn-icon btn-ghost-primary" @click="emit('edit-task', t)"
-                                    v-tooltip="'Редактировать'" type="button">
+                                    type="button">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
                                         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                         stroke-linejoin="round"
@@ -462,7 +462,7 @@ function updateBodyScrollClass() {
                                     </svg>
                                 </button>
                                 <button v-if="!isManager && !isPerformer" class="btn btn-icon btn-ghost-danger"
-                                    @click="emit('delete-task', t)" v-tooltip="'Удалить'" type="button">
+                                    @click="emit('delete-task', t)" type="button">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
                                         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                         stroke-linejoin="round"

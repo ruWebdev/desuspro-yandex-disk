@@ -16,7 +16,7 @@ import { Head, useForm, router } from '@inertiajs/vue3'
 import ContentLayout from '@/Layouts/ContentLayout.vue';
 import { Modal } from 'bootstrap';
 
-// Get toast service
+// Получить сервис toast
 const toast = inject('toast') || window.toast;
 
 const props = defineProps({
@@ -71,7 +71,7 @@ const editForm = useForm({
   is_blocked: false,
 })
 
-// Validation: all fields must be filled
+// Валидация: все поля должны быть заполнены
 const isFilled = (v) => typeof v === 'string' ? v.trim().length > 0 : !!v
 const createInvalid = computed(() => !(
   isFilled(createForm.last_name) &&
@@ -99,7 +99,7 @@ function openEdit(user) {
   editForm.reset();
   editForm.email = user.email;
 
-  // Parse full name into separate fields
+  // Разобрать полное имя на отдельные поля
   const nameParts = (user.name || '').split(' ').filter(Boolean);
   editForm.last_name = nameParts[0] || '';
   editForm.first_name = nameParts[1] || '';
@@ -132,7 +132,7 @@ function submitCreate() {
     return;
   }
 
-  // derive display name from FIO
+  // вывести отображаемое имя из ФИО
   createForm.name = [createForm.last_name, createForm.first_name, createForm.middle_name].filter(Boolean).join(' ').trim();
 
   createForm.post(route('users.executors.store'), {
@@ -158,7 +158,7 @@ function submitEdit() {
     return;
   }
 
-  // derive display name from FIO
+  // вывести отображаемое имя из ФИО
   const name = [editForm.last_name, editForm.first_name, editForm.middle_name].filter(Boolean).join(' ').trim();
   const payload = {
     name,
@@ -250,7 +250,7 @@ function submitDelete() {
               <td>
                 <span :class="['badge', 'text-light', u.is_blocked ? 'bg-red' : 'bg-green']">{{ u.is_blocked ? 'Да' :
                   'Нет'
-                  }}</span>
+                }}</span>
               </td>
               <td class="text-end">
                 <div class="btn-list flex-nowrap">

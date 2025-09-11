@@ -42,6 +42,11 @@ const filteredArticles = computed(() => {
     );
 });
 
+// Button availability: require brand, article, and task type
+const canSubmit = computed(() => {
+    return !!(createForm.value.brand_id && createForm.value.task_type_id && createForm.value.article_id);
+});
+
 async function loadArticlesForBrand(brandId) {
     brandArticles.value = [];
     if (!brandId) return;
@@ -141,6 +146,27 @@ function removeSourceFileField(idx) {
     createForm.value.source_files.splice(idx, 1);
 }
 
+// Prevent duplicate non-empty values across FILE(s) fields
+watch(() => createForm.value.source_files, (arr) => {
+    try {
+        if (!Array.isArray(arr)) return;
+        const normalized = arr.map(v => (v ?? '').toString().trim());
+        const seen = new Set();
+        normalized.forEach((val, idx) => {
+            if (!val) return; // allow empty values
+            if (seen.has(val)) {
+                // Clear the duplicate entry and inform user
+                createForm.value.source_files[idx] = '';
+                toast.warning('Дубликаты значений в поле ФАЙЛ(ы) недопустимы');
+            } else {
+                seen.add(val);
+            }
+        });
+    } catch (e) {
+        console.error(e);
+    }
+}, { deep: true });
+
 // Watch for selected article changes
 watch(selectedArticle, (newVal) => {
     try {
@@ -161,6 +187,26 @@ watch(() => createForm.value.brand_id, (newVal) => {
     }
     createForm.value.article_id = '';
     articleSearch.value = '';
+});
+
+// Reset all form data on each modal open
+watch(() => props.show, (val) => {
+    if (val) {
+        createForm.value = {
+            name: '',
+            brand_id: '',
+            task_type_id: '',
+            article_id: '',
+            assignee_id: '',
+            priority: 'medium',
+            source_files: [''],
+            source_comment: ''
+        };
+        brandArticles.value = [];
+        articleSearch.value = '';
+        selectedArticle.value = null;
+        showArticleDropdown.value = false;
+    }
 });
 </script>
 
@@ -263,7 +309,7 @@ watch(() => createForm.value.brand_id, (newVal) => {
                         <button type="button" class="btn btn-link link-secondary" data-bs-dismiss="modal"
                             @click="close">Отмена</button>
                         <button type="button" class="btn btn-primary ms-auto" @click="submitCreate"
-                            :disabled="creating">
+                            :disabled="creating || !canSubmit">
                             <span v-if="creating" class="spinner-border spinner-border-sm me-2" role="status"></span>
                             {{ creating ? 'Создание...' : 'Создать' }}
                         </button>

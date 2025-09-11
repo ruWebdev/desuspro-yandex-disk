@@ -14,7 +14,7 @@ use Illuminate\Http\JsonResponse;
 class SubtaskController extends Controller
 {
     /**
-     * List subtasks for a task (JSON response for now; UI can be added later).
+     * Перечислить подзадачи для задачи (JSON ответ пока; UI может быть добавлен позже).
      */
     public function index(Request $request, Brand $brand, Task $task): JsonResponse
     {
@@ -33,14 +33,14 @@ class SubtaskController extends Controller
     }
 
     /**
-     * Create a subtask under a task.
+     * Создать подзадачу под задачей.
      */
     public function store(Request $request, Brand $brand, Task $task): RedirectResponse
     {
         abort_unless($task->brand_id === $brand->id, 404);
         $data = $request->validate([
             'name' => ['nullable','string','max:255'],
-            // Support extended statuses
+            // Поддержка расширенных статусов
             'status' => ['nullable','in:created,unassigned,assigned,on_review,accepted,rejected'],
             'ownership' => ['nullable','in:Photographer,PhotoEditor'],
             'assignee_id' => ['nullable','exists:users,id'],
@@ -51,7 +51,7 @@ class SubtaskController extends Controller
         Subtask::create([
             'task_id' => $task->id,
             'name' => $data['name'] ?? null,
-            // default to 'unassigned' if not provided
+            // по умолчанию 'unassigned', если не предоставлено
             'status' => $data['status'] ?? 'unassigned',
             'ownership' => $data['ownership'] ?? null,
             'assignee_id' => $data['assignee_id'] ?? null,
@@ -63,34 +63,34 @@ class SubtaskController extends Controller
     }
 
     /**
-     * Update a subtask.
+     * Обновить подзадачу.
      */
     public function update(Request $request, Brand $brand, Task $task, Subtask $subtask): RedirectResponse
     {
         abort_unless($task->brand_id === $brand->id && $subtask->task_id === $task->id, 404);
         $data = $request->validate([
             'name' => ['sometimes','nullable','string','max:255'],
-            // Support extended statuses
+            // Поддержка расширенных статусов
             'status' => ['sometimes','required','in:created,unassigned,assigned,on_review,accepted,rejected'],
             'ownership' => ['sometimes','nullable','in:Photographer,PhotoEditor'],
             'assignee_id' => ['sometimes','nullable','exists:users,id'],
             'comment' => ['sometimes','nullable','string'],
             'highlighted' => ['sometimes','boolean'],
         ]);
-        // If assignee_id changes and status not explicitly provided, set status accordingly
+        // Если assignee_id изменяется и статус не указан явно, установить статус соответственно
         if (array_key_exists('assignee_id', $data) && !array_key_exists('status', $data)) {
             $data['status'] = $data['assignee_id'] ? 'assigned' : 'unassigned';
         }
 
-        // Capture originals before change
+        // Захватить оригиналы перед изменением
         $originalName = $subtask->name;
         $originalOwnership = $subtask->ownership;
 
-        // Compute new values without persisting yet
+        // Вычислить новые значения без сохранения пока
         $newName = array_key_exists('name', $data) ? $data['name'] : $subtask->name;
         $newOwnership = array_key_exists('ownership', $data) ? $data['ownership'] : $subtask->ownership;
 
-        // Attempt Yandex Disk move when name/ownership changed and names are present
+        // Попытаться переместить на Yandex Disk, когда имя/владение изменено и имена присутствуют
         $fromPath = null; $toPath = null;
         $brandRoot = $brand->name; // Root folder is the brand name
 
@@ -105,7 +105,7 @@ class SubtaskController extends Controller
             $toPath = $brandRoot.'/'.($newPrefix.$newName);
         }
 
-        // Persist changes first; move does not depend on DB transaction here
+        // Сохранить изменения сначала; перемещение не зависит от DB транзакции здесь
         $subtask->fill($data)->save();
 
         if ($fromPath && $toPath && $fromPath !== $toPath) {
@@ -116,17 +116,17 @@ class SubtaskController extends Controller
                     $token = $service->ensureValidToken($token);
                     $service->moveResource($token->access_token, $fromPath, $toPath, false);
                 }
-                // If there is no token or move fails silently, we just continue; UI can refresh later
+                // Если нет токена или перемещение не удается молча, мы просто продолжаем; UI может обновиться позже
             } catch (\Throwable $e) {
-                // Swallow Yandex errors for now to not block subtask update
-                // Consider logging: \Log::warning('Yandex move failed', [...]) if logger available
+                // Поглощать ошибки Yandex пока, чтобы не блокировать обновление подзадачи
+                // Рассмотреть логирование: \Log::warning('Yandex move failed', [...]) если логгер доступен
             }
         }
         return back()->with('status', 'subtask-updated');
     }
 
     /**
-     * Delete a subtask.
+     * Удалить подзадачу.
      */
     public function destroy(Brand $brand, Task $task, Subtask $subtask): RedirectResponse
     {
@@ -136,7 +136,7 @@ class SubtaskController extends Controller
     }
 
     /**
-     * Generate a public link for subtask.
+     * Сгенерировать публичную ссылку для подзадачи.
      */
     public function generatePublicLink(Brand $brand, Task $task, Subtask $subtask): RedirectResponse
     {
@@ -149,7 +149,7 @@ class SubtaskController extends Controller
     }
 
     /**
-     * Remove public link for subtask.
+     * Удалить публичную ссылку для подзадачи.
      */
     public function removePublicLink(Brand $brand, Task $task, Subtask $subtask): RedirectResponse
     {
