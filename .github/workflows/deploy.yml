@@ -24,13 +24,11 @@ jobs:
 
       - name: Deploy to test
         run: |
-          # Синхронизация файлов в папку деплоя
-          sudo rsync -avz --exclude='.git' --delete \
-            --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r \
-            ./ /var/www/art/dev
+          # Синхронизация файлов в папку деплоя под www-data
+          sudo -u www-data rsync -avz --exclude='.git' --delete \
+            --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r ./ /var/www/art/dev
           
-          # Установка владельца и прав
-          sudo chown -R www-data:www-data /var/www/art/dev
+          # Установка владельца и прав для Laravel
           sudo chown -R www-data:www-data /var/www/art/dev/storage /var/www/art/dev/bootstrap/cache
           
           # Artisan команды под www-data
@@ -55,11 +53,9 @@ jobs:
 
       - name: Deploy to prod
         run: |
-          sudo rsync -avz --exclude='.git' --delete \
-            --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r \
-            ./ /var/www/art/prod
+          sudo -u www-data rsync -avz --exclude='.git' --delete \
+            --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r ./ /var/www/art/prod
           
-          sudo chown -R www-data:www-data /var/www/art/prod
           sudo chown -R www-data:www-data /var/www/art/prod/storage /var/www/art/prod/bootstrap/cache
           
           sudo -u www-data php /var/www/art/prod/artisan migrate --force
