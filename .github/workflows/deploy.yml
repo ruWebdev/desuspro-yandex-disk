@@ -90,3 +90,5 @@ jobs:
           sudo -u www-data php /var/www/art/prod/artisan migrate --force
           sudo -u www-data php /var/www/art/prod/artisan config:clear
           sudo -u www-data php /var/www/art/prod/artisan cache:clear
+
+#NUDAVAI!BLYAT
