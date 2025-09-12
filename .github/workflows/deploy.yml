@@ -14,11 +14,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install PHP dependencies as www-data
-        run: sudo -u www-data composer install --no-dev --optimize-autoloader
+      - name: Install PHP dependencies
+        run: composer install --no-dev --optimize-autoloader
 
-      - name: Build frontend as www-data
-        run: sudo -u www-data bash -c "npm install && npm run build"
+      - name: Build frontend
+        run: |
+          npm install
+          npm run build
 
       - name: Deploy to test
         run: |
@@ -36,11 +38,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install PHP dependencies as www-data
-        run: sudo -u www-data composer install --no-dev --optimize-autoloader
+      - name: Install PHP dependencies
+        run: composer install --no-dev --optimize-autoloader
 
-      - name: Build frontend as www-data
-        run: sudo -u www-data bash -c "npm install && npm run build"
+      - name: Build frontend
+        run: |
+          npm install
+          npm run build
 
       - name: Deploy to prod
         run: |
