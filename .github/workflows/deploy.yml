@@ -14,19 +14,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install PHP dependencies
-        run: composer install --no-dev --optimize-autoloader
+      - name: Install PHP dependencies as www-data
+        run: sudo -u www-data composer install --no-dev --optimize-autoloader
 
-      - name: Build frontend
-        run: |
-          npm install
-          npm run build
+      - name: Build frontend as www-data
+        run: sudo -u www-data bash -c "npm install && npm run build"
 
       - name: Deploy to test
         run: |
-          sudo -u www-data rsync -avz --exclude='.git' --delete ./ /var/www/art/dev
+          sudo rsync -avz --exclude='.git' --delete --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r ./ /var/www/art/dev
           sudo chown -R www-data:www-data /var/www/art/dev
-          sudo -u www-data bash -c "cd /var/www/art/dev && php artisan migrate --force && php artisan config:clear && php artisan cache:clear"
+          sudo chown -R www-data:www-data /var/www/art/dev/storage /var/www/art/dev/bootstrap/cache
+          sudo -u www-data php /var/www/art/dev/artisan migrate --force
+          sudo -u www-data php /var/www/art/dev/artisan config:clear
+          sudo -u www-data php /var/www/art/dev/artisan cache:clear
 
   deploy-prod:
     if: github.ref == 'refs/heads/main'
@@ -35,16 +36,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install PHP dependencies
-        run: composer install --no-dev --optimize-autoloader
+      - name: Install PHP dependencies as www-data
+        run: sudo -u www-data composer install --no-dev --optimize-autoloader
 
-      - name: Build frontend
-        run: |
-          npm install
-          npm run build
+      - name: Build frontend as www-data
+        run: sudo -u www-data bash -c "npm install && npm run build"
 
       - name: Deploy to prod
         run: |
-          sudo -u www-data rsync -avz --exclude='.git' --delete ./ /var/www/art/prod
+          sudo rsync -avz --exclude='.git' --delete --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r ./ /var/www/art/prod
           sudo chown -R www-data:www-data /var/www/art/prod
-          sudo -u www-data bash -c "cd /var/www/art/prod && php artisan migrate --force && php artisan config:clear && php artisan cache:clear"
+          sudo chown -R www-data:www-data /var/www/art/prod/storage /var/www/art/prod/bootstrap/cache
+          sudo -u www-data php /var/www/art/prod/artisan migrate --force
+          sudo -u www-data php /var/www/art/prod/artisan config:clear
+          sudo -u www-data php /var/www/art/prod/artisan cache:clear
