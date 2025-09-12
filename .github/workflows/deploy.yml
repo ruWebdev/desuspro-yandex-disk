@@ -9,7 +9,7 @@ on:
 jobs:
   deploy-test:
     if: github.ref == 'refs/heads/develop'
-    runs-on: [self-hosted, linux, test]   # Runner с label "test"
+    runs-on: [self-hosted, linux, dev]   # Runner с label "dev"
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
