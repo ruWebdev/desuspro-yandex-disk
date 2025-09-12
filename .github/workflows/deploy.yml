@@ -9,7 +9,7 @@ on:
 jobs:
   deploy-test:
     if: github.ref == 'refs/heads/develop'
-    runs-on: [self-hosted, linux, dev]   # Runner с label "dev"
+    runs-on: [self-hosted, linux, dev]
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -24,13 +24,13 @@ jobs:
 
       - name: Deploy to test
         run: |
-          rsync -avz --exclude='.git' ./ /var/www/art/dev
+          sudo rsync -avz --exclude='.git' --delete --no-perms ./ /var/www/art/dev
           sudo chown -R www-data:www-data /var/www/art/dev
           sudo -u www-data bash -c "cd /var/www/art/dev && php artisan migrate --force && php artisan config:clear && php artisan cache:clear"
 
   deploy-prod:
     if: github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux, prod]   # Runner с label "prod"
+    runs-on: [self-hosted, linux, prod]
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -45,6 +45,6 @@ jobs:
 
       - name: Deploy to prod
         run: |
-          rsync -avz --exclude='.git' ./ /var/www/art/prod
+          sudo rsync -avz --exclude='.git' --delete --no-perms ./ /var/www/art/prod
           sudo chown -R www-data:www-data /var/www/art/prod
           sudo -u www-data bash -c "cd /var/www/art/prod && php artisan migrate --force && php artisan config:clear && php artisan cache:clear"
