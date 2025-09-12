@@ -3,8 +3,8 @@ name: Deploy
 on:
   push:
     branches:
-      - develop   # деплой на TEST
-      - main      # деплой на PROD
+      - develop
+      - main
 
 jobs:
   deploy-test:
@@ -14,24 +14,41 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # ----------------------
+      # PHP dependencies cache
+      - name: Cache PHP dependencies
+        uses: actions/cache@v3
+        with:
+          path: vendor
+          key: vendor-${{ hashFiles('**/composer.lock') }}
+
       - name: Install PHP dependencies
         run: composer install --no-dev --optimize-autoloader
+
+      # ----------------------
+      # Node dependencies cache
+      - name: Cache Node dependencies
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: node-modules-${{ hashFiles('package-lock.json') }}
 
       - name: Build frontend
         run: |
           npm install
           npm run build
 
+      # ----------------------
+      # Deploy code
       - name: Deploy to test
         run: |
-          # Синхронизация файлов, кроме storage и bootstrap/cache
           rsync -avz --exclude='.git' --exclude='storage' --exclude='bootstrap/cache' \
             --delete ./ /var/www/art/dev
-          
-          # Artisan команды
-          php /var/www/art/dev/artisan migrate --force
-          php /var/www/art/dev/artisan config:clear
-          php /var/www/art/dev/artisan cache:clear
+
+          # Artisan commands under www-data
+          sudo -u www-data php /var/www/art/dev/artisan migrate --force
+          sudo -u www-data php /var/www/art/dev/artisan config:clear
+          sudo -u www-data php /var/www/art/dev/artisan cache:clear
 
   deploy-prod:
     if: github.ref == 'refs/heads/main'
@@ -40,21 +57,37 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # ----------------------
+      # PHP dependencies cache
+      - name: Cache PHP dependencies
+        uses: actions/cache@v3
+        with:
+          path: vendor
+          key: vendor-${{ hashFiles('**/composer.lock') }}
+
       - name: Install PHP dependencies
         run: composer install --no-dev --optimize-autoloader
+
+      # ----------------------
+      # Node dependencies cache
+      - name: Cache Node dependencies
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: node-modules-${{ hashFiles('package-lock.json') }}
 
       - name: Build frontend
         run: |
           npm install
           npm run build
 
+      # ----------------------
+      # Deploy code
       - name: Deploy to prod
         run: |
           rsync -avz --exclude='.git' --exclude='storage' --exclude='bootstrap/cache' \
             --delete ./ /var/www/art/prod
-          
-          php /var/www/art/prod/artisan migrate --force
-          php /var/www/art/prod/artisan config:clear
-          php /var/www/art/prod/artisan cache:clear
 
-#NUDAVAI!BLYAT
+          sudo -u www-data php /var/www/art/prod/artisan migrate --force
+          sudo -u www-data php /var/www/art/prod/artisan config:clear
+          sudo -u www-data php /var/www/art/prod/artisan cache:clear
