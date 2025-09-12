@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v3
 
       # ----------------------
-      # PHP dependencies cache
+      # Кэш PHP зависимостей
       - name: Cache PHP dependencies
         uses: actions/cache@v3
         with:
@@ -26,7 +26,7 @@ jobs:
         run: composer install --no-dev --optimize-autoloader
 
       # ----------------------
-      # Node dependencies cache
+      # Кэш Node зависимостей
       - name: Cache Node dependencies
         uses: actions/cache@v3
         with:
@@ -42,10 +42,10 @@ jobs:
       # Deploy code
       - name: Deploy to test
         run: |
-          rsync -avz --exclude='.git' --exclude='storage' --exclude='bootstrap/cache' \
-            --delete ./ /var/www/art/dev
+          # Синхронизация файлов, исключая .env, storage и bootstrap/cache
+          rsync -avz --exclude='.git' --exclude='.env' --exclude='storage' --exclude='bootstrap/cache' ./ /var/www/art/dev
 
-          # Artisan commands under www-data
+          # Artisan команды под www-data
           sudo -u www-data php /var/www/art/dev/artisan migrate --force
           sudo -u www-data php /var/www/art/dev/artisan config:clear
           sudo -u www-data php /var/www/art/dev/artisan cache:clear
@@ -58,7 +58,7 @@ jobs:
         uses: actions/checkout@v3
 
       # ----------------------
-      # PHP dependencies cache
+      # Кэш PHP зависимостей
       - name: Cache PHP dependencies
         uses: actions/cache@v3
         with:
@@ -69,7 +69,7 @@ jobs:
         run: composer install --no-dev --optimize-autoloader
 
       # ----------------------
-      # Node dependencies cache
+      # Кэш Node зависимостей
       - name: Cache Node dependencies
         uses: actions/cache@v3
         with:
@@ -85,8 +85,7 @@ jobs:
       # Deploy code
       - name: Deploy to prod
         run: |
-          rsync -avz --exclude='.git' --exclude='storage' --exclude='bootstrap/cache' \
-            --delete ./ /var/www/art/prod
+          rsync -avz --exclude='.git' --exclude='.env' --exclude='storage' --exclude='bootstrap/cache' ./ /var/www/art/prod
 
           sudo -u www-data php /var/www/art/prod/artisan migrate --force
           sudo -u www-data php /var/www/art/prod/artisan config:clear
