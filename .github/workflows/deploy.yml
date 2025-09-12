@@ -91,4 +91,4 @@ jobs:
           sudo -u www-data php /var/www/art/prod/artisan config:clear
           sudo -u www-data php /var/www/art/prod/artisan cache:clear
 
-#NUDAVAI!BLYATSUKA!NAHESHERAZ!
+#NUDAVAI!BLYATSUKA!NAHESHERAZ!AAA!
