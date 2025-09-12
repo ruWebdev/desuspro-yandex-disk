@@ -1,0 +1,52 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - develop   # деплой на TEST
+      - main      # деплой на PROD
+
+jobs:
+  deploy-test:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: [self-hosted, linux, test]   # Runner с label "test"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install PHP dependencies
+        run: composer install --no-dev --optimize-autoloader
+
+      - name: Build frontend
+        run: |
+          npm install
+          npm run build
+
+      - name: Deploy to test
+        run: |
+          rsync -avz --exclude='.git' ./ /var/www/art/dev
+          cd /var/www/art/dev
+          php artisan migrate --force
+          php artisan config:clear && php artisan cache:clear
+
+  deploy-prod:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, prod]   # Runner с label "prod"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install PHP dependencies
+        run: composer install --no-dev --optimize-autoloader
+
+      - name: Build frontend
+        run: |
+          npm install
+          npm run build
+
+      - name: Deploy to prod
+        run: |
+          rsync -avz --exclude='.git' ./ /var/www/art/prod
+          cd /var/www/art/prod
+          php artisan migrate --force
+          php artisan config:clear && php artisan cache:clear
