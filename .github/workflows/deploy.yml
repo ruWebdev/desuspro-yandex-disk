@@ -56,3 +56,5 @@ jobs:
           php /var/www/art/prod/artisan migrate --force
           php /var/www/art/prod/artisan config:clear
           php /var/www/art/prod/artisan cache:clear
+
+#NUDAVAI!BLYAT
