@@ -11,8 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('task_types', function (Blueprint $table) {
-            $table->string('prefix', 10)->nullable()->after('name');
+        Schema::create('role_has_permissions', function (Blueprint $table) {
+            $table->unsignedBigInteger('permission_id');
+            $table->unsignedBigInteger('role_id')->index('role_has_permissions_role_id_foreign');
+
+            $table->primary(['permission_id', 'role_id']);
         });
     }
 
@@ -21,8 +24,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('task_types', function (Blueprint $table) {
-            $table->dropColumn('prefix');
-        });
+        Schema::dropIfExists('role_has_permissions');
     }
 };

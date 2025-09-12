@@ -11,8 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('task_comments', function (Blueprint $table) {
-            $table->text('content')->nullable()->change();
+        Schema::table('model_has_roles', function (Blueprint $table) {
+            $table->foreign(['role_id'])->references(['id'])->on('roles')->onUpdate('no action')->onDelete('cascade');
         });
     }
 
@@ -21,8 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('task_comments', function (Blueprint $table) {
-            $table->text('content')->nullable(false)->change();
+        Schema::table('model_has_roles', function (Blueprint $table) {
+            $table->dropForeign('model_has_roles_role_id_foreign');
         });
     }
 };

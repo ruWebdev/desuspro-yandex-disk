@@ -12,7 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('task_comments', function (Blueprint $table) {
-            $table->string('image_path')->nullable()->after('content');
+            $table->foreign(['task_id'])->references(['id'])->on('tasks')->onUpdate('no action')->onDelete('cascade');
+            $table->foreign(['user_id'])->references(['id'])->on('users')->onUpdate('no action')->onDelete('cascade');
         });
     }
 
@@ -22,7 +23,8 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('task_comments', function (Blueprint $table) {
-            $table->dropColumn('image_path');
+            $table->dropForeign('task_comments_task_id_foreign');
+            $table->dropForeign('task_comments_user_id_foreign');
         });
     }
 };

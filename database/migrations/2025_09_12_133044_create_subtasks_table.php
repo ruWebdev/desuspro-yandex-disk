@@ -4,19 +4,20 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     /**
      * Run the migrations.
      */
     public function up(): void
     {
         Schema::create('subtasks', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('task_id')->constrained()->cascadeOnDelete();
+            $table->bigIncrements('id');
+            $table->unsignedBigInteger('task_id')->index('subtasks_task_id_foreign');
             $table->string('name')->nullable();
-            $table->string('status')->default('created'); // created, accepted, rejected
-            $table->enum('ownership', ['Photographer','PhotoEditor'])->nullable();
-            $table->foreignId('assignee_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->string('status')->default('created');
+            $table->enum('ownership', ['Photographer', 'PhotoEditor'])->nullable();
+            $table->unsignedBigInteger('assignee_id')->nullable()->index('subtasks_assignee_id_foreign');
             $table->string('public_link')->nullable();
             $table->boolean('highlighted')->default(false);
             $table->text('comment')->nullable();
