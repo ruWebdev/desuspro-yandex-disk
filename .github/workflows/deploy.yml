@@ -48,3 +48,5 @@ jobs:
         run: |
           sudo -u www-data rsync -avz --exclude='.git' ./ /var/www/art/prod
           sudo -u www-data bash -c "cd /var/www/art/prod && php artisan migrate --force && php artisan config:clear && php artisan cache:clear"
+
+#NUDAVAI!!!!!
