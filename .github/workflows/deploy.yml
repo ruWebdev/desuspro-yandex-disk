@@ -15,17 +15,17 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Install PHP dependencies
-        run: |
-          sudo -u www-data composer install --no-dev --optimize-autoloader
+        run: composer install --no-dev --optimize-autoloader
 
       - name: Build frontend
         run: |
-          sudo -u www-data npm install
-          sudo -u www-data npm run build
+          npm install
+          npm run build
 
       - name: Deploy to test
         run: |
-          sudo -u www-data rsync -avz --exclude='.git' ./ /var/www/art/dev
+          rsync -avz --exclude='.git' ./ /var/www/art/dev
+          sudo chown -R www-data:www-data /var/www/art/dev
           sudo -u www-data bash -c "cd /var/www/art/dev && php artisan migrate --force && php artisan config:clear && php artisan cache:clear"
 
   deploy-prod:
@@ -36,17 +36,15 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Install PHP dependencies
-        run: |
-          sudo -u www-data composer install --no-dev --optimize-autoloader
+        run: composer install --no-dev --optimize-autoloader
 
       - name: Build frontend
         run: |
-          sudo -u www-data npm install
-          sudo -u www-data npm run build
+          npm install
+          npm run build
 
       - name: Deploy to prod
         run: |
-          sudo -u www-data rsync -avz --exclude='.git' ./ /var/www/art/prod
+          rsync -avz --exclude='.git' ./ /var/www/art/prod
+          sudo chown -R www-data:www-data /var/www/art/prod
           sudo -u www-data bash -c "cd /var/www/art/prod && php artisan migrate --force && php artisan config:clear && php artisan cache:clear"
-
-#NUDAVAI!!!!!
