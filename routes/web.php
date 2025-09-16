@@ -152,6 +152,7 @@ Route::middleware(['auth', 'role:Performer'])->group(function () {
 Route::middleware(['auth', 'role:Manager|Administrator|Performer'])->group(function () {
     // All Tasks (global)
     Route::get('/tasks', [TaskController::class, 'all'])->name('tasks.all');
+    Route::get('/tasks/check-duplicate', [TaskController::class, 'checkDuplicate'])->name('tasks.check_duplicate');
     Route::post('/tasks', [TaskController::class, 'storeGlobal'])->name('tasks.store');
     Route::put('/tasks/{task}/public-link', [TaskController::class, 'updatePublicLink'])->name('tasks.update_public_link');
     Route::put('/tasks/bulk-update', [TaskController::class, 'bulkUpdate'])->name('tasks.bulk_update'); // Added manager-only route for bulk task updates

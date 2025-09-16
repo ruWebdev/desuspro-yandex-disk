@@ -36,6 +36,13 @@ watch(() => props.show, async (val) => {
         // Set public folder URL from task
         publicFolderUrl.value = props.task?.public_link || '';
 
+        // Capture stable IDs for comment operations
+        if (props.task) {
+            commentCtx.value = { brandId: props.task.brand_id, taskId: props.task.id };
+        } else {
+            commentCtx.value = { brandId: null, taskId: null };
+        }
+
         if (offcanvasInstance) {
             offcanvasInstance.show();
         }
@@ -72,6 +79,8 @@ const newComment = ref('');
 const submitting = ref(false);
 const commentImageInput = ref(null);
 const selectedCommentImages = ref([]);
+// Stable identifiers to avoid race conditions
+const commentCtx = ref({ brandId: null, taskId: null });
 
 // Files state
 const filesLoading = ref(false);
@@ -125,17 +134,17 @@ function openFilesOffcanvas(task) {
 }
 
 async function loadComments() {
-    if (!props.task?.id) { comments.value = []; return; }
-    const url = route('brands.tasks.comments.index', { brand: props.task.brand_id, task: props.task.id });
+    if (!commentCtx.value?.taskId || !commentCtx.value?.brandId) { comments.value = []; return; }
+    const url = route('brands.tasks.comments.index', { brand: commentCtx.value.brandId, task: commentCtx.value.taskId });
     const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
     comments.value = await res.json();
 }
 
 async function addComment() {
-    if (!props.task?.id || (!newComment.value.trim() && (!selectedCommentImages.value || selectedCommentImages.value.length === 0))) return;
+    if (!commentCtx.value?.taskId || (!newComment.value.trim() && (!selectedCommentImages.value || selectedCommentImages.value.length === 0))) return;
     submitting.value = true;
     try {
-        const baseUrl = route('brands.tasks.comments.store', { brand: props.task.brand_id, task: props.task.id });
+        const baseUrl = route('brands.tasks.comments.store', { brand: commentCtx.value.brandId, task: commentCtx.value.taskId });
         const headersBase = { 'Accept': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() };
 
         const files = Array.isArray(selectedCommentImages.value) ? selectedCommentImages.value : [];
@@ -211,15 +220,15 @@ function canDeleteComment(comment) {
 }
 
 async function deleteComment(comment) {
-    if (!props.task?.id || !canDeleteComment(comment)) return;
+    if (!commentCtx.value?.taskId || !canDeleteComment(comment)) return;
 
     if (!confirm('Вы уверены, что хотите удалить этот комментарий?')) {
         return;
     }
 
     const url = route('brands.tasks.comments.destroy', {
-        brand: props.task.brand_id,
-        task: props.task.id,
+        brand: commentCtx.value.brandId,
+        task: commentCtx.value.taskId,
         comment: comment.id
     });
 

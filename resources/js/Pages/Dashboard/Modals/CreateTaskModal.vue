@@ -33,6 +33,11 @@ const articleSearch = ref('');
 const selectedArticle = ref(null);
 const showArticleDropdown = ref(false);
 
+// Duplicate check state
+const duplicateExists = ref(false);
+const duplicateChecking = ref(false);
+let duplicateTimer = null;
+
 const filteredArticles = computed(() => {
     if (!articleSearch.value) return brandArticles.value;
     const search = articleSearch.value.toLowerCase();
@@ -42,9 +47,32 @@ const filteredArticles = computed(() => {
     );
 });
 
-// Button availability: require brand, article, and task type
+// Button availability: require brand, article, and task type, and no duplicate
 const canSubmit = computed(() => {
-    return !!(createForm.value.brand_id && createForm.value.task_type_id && createForm.value.article_id);
+    return !!(createForm.value.brand_id && createForm.value.task_type_id && createForm.value.article_id) && !duplicateExists.value;
+});
+
+// Debounced duplicate check
+watch(() => [createForm.value.brand_id, createForm.value.task_type_id, createForm.value.article_id], async ([b, t, a]) => {
+    try {
+        duplicateExists.value = false;
+        if (duplicateTimer) { clearTimeout(duplicateTimer); duplicateTimer = null; }
+        if (!b || !t || !a) return;
+        duplicateTimer = setTimeout(async () => {
+            duplicateChecking.value = true;
+            try {
+                const url = route('tasks.check_duplicate');
+                const res = await axios.get(url, { params: { brand_id: Number(b), task_type_id: Number(t), article_id: Number(a) } });
+                duplicateExists.value = !!res?.data?.exists;
+            } catch (e) {
+                // fail-open: do not block creation on check failures
+                console.warn('duplicate check failed', e);
+                duplicateExists.value = false;
+            } finally {
+                duplicateChecking.value = false;
+            }
+        }, 300);
+    } catch (e) { console.error(e); }
 });
 
 async function loadArticlesForBrand(brandId) {
@@ -254,6 +282,12 @@ watch(() => props.show, (val) => {
                                             {{ a.name }}
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                            <div class="col-12" v-if="duplicateChecking || duplicateExists">
+                                <div :class="['small', 'mt-1', duplicateExists ? 'text-danger' : 'text-secondary']">
+                                    <span v-if="duplicateChecking">Проверка на дубликаты…</span>
+                                    <span v-else>Задание с таким брендом, артикулом и типом уже есть в системе</span>
                                 </div>
                             </div>
                             <div class="col-md-6">

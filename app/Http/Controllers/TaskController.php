@@ -486,6 +486,27 @@ class TaskController extends Controller
         return back()->with('status', 'public-link-removed');
     }
 
+    /**
+     * Check whether a task with the same brand, article and type already exists (global DB check).
+     * Returns JSON: { exists: boolean }
+     */
+    public function checkDuplicate(Request $request)
+    {
+        $data = $request->validate([
+            'brand_id' => ['required','integer','exists:brands,id'],
+            'article_id' => ['required','integer','exists:articles,id'],
+            'task_type_id' => ['required','integer','exists:task_types,id'],
+        ]);
+
+        $exists = Task::query()
+            ->where('brand_id', (int)$data['brand_id'])
+            ->where('article_id', (int)$data['article_id'])
+            ->where('task_type_id', (int)$data['task_type_id'])
+            ->exists();
+
+        return response()->json(['exists' => $exists]);
+    }
+
     public function updatePublicLink(Request $request, Task $task)
     {
         $request->validate(['public_link' => 'required|string']);

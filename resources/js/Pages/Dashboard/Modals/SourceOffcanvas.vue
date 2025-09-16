@@ -279,17 +279,17 @@ function openSourceFilesOffcanvas(task) {
 }
 
 async function loadSourceComments() {
-    if (!props.task?.id) { sourceComments.value = []; return; }
-    const url = route('brands.tasks.source_comments.index', { brand: props.task.brand_id, task: props.task.id });
+    if (!sourceOc.value?.taskId || !sourceOc.value?.brandId) { sourceComments.value = []; return; }
+    const url = route('brands.tasks.source_comments.index', { brand: sourceOc.value.brandId, task: sourceOc.value.taskId });
     const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
     sourceComments.value = await res.json();
 }
 
 async function addSourceComment() {
-    if (!props.task?.id || (!newSourceComment.value.trim() && (!selectedCommentImages.value || selectedCommentImages.value.length === 0))) return;
+    if (!sourceOc.value?.taskId || (!newSourceComment.value.trim() && (!selectedCommentImages.value || selectedCommentImages.value.length === 0))) return;
     sourceSubmitting.value = true;
     try {
-        const baseUrl = route('brands.tasks.source_comments.store', { brand: props.task.brand_id, task: props.task.id });
+        const baseUrl = route('brands.tasks.source_comments.store', { brand: sourceOc.value.brandId, task: sourceOc.value.taskId });
         const headersBase = { 'Accept': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() };
 
         const files = Array.isArray(selectedCommentImages.value) ? selectedCommentImages.value : [];
@@ -360,15 +360,15 @@ function canDeleteComment(comment) {
 }
 
 async function deleteSourceComment(comment) {
-    if (!props.task?.id || !canDeleteComment(comment)) return;
+    if (!sourceOc.value?.taskId || !canDeleteComment(comment)) return;
 
     if (!confirm('Вы уверены, что хотите удалить этот комментарий?')) {
         return;
     }
 
     const url = route('brands.tasks.source_comments.destroy', {
-        brand: props.task.brand_id,
-        task: props.task.id,
+        brand: sourceOc.value.brandId,
+        task: sourceOc.value.taskId,
         comment: comment.id
     });
 
