@@ -66,7 +66,7 @@ function openCreate() {
 }
 
 function submitCreate() {
-  createForm.post(route('brands.store'), {
+  createForm.post(route('admin.brands.store'), {
     preserveScroll: true,
     onSuccess: () => {
       showCreate.value = false;
@@ -90,7 +90,7 @@ function cancelEdit() {
 
 function submitEdit() {
   if (!editingBrand.value) return;
-  editForm.put(route('brands.update', editingBrand.value.id), {
+  editForm.put(route('admin.brands.update', editingBrand.value.id), {
     preserveScroll: true,
     onSuccess: () => {
       cancelEdit();
@@ -110,7 +110,7 @@ function cancelDelete() {
 
 function submitDelete() {
   if (!brandToDelete.value) return;
-  deleteForm.delete(route('brands.destroy', brandToDelete.value.id), {
+  deleteForm.delete(route('admin.brands.destroy', brandToDelete.value.id), {
     preserveScroll: true,
     onSuccess: () => {
       cancelDelete();
