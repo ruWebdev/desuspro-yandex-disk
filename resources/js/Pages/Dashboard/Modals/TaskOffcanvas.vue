@@ -259,6 +259,7 @@ function getXsrfToken() {
     const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
     return match ? decodeURIComponent(match[1]) : '';
 }
+
 async function copyFolderPath() {
     const text = publicFolderUrl.value;
     if (!text) {
@@ -463,9 +464,9 @@ async function viewYandexItemInLightbox(item) {
             method: 'POST',
             headers: {
                 'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
+                'X-XSRF-TOKEN': getXsrfToken(),
             },
+            credentials: 'same-origin',
             body: JSON.stringify({ item })
         });
         if (res.ok) {
