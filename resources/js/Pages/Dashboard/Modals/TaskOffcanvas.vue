@@ -474,9 +474,10 @@ async function viewYandexItemInLightbox(item) {
                     headers: {
                         'Accept': 'application/json',
                         'Content-Type': 'application/json',
-                        ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
+                        'X-XSRF-TOKEN': getXsrfToken(),
                     },
-                    body: JSON.stringify({ direct_url: href })
+                    body: JSON.stringify({ direct_url: href }),
+                    credentials: 'same-origin'
                 });
                 if (tempRes.ok) {
                     const temp = await tempRes.json();
@@ -500,9 +501,10 @@ async function viewYandexItemInLightbox(item) {
                 headers: {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json',
-                    ...(csrf ? { 'X-CSRF-TOKEN': csrf } : {}),
+                    'X-XSRF-TOKEN': getXsrfToken(),
                 },
-                body: JSON.stringify({ direct_url: direct })
+                body: JSON.stringify({ direct_url: direct }),
+                credentials: 'same-origin'
             });
             if (tempRes.ok) {
                 const temp = await tempRes.json();
@@ -616,8 +618,8 @@ async function viewYandexItemInLightbox(item) {
                                             @click="() => emit('open-lightbox', '/storage/' + c.image_path)" />
                                     </div>
                                 </div>
-                                <button v-if="canDeleteComment(c)" class="btn btn-ghost-danger btn-sm ms-2" title="Удалить"
-                                    @click="deleteComment(c)">Удалить</button>
+                                <button v-if="canDeleteComment(c)" class="btn btn-ghost-danger btn-sm ms-2"
+                                    title="Удалить" @click="deleteComment(c)">Удалить</button>
                             </li>
                         </ul>
                         <div class="mt-3">
