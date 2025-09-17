@@ -22,8 +22,8 @@ const isPerformer = computed(() => {
 });
 
 const isManager = computed(() => {
-    return props.currentUser?.roles?.some(r => 
-        r.name.toLowerCase() === 'manager' || 
+    return props.currentUser?.roles?.some(r =>
+        r.name.toLowerCase() === 'manager' ||
         r.name.toLowerCase() === 'менеджер' ||
         props.currentUser.is_manager
     );
@@ -145,7 +145,7 @@ async function addComment() {
     submitting.value = true;
     try {
         const baseUrl = route('brands.tasks.comments.store', { brand: commentCtx.value.brandId, task: commentCtx.value.taskId });
-        const headersBase = { 'Accept': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() };
+        const headersBase = { 'Accept': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() };
 
         const files = Array.isArray(selectedCommentImages.value) ? selectedCommentImages.value : [];
         if (files.length > 0) {
@@ -153,7 +153,9 @@ async function addComment() {
                 const formData = new FormData();
                 formData.append('content', i === 0 ? (newComment.value.trim() || '') : '');
                 formData.append('image', files[i]);
-                const res = await fetch(baseUrl, { method: 'POST', headers: headersBase, body: formData });
+                const res = await fetch(baseUrl, {
+                    method: 'POST', headers: headersBase, body: formData, credentials: 'same-origin'
+                });
                 if (!res.ok) {
                     const errorData = await res.json().catch(() => ({}));
                     if (errorData?.errors?.content?.[0]) { toast.error(errorData.errors.content[0]); return; }
@@ -237,8 +239,9 @@ async function deleteComment(comment) {
             method: 'DELETE',
             headers: {
                 'Accept': 'application/json',
-                'X-CSRF-TOKEN': getCsrfToken()
-            }
+                'X-XSRF-TOKEN': getXsrfToken()
+            },
+            credentials: 'same-origin'
         });
 
         if (!response.ok) {
@@ -252,10 +255,10 @@ async function deleteComment(comment) {
     }
 }
 
-function getCsrfToken() {
-    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+function getXsrfToken() {
+    const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : '';
 }
-
 async function copyFolderPath() {
     const text = publicFolderUrl.value;
     if (!text) {
@@ -372,8 +375,9 @@ async function deleteYandexItem(item) {
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'X-XSRF-TOKEN': getXsrfToken(),
             },
+            credentials: 'same-origin',
             body: JSON.stringify({ path: reqPath, permanently: false })
         });
 
@@ -414,7 +418,8 @@ async function uploadFiles(files) {
             fd.append('file', f, f.name);
             const res = await fetch(route('integrations.yandex.upload'), {
                 method: 'POST',
-                headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') },
+                headers: { 'X-XSRF-TOKEN': getXsrfToken() },
+                credentials: 'same-origin',
                 body: fd,
             });
             if (!res.ok) {

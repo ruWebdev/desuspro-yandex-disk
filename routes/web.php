@@ -24,9 +24,9 @@ Route::get('/', function () {
 });
 
 Route::get('/dashboard', function () {
-    $brands = Brand::query()->orderBy('name')->get(['id','name']);
-    $performers = User::role('Performer')->get(['id','name','is_blocked']);
-    $taskTypes = TaskType::query()->orderBy('name')->get(['id','name','prefix']);
+    $brands = Brand::query()->orderBy('name')->get(['id', 'name']);
+    $performers = User::role('Performer')->get(['id', 'name', 'is_blocked']);
+    $taskTypes = TaskType::query()->orderBy('name')->get(['id', 'name', 'prefix']);
     return Inertia::render('Dashboard/Dashboard', [
         'brands' => $brands,
         'performers' => $performers,
@@ -39,9 +39,9 @@ Route::get('/dashboard', function () {
 // Role-based Dashboard pages
 Route::middleware(['auth', 'verified', 'role:Administrator'])
     ->get('/admin', function () {
-        $brands = Brand::query()->orderBy('name')->get(['id','name']);
-        $performers = User::role('Performer')->get(['id','name','is_blocked']);
-        $taskTypes = TaskType::query()->orderBy('name')->get(['id','name','prefix']);
+        $brands = Brand::query()->orderBy('name')->get(['id', 'name']);
+        $performers = User::role('Performer')->get(['id', 'name', 'is_blocked']);
+        $taskTypes = TaskType::query()->orderBy('name')->get(['id', 'name', 'prefix']);
         return Inertia::render('Dashboard/Dashboard', [
             'brands' => $brands,
             'performers' => $performers,
@@ -53,9 +53,9 @@ Route::middleware(['auth', 'verified', 'role:Administrator'])
 
 Route::middleware(['auth', 'verified', 'role:Manager'])
     ->get('/manager', function () {
-        $brands = Brand::query()->orderBy('name')->get(['id','name']);
-        $performers = User::role('Performer')->get(['id','name','is_blocked']);
-        $taskTypes = TaskType::query()->orderBy('name')->get(['id','name','prefix']);
+        $brands = Brand::query()->orderBy('name')->get(['id', 'name']);
+        $performers = User::role('Performer')->get(['id', 'name', 'is_blocked']);
+        $taskTypes = TaskType::query()->orderBy('name')->get(['id', 'name', 'prefix']);
         return Inertia::render('Dashboard/Dashboard', [
             'brands' => $brands,
             'performers' => $performers,
@@ -67,9 +67,9 @@ Route::middleware(['auth', 'verified', 'role:Manager'])
 
 Route::middleware(['auth', 'verified', 'role:Performer'])
     ->get('/performer', function () {
-        $brands = Brand::query()->orderBy('name')->get(['id','name']);
-        $performers = User::role('Performer')->get(['id','name','is_blocked']);
-        $taskTypes = TaskType::query()->orderBy('name')->get(['id','name','prefix']);
+        $brands = Brand::query()->orderBy('name')->get(['id', 'name']);
+        $performers = User::role('Performer')->get(['id', 'name', 'is_blocked']);
+        $taskTypes = TaskType::query()->orderBy('name')->get(['id', 'name', 'prefix']);
         return Inertia::render('Dashboard/Dashboard', [
             'brands' => $brands,
             'performers' => $performers,

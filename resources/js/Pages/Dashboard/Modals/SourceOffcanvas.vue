@@ -93,6 +93,11 @@ watch(sourceOffcanvasEl, (el) => {
     }
 });
 
+function getXsrfToken() {
+    const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : '';
+}
+
 function closeSourceOffcanvas() {
     if (sourceOffcanvasInstance) sourceOffcanvasInstance.hide();
     else emit('close');
@@ -156,25 +161,8 @@ watch(() => sourceFiles.value, (arr) => {
 async function saveSourceFiles() {
     if (!sourceOc.value.taskId) return;
 
-    // Normalize and validate values
     const normalized = (Array.isArray(sourceFiles.value) ? sourceFiles.value : [])
         .map(v => (v ?? '').toString().trim());
-    const taskPublicLink = (props.task?.public_link ?? '').toString().trim();
-    const seen = new Set();
-    for (const val of normalized) {
-        if (!val) continue;
-        if (taskPublicLink && val === taskPublicLink) {
-            toast.error('Значение не может совпадать с публичной ссылкой задачи');
-            return;
-        }
-        if (seen.has(val)) {
-            toast.error('Дубликаты значений в "Файл(ы) исходника" недопустимы');
-            return;
-        }
-        seen.add(val);
-    }
-
-    // Only send non-empty trimmed strings
     const files = normalized.filter(v => v.length > 0);
 
     const payload = { source_files: files };
@@ -188,9 +176,10 @@ async function saveSourceFiles() {
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': getCsrfToken()
+                'X-XSRF-TOKEN': getXsrfToken()
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            credentials: 'same-origin' // важно для работы с куками
         });
 
         if (!response.ok) {
@@ -199,20 +188,18 @@ async function saveSourceFiles() {
 
         const result = await response.json();
 
-        // Emit event to parent to update the task data
         emit('source-files-updated', {
             taskId: sourceOc.value.taskId,
             sourceFiles: files
         });
 
-        // Show success message
         toast.success('Файлы исходника сохранены успешно');
-
     } catch (e) {
         console.error('Error saving source files:', e);
         toast.error('Не удалось сохранить файлы исходника');
     }
 }
+
 
 function openSourceCommentsOffcanvas(task) {
     const brandName = task.brand?.name || (props.brands?.find(b => b.id === task.brand_id)?.name) || '';
@@ -286,19 +273,27 @@ async function loadSourceComments() {
 }
 
 async function addSourceComment() {
-    if (!sourceOc.value?.taskId || (!newSourceComment.value.trim() && (!selectedCommentImages.value || selectedCommentImages.value.length === 0))) return;
+    if (!sourceOc.value?.taskId || (!newSourceComment.value.trim() && (!selectedCommentImages.value?.length))) return;
     sourceSubmitting.value = true;
+
     try {
         const baseUrl = route('brands.tasks.source_comments.store', { brand: sourceOc.value.brandId, task: sourceOc.value.taskId });
-        const headersBase = { 'Accept': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() };
 
         const files = Array.isArray(selectedCommentImages.value) ? selectedCommentImages.value : [];
+
         if (files.length > 0) {
             for (let i = 0; i < files.length; i++) {
                 const formData = new FormData();
                 formData.append('content', i === 0 ? (newSourceComment.value.trim() || '') : '');
                 formData.append('image', files[i]);
-                const res = await fetch(baseUrl, { method: 'POST', headers: headersBase, body: formData });
+
+                const res = await fetch(baseUrl, {
+                    method: 'POST',
+                    headers: { 'X-XSRF-TOKEN': getXsrfToken() },
+                    body: formData,
+                    credentials: 'same-origin'
+                });
+
                 if (!res.ok) {
                     const errorData = await res.json().catch(() => ({}));
                     if (errorData?.errors?.content?.[0]) { toast.error(errorData.errors.content[0]); return; }
@@ -309,9 +304,17 @@ async function addSourceComment() {
             }
             clearSourceCommentForm();
         } else {
-            const headers = { ...headersBase, 'Content-Type': 'application/json' };
-            const body = JSON.stringify({ content: newSourceComment.value.trim() });
-            const res = await fetch(baseUrl, { method: 'POST', headers, body });
+            const res = await fetch(baseUrl, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-XSRF-TOKEN': getXsrfToken()
+                },
+                body: JSON.stringify({ content: newSourceComment.value.trim() }),
+                credentials: 'same-origin'
+            });
+
             if (!res.ok) {
                 const errorData = await res.json().catch(() => ({}));
                 if (errorData?.errors?.content?.[0]) { toast.error(errorData.errors.content[0]); return; }
@@ -326,6 +329,7 @@ async function addSourceComment() {
         toast.error('Ошибка при добавлении комментария. Попробуйте ещё раз.');
     } finally { sourceSubmitting.value = false; }
 }
+
 
 function clearSourceCommentForm() {
     newSourceComment.value = '';
@@ -377,8 +381,9 @@ async function deleteSourceComment(comment) {
             method: 'DELETE',
             headers: {
                 'Accept': 'application/json',
-                'X-CSRF-TOKEN': getCsrfToken()
-            }
+                'X-XSRF-TOKEN': getXsrfToken()
+            },
+            credentials: 'same-origin'
         });
 
         if (!response.ok) {
@@ -390,10 +395,6 @@ async function deleteSourceComment(comment) {
         console.error(e);
         toast.error('Не удалось удалить комментарий');
     }
-}
-
-function getCsrfToken() {
-    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 }
 
 function onCommentImagesSelected(event) {
