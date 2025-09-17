@@ -265,6 +265,10 @@ function openSourceFilesOffcanvas(task) {
     sourceActiveTab.value = 'files';
 }
 
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+}
+
 async function loadSourceComments() {
     if (!sourceOc.value?.taskId || !sourceOc.value?.brandId) { sourceComments.value = []; return; }
     const url = route('brands.tasks.source_comments.index', { brand: sourceOc.value.brandId, task: sourceOc.value.taskId });
@@ -278,6 +282,7 @@ async function addSourceComment() {
 
     try {
         const baseUrl = route('brands.tasks.source_comments.store', { brand: sourceOc.value.brandId, task: sourceOc.value.taskId });
+        const headersBase = { 'Accept': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() };
 
         const files = Array.isArray(selectedCommentImages.value) ? selectedCommentImages.value : [];
 
@@ -289,7 +294,7 @@ async function addSourceComment() {
 
                 const res = await fetch(baseUrl, {
                     method: 'POST',
-                    headers: { 'X-XSRF-TOKEN': getXsrfToken() },
+                    headers: headersBase,
                     body: formData,
                     credentials: 'same-origin'
                 });
@@ -307,9 +312,8 @@ async function addSourceComment() {
             const res = await fetch(baseUrl, {
                 method: 'POST',
                 headers: {
-                    'Accept': 'application/json',
+                    ...headersBase,
                     'Content-Type': 'application/json',
-                    'X-XSRF-TOKEN': getXsrfToken()
                 },
                 body: JSON.stringify({ content: newSourceComment.value.trim() }),
                 credentials: 'same-origin'
