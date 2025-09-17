@@ -347,24 +347,19 @@ function canDeleteComment(comment) {
     if (!props.currentUser) return false;
 
     const isAdmin = props.currentUser.roles?.some(r => r.name === 'Administrator' || r.name === 'admin') || props.currentUser.is_admin;
-    const isManager = props.currentUser.roles?.some(r => r.name === 'Manager' || r.name === 'manager') || props.currentUser.is_manager;
-    const isPerformer = props.currentUser.roles?.some(r => r.name === 'Performer' || r.name === 'performer') || props.currentUser.is_performer;
-
-    // Administrators can delete any comment
+    // Administrators can delete any comment at any time
     if (isAdmin) return true;
 
-    // Check if the comment belongs to the current user
+    // Only the author can delete their own comment
     const isOwnComment = comment.user_id === props.currentUser.id;
+    if (!isOwnComment) return false;
 
-    if (!isOwnComment) {
-        // Cannot delete comments from other roles
-        return false;
-    }
-
-    // For own comments, can only delete the most recent one
-    const userComments = sourceComments.value.filter(c => c.user_id === props.currentUser.id);
-    const mostRecentComment = userComments.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
-    return mostRecentComment && mostRecentComment.id === comment.id;
+    // Non-admins: allow deletion only within 1 minute of creation
+    const createdAt = new Date(comment.created_at).getTime();
+    if (!createdAt || Number.isNaN(createdAt)) return false;
+    const elapsed = Date.now() - createdAt;
+    const windowMs = 60 * 1000; // 1 minute
+    return elapsed <= windowMs;
 }
 
 async function deleteSourceComment(comment) {

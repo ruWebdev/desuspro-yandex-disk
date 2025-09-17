@@ -64,22 +64,33 @@ class TaskController extends Controller
             $q->where('status', $status);
         }
 
-        // Поиск по имени
+        // Поиск по имени (только по названию задачи)
         if ($request->filled('search')) {
             $name = trim((string)$request->query('search'));
-            $q->where(function($qq) use ($name) {
-                $qq->where('name', 'like', "%{$name}%");
-            });
+            if ($name !== '') {
+                $q->where(function($qq) use ($name) {
+                    $qq->where('name', 'like', "%{$name}%");
+                });
+            }
         }
-        // Global search across fields
-        if ($request->filled('global')) {
-            $g = trim((string)$request->query('global'));
-            $q->where(function($qq) use ($g) {
-                $qq->where('name', 'like', "%{$g}%")
-                   ->orWhereHas('article', fn($aq) => $aq->where('name', 'like', "%{$g}%"))
-                   ->orWhereHas('brand', fn($bq) => $bq->where('name', 'like', "%{$g}%"))
-                   ->orWhereHas('type', fn($tq) => $tq->where('name', 'like', "%{$g}%"));
-            });
+        // Глобальный поиск по нескольким полям. Поддерживает оба параметра: 'global' и 'global_search'
+        $globalTerm = $request->filled('global_search')
+            ? $request->query('global_search')
+            : ($request->filled('global') ? $request->query('global') : null);
+        if ($globalTerm !== null) {
+            $g = trim((string)$globalTerm);
+            if ($g !== '') {
+                $q->where(function($qq) use ($g) {
+                    $qq->where('name', 'like', "%{$g}%")
+                       ->orWhereHas('brand', fn($bq) => $bq->where('name', 'like', "%{$g}%"))
+                       ->orWhereHas('article', fn($aq) => $aq->where('name', 'like', "%{$g}%"))
+                       ->orWhereHas('type', fn($tq) => $tq->where('name', 'like', "%{$g}%"))
+                       // Исполнитель (performer)
+                       ->orWhereHas('assignee', fn($uq) => $uq->where('name', 'like', "%{$g}%"))
+                       // Проверяющий/создатель (checker/manager)
+                       ->orWhereHas('creator', fn($cq) => $cq->where('name', 'like', "%{$g}%"));
+                });
+            }
         }
 
         // Date filter: today|yesterday|date=YYYY-MM-DD
