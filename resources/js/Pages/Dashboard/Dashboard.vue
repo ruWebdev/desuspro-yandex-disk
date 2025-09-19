@@ -83,6 +83,8 @@ function resetFilters() {
     search.value = '';
     globalSearch.value = '';
     brandFilter.value = '';
+    statusFilter.value = '';
+    priorityFilter.value = '';
     articleFilter.value = '';
     performerFilter.value = '';
     createdFilter.value = '';

@@ -1,33 +1,134 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
-
 <p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+  <a href="https://laravel.com" target="_blank">
+    <img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo">
+  </a>
+  <h1 align="center">DecusPro Yandex.Disk Integration</h1>
 </p>
 
-## About Laravel
+<p align="center">
+  <a href="#"><img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/php-8.2%2B-8892BF" alt="PHP 8.2+"></a>
+  <a href="#"><img src="https://img.shields.io/badge/laravel-10.x-FF2D20" alt="Laravel 10.x"></a>
+  <a href="#"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
+</p>
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## О проекте
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+DecusPro Yandex.Disk Integration - это веб-приложение для управления задачами с интеграцией Yandex.Disk, построенное на Laravel и Inertia.js с использованием Vue.js на фронтенде.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+### Основные возможности
 
-## Learning Laravel
+- Управление задачами и подзадачами
+- Интеграция с Yandex.Disk для хранения файлов
+- Разграничение прав доступа (роли: Администратор, Менеджер, Исполнитель)
+- Гибкая система фильтрации и поиска задач
+- Удобный интерфейс для работы с файлами
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## Требования
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+- PHP 8.2+
+- Composer 2.0+
+- Node.js 18+
+- MySQL 8.0+
+- Redis (для кеширования и очередей)
+- Yandex.Disk API ключи
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Установка
+
+1. Клонируйте репозиторий:
+   ```bash
+   git clone git@github.com:your-organization/decuspro-yd.git
+   cd decuspro-yd
+   ```
+
+2. Установите зависимости PHP:
+   ```bash
+   composer install
+   ```
+
+3. Установите зависимости Node.js:
+   ```bash
+   npm install
+   ```
+
+4. Настройте окружение:
+   ```bash
+   cp .env.example .env
+   php artisan key:generate
+   ```
+
+5. Настройте базу данных в `.env`
+
+6. Выполните миграции и сиды:
+   ```bash
+   php artisan migrate --seed
+   ```
+
+7. Соберите ассеты:
+   ```bash
+   npm run build
+   ```
+
+8. Запустите сервер:
+   ```bash
+   php artisan serve
+   ```
+
+## Разработка
+
+Для локальной разработки рекомендуется использовать Laravel Sail:
+
+```bash
+# Создайте файл .env
+cp .env.example .env
+
+# Запустите контейнеры
+./vendor/bin/sail up -d
+
+# Установите зависимости
+./vendor/bin/sail composer install
+./vendor/bin/sail npm install
+
+# Запустите миграции
+./vendor/bin/sail artisan migrate --seed
+
+# Соберите ассеты
+./vendor/bin/sail npm run dev
+```
+
+## Тестирование
+
+```bash
+# Запуск PHPUnit тестов
+php artisan test
+
+# Запуск PHPStan (статический анализ)
+vendor/bin/phpstan analyse
+
+# Запуск ESLint
+npx eslint resources/js --ext .js,.vue
+```
+
+## Развертывание
+
+Проект использует GitHub Actions для CI/CD. Развертывание происходит автоматически:
+- При пуше в ветку `develop` - на тестовое окружение
+- При мерже в ветку `main` - на продакшн
+
+## Лицензия
+
+Этот проект является проприетарным программным обеспечением и защищен авторскими правами.
+
+## Документация
+
+- [Документация Laravel](https://laravel.com/docs)
+- [Документация Inertia.js](https://inertiajs.com/)
+- [Документация Vue.js](https://vuejs.org/guide/)
+- [Документация Yandex.Disk API](https://yandex.ru/dev/disk/api/concepts/)
+
+## Поддержка
+
+По вопросам, связанным с проектом, обращайтесь к команде разработки.
 
 ## Laravel Sponsors
 
@@ -44,9 +145,9 @@ We would like to extend our thanks to the following sponsors for funding Laravel
 - **[Redberry](https://redberry.international/laravel-development)**
 - **[Active Logic](https://activelogic.com)**
 
-## Contributing
+## Вклад в проект
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Спасибо за ваш интерес к участию в проекте! Пожалуйста, ознакомьтесь с нашим [руководством по вкладу](CONTRIBUTING.md), чтобы узнать, как вы можете помочь.
 
 ## Code of Conduct
 
