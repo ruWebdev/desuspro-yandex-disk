@@ -45,7 +45,7 @@ watch(() => props.show, async (val) => {
     }
 });
 
-const emit = defineEmits(['close', 'source-files-updated', 'open-lightbox']);
+const emit = defineEmits(['close', 'show', 'source-files-updated', 'open-lightbox']);
 
 const isPerformer = computed(() => {
     return props.currentUser && (
@@ -400,6 +400,67 @@ function onCommentImagesSelected(event) {
     const files = event.target.files;
     selectedCommentImages.value = files ? Array.from(files) : [];
 }
+
+function openCommentFileDialog() {
+    if (commentImageInput.value) {
+        commentImageInput.value.value = null;
+        commentImageInput.value.click();
+    }
+}
+
+function onCommentPaste(e) {
+    try {
+        const items = e.clipboardData?.items || [];
+        const images = [];
+        for (const it of items) {
+            if (it.kind === 'file') {
+                const file = it.getAsFile();
+                if (file && /^image\//i.test(file.type)) images.push(file);
+            }
+        }
+        if (images.length) {
+            selectedCommentImages.value = [...selectedCommentImages.value, ...images];
+            e.preventDefault();
+        }
+    } catch (_) { }
+}
+
+async function addImagesFromClipboard() {
+    try {
+        if (!navigator.clipboard?.read) {
+            toast.info('Браузер не поддерживает чтение из буфера. Используйте Ctrl+V в поле комментария.');
+            return;
+        }
+        const items = await navigator.clipboard.read();
+        const newFiles = [];
+        for (const item of items) {
+            for (const type of item.types) {
+                if (type.startsWith('image/')) {
+                    const blob = await item.getType(type);
+                    const file = new File([blob], `clipboard-${Date.now()}.${type.split('/')[1] || 'png'}`, { type });
+                    newFiles.push(file);
+                }
+            }
+        }
+        if (newFiles.length) {
+            selectedCommentImages.value = [...selectedCommentImages.value, ...newFiles];
+            toast.success(`Добавлено изображений: ${newFiles.length}`);
+        } else {
+            toast.info('В буфере обмена не найдено изображений. Скопируйте изображение и попробуйте снова.');
+        }
+    } catch (e) {
+        console.warn('Clipboard read failed', e);
+        toast.error('Не удалось прочитать буфер обмена. Разрешите доступ или используйте Ctrl+V.');
+    }
+}
+
+function getObjectURL(file) {
+    try {
+        const URL_ = (typeof window !== 'undefined' && (window.URL || window.webkitURL)) || null;
+        return URL_ ? URL_.createObjectURL(file) : '';
+    } catch (_) { return ''; }
+}
+
 </script>
 
 <template>
@@ -444,7 +505,7 @@ function onCommentImagesSelected(event) {
                                 <div v-if="c.image_path" class="mt-2">
                                     <img :src="'/storage/' + c.image_path" class="img-fluid rounded cursor-pointer"
                                         style="max-width: 300px; max-height: 200px;"
-                                        @click="() => emit('open-lightbox', '/storage/' + c.image_path)" />
+                                        @click="() => emit('open-lightbox', '/storage/' + c.image_path, null, sourceComments.filter(x => x.image_path).map(x => '/storage/' + x.image_path))" />
                                 </div>
                             </div>
                             <button v-if="canDeleteComment(c)" class="btn btn-ghost-danger btn-sm ms-2" title="Удалить"
@@ -455,12 +516,25 @@ function onCommentImagesSelected(event) {
                         <form @submit.prevent="addSourceComment">
                             <div class="mb-2">
                                 <textarea v-model="newSourceComment" rows="2" class="form-control"
-                                    placeholder="Новый комментарий…"></textarea>
+                                    placeholder="Новый комментарий…" @paste="onCommentPaste"></textarea>
                             </div>
                             <div class="mb-2">
-                                <input type="file" ref="commentImageInput" accept="image/*" multiple
-                                    class="form-control" @change="onCommentImagesSelected" />
-                                <small class="text-secondary">Максимальный размер: 5MB на файл</small>
+                                <input type="file" ref="commentImageInput" accept="image/*" multiple class="d-none"
+                                    @change="onCommentImagesSelected" />
+                                <button type="button" class="btn btn-outline-secondary btn-sm"
+                                    @click="openCommentFileDialog">
+                                    Вложение
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm ms-1" @click="addImagesFromClipboard">
+                                    Из буфера обмена
+                                </button>
+                                <div v-if="selectedCommentImages && selectedCommentImages.length" class="mt-2 d-flex flex-wrap gap-2">
+                                    <div v-for="(f, idx) in selectedCommentImages" :key="idx" class="border rounded p-1">
+                                        <img :src="getObjectURL(f)" style="height: 60px; width: auto;" />
+                                    </div>
+                                </div>
+                                <small class="text-secondary d-block mt-1">Максимальный размер: 5MB на файл. Можно
+                                    вставлять изображение из буфера обмена (Ctrl+V).</small>
                             </div>
                             <div class="d-flex justify-content-end">
                                 <button type="button" class="btn btn-secondary me-2"

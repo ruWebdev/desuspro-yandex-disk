@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Brand;
 use App\Models\Task;
+use App\Models\TaskFileThumbnail;
 use App\Models\TaskSourceComment;
+use App\Models\TaskComment;
 use App\Models\User;
 use App\Models\Subtask;
 use App\Models\TaskType;
@@ -293,6 +295,13 @@ class TaskController extends Controller
     {
         abort_unless($task->brand_id === $brand->id, 404);
 
+        // Backend enforcement: performer cannot change status of an already accepted task
+        $user = $request->user();
+        if (($user && method_exists($user, 'hasRole') && ($user->hasRole('Performer') || $user->hasRole('performer')))
+            && $task->status === 'accepted' && $request->has('status')) {
+            return response()->json(['success' => false, 'error' => 'Forbidden for performer on accepted task'], 403);
+        }
+
         // Normalize known legacy/alias statuses before validation
         if ($request->has('status')) {
             $normalized = $this->normalizeStatus($request->string('status'));
@@ -345,6 +354,14 @@ class TaskController extends Controller
         }
         $task->save();
 
+        // If status changed to accepted or cancelled, cleanup local thumbnails
+        if (array_key_exists('status', $data)) {
+            $newStatus = $task->status;
+            if (in_array($newStatus, ['accepted', 'cancelled'], true) && $newStatus !== $oldStatus) {
+                $this->cleanupTaskThumbnails($task);
+            }
+        }
+
         // Return JSON response for API requests, Inertia response for web
         if ($request->wantsJson()) {
             return response()->json([
@@ -375,6 +392,16 @@ class TaskController extends Controller
             'assignee_id' => ['sometimes','nullable','integer','exists:users,id'],
         ]);
 
+        // Backend enforcement: performer cannot change status for accepted tasks
+        $user = $request->user();
+        if ($user && method_exists($user, 'hasRole') && ($user->hasRole('Performer') || $user->hasRole('performer'))
+            && array_key_exists('status', $payload)) {
+            $acceptedExists = Task::whereIn('id', $payload['ids'])->where('status', 'accepted')->exists();
+            if ($acceptedExists) {
+                return response()->json(['success' => false, 'error' => 'Forbidden for performer on accepted tasks'], 403);
+            }
+        }
+
         $update = [];
         if (array_key_exists('status', $payload)) {
             $status = $this->normalizeStatus($payload['status']);
@@ -404,6 +431,16 @@ class TaskController extends Controller
         }
 
         Task::whereIn('id', $payload['ids'])->update($update);
+
+        // If status set to accepted or cancelled, cleanup thumbnails for affected tasks
+        if (array_key_exists('status', $update) && in_array($update['status'], ['accepted','cancelled'], true)) {
+            $affected = Task::whereIn('id', $payload['ids'])->get(['id','brand_id','status']);
+            foreach ($affected as $t) {
+                if (in_array($t->status, ['accepted','cancelled'], true)) {
+                    $this->cleanupTaskThumbnails($t);
+                }
+            }
+        }
 
         $result = ['success' => true, 'updated' => count($payload['ids'])];
         // If the request expects JSON (API/AJAX), return JSON. Otherwise, redirect back for Inertia.
@@ -436,6 +473,55 @@ class TaskController extends Controller
         Storage::disk('public')->deleteDirectory("tasks/{$task->id}");
         $task->delete();
         return back()->with('status', 'task-deleted');
+    }
+
+    /**
+     * Bulk delete tasks (admin only via route middleware). Deletes:
+     * - Task records
+     * - All task comments and source comments and their image files
+     * - Yandex Disk folder for each task
+     * - Local storage folder tasks/{id}
+     */
+    public function bulkDelete(Request $request)
+    {
+        $data = $request->validate([
+            'ids' => ['required','array','min:1'],
+            'ids.*' => ['integer','exists:tasks,id'],
+        ]);
+
+        $ids = $data['ids'];
+        $tasks = Task::with(['brand','type','article'])->whereIn('id', $ids)->get();
+        foreach ($tasks as $task) {
+            // Delete comments and their images
+            $comments = TaskComment::where('task_id', $task->id)->get();
+            foreach ($comments as $comment) {
+                if ($comment->image_path) {
+                    Storage::disk('public')->delete($comment->image_path);
+                }
+                $comment->delete();
+            }
+            $sourceComments = TaskSourceComment::where('task_id', $task->id)->get();
+            foreach ($sourceComments as $comment) {
+                if ($comment->image_path) {
+                    Storage::disk('public')->delete($comment->image_path);
+                }
+                $comment->delete();
+            }
+
+            // Delete Yandex folder (best-effort)
+            try { $this->deleteYandexFolderStructure($task->brand, $task); } catch (\Throwable $e) { Log::warning('bulkDelete yandex folder failed', ['task_id'=>$task->id,'e'=>$e->getMessage()]); }
+
+            // Delete local files
+            Storage::disk('public')->deleteDirectory("tasks/{$task->id}");
+
+            // Delete task
+            $task->delete();
+        }
+
+        if ($request->expectsJson() || $request->wantsJson()) {
+            return response()->json(['success' => true, 'deleted' => count($ids)]);
+        }
+        return back()->with('status', 'tasks-bulk-deleted');
     }
 
     public function upload(Request $request, Brand $brand, Task $task): RedirectResponse
@@ -646,6 +732,24 @@ class TaskController extends Controller
                 'brand_id' => $brand->id,
                 'message' => $e->getMessage(),
             ]);
+        }
+    }
+
+    /**
+     * Delete local thumbnail files and DB records for a task.
+     */
+    private function cleanupTaskThumbnails(Task $task): void
+    {
+        try {
+            // Remove files under public storage
+            Storage::disk('public')->deleteDirectory("tasks/{$task->id}/thumbnails");
+        } catch (\Throwable $e) {
+            Log::warning('Failed to delete thumbnails directory', ['task_id' => $task->id, 'error' => $e->getMessage()]);
+        }
+        try {
+            TaskFileThumbnail::where('task_id', $task->id)->delete();
+        } catch (\Throwable $e) {
+            Log::warning('Failed to delete thumbnail DB records', ['task_id' => $task->id, 'error' => $e->getMessage()]);
         }
     }
 }

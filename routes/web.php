@@ -136,6 +136,10 @@ Route::middleware('auth')->group(function () {
         Route::get('/source-comments', [\App\Http\Controllers\TaskSourceCommentController::class, 'index'])->name('brands.tasks.source_comments.index');
         Route::post('/source-comments', [\App\Http\Controllers\TaskSourceCommentController::class, 'store'])->name('brands.tasks.source_comments.store');
         Route::delete('/source-comments/{comment}', [\App\Http\Controllers\TaskSourceCommentController::class, 'destroy'])->name('brands.tasks.source_comments.destroy');
+
+        // Task files thumbnails
+        Route::get('/files', [\App\Http\Controllers\TaskFileController::class, 'index'])->name('brands.tasks.files.index');
+        Route::post('/files/thumbnail', [\App\Http\Controllers\TaskFileController::class, 'thumbnail'])->name('brands.tasks.files.thumbnail');
     });
 });
 
@@ -157,6 +161,10 @@ Route::middleware(['auth', 'role:Manager|Administrator|Performer'])->group(funct
     Route::put('/tasks/{task}/public-link', [TaskController::class, 'updatePublicLink'])->name('tasks.update_public_link');
     Route::put('/tasks/bulk-update', [TaskController::class, 'bulkUpdate'])->name('tasks.bulk_update'); // Added manager-only route for bulk task updates
     Route::get('/tasks/search', [TaskController::class, 'search'])->name('tasks.search');
+    // Admin-only bulk delete
+    Route::delete('/tasks/bulk-delete', [TaskController::class, 'bulkDelete'])
+        ->middleware('role:Administrator')
+        ->name('tasks.bulk_delete');
 
     // Executors (all non-manager users) - unified management
     Route::get('/users/executors', [\App\Http\Controllers\Users\ExecutorsController::class, 'index'])->name('users.executors.index');

@@ -259,7 +259,19 @@ class YandexDiskController extends Controller
 
         $path = (string) $request->string('path');
         try {
-            $result = $this->disk->upload($token->access_token, $path, $resource);
+            try {
+                // First try without overwrite to avoid accidental clobber
+                $result = $this->disk->upload($token->access_token, $path, $resource, false);
+            } catch (\Illuminate\Http\Client\RequestException $e) {
+                // If resource exists already, retry with overwrite=true for idempotency
+                if (optional($e->response)->status() === 409) {
+                    // Rewind stream for second attempt
+                    if (is_resource($resource)) { @rewind($resource); }
+                    $result = $this->disk->upload($token->access_token, $path, $resource, true);
+                } else {
+                    throw $e;
+                }
+            }
         } finally {
             if (is_resource($resource)) {
                 fclose($resource);

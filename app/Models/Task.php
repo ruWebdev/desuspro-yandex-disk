@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class Task extends Model
 {
@@ -73,5 +74,22 @@ class Task extends Model
     public function comments(): HasMany
     {
         return $this->hasMany(TaskComment::class);
+    }
+
+    public function thumbnails(): HasMany
+    {
+        return $this->hasMany(TaskFileThumbnail::class);
+    }
+
+    protected static function booted(): void
+    {
+        static::deleting(function (Task $task) {
+            // Remove thumbnail files from storage; rows will be deleted via FK cascade
+            foreach ($task->thumbnails as $thumb) {
+                if ($thumb->thumbnail_path) {
+                    try { Storage::disk('public')->delete($thumb->thumbnail_path); } catch (\Throwable $e) { /* noop */ }
+                }
+            }
+        });
     }
 }

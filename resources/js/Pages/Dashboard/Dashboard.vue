@@ -57,6 +57,29 @@ const toast = useToast();
 function getCsrfToken() {
     return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 }
+function getFileNameFromUrl(url) {
+    try {
+        const u = new URL(url, window.location.origin);
+        const path = u.pathname || '';
+        const segs = path.split('/').filter(Boolean);
+        return segs[segs.length - 1] || '';
+    } catch (_) {
+        const clean = (url || '').split('?')[0].split('#')[0];
+        const parts = clean.split('/');
+        return parts[parts.length - 1] || '';
+    }
+}
+async function onLightboxComment(fname) {
+    const derived = fname && String(fname).trim()
+        ? fname.trim()
+        : ((lightboxMeta.value && lightboxMeta.value.name) ? lightboxMeta.value.name : getFileNameFromUrl(lightboxSrc.value));
+    closeLightbox();
+    // Switch offcanvas to comments and prefill (force watcher by toggling value)
+    activeOcTab.value = 'comments';
+    commentPrefill.value = '';
+    await nextTick();
+    commentPrefill.value = derived || '';
+}
 
 // Фильтры
 const search = ref('');
@@ -222,6 +245,38 @@ const anySelected = computed(() => selectedIds.value.length > 0);
 const selectedTasks = computed(() => items.value.filter(t => selectedIds.value.includes(t.id)));
 function clearSelection() { selectedIds.value = []; }
 
+// Bulk delete (admin only)
+async function onBulkDelete() {
+    if (!isAdmin.value) return;
+    const ids = [...selectedIds.value];
+    if (ids.length === 0) return;
+    if (!confirm(`Удалить ${ids.length} задач(и)? Будут удалены комментарии, изображения комментариев и папка на Яндекс.Диске.`)) return;
+    try {
+        const res = await fetch(route('tasks.bulk_delete'), {
+            method: 'DELETE',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': getCsrfToken(),
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ ids })
+        });
+        if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            throw new Error(`HTTP ${res.status}: ${text}`);
+        }
+        // Remove deleted tasks from UI
+        const idSet = new Set(ids);
+        items.value = items.value.filter(t => !idSet.has(t.id));
+        clearSelection();
+        toast.success('Задачи удалены');
+    } catch (e) {
+        console.error('bulk delete failed', e);
+        toast.error('Не удалось удалить задачи');
+    }
+}
+
 // Options helpers
 const statusOptions = [
     { value: 'created', label: 'Создана' },
@@ -276,6 +331,11 @@ function onUpdateStatus(task, status) {
     // Enforce allowed transitions by role in UI, but double-check here
     const allowed = new Set(userStatusOptions.value.map(o => o.value));
     if (!allowed.has(status)) { toast.error('Недоступный статус для вашей роли'); return; }
+    // Restrict: Performer cannot change status if task is already accepted
+    if (isPerformer.value && task?.status === 'accepted') {
+        toast.error('Исполнитель не может менять статус принятой задачи');
+        return;
+    }
     if (status === 'question') {
         questionContext.value = { mode: 'single', task };
         showQuestion.value = true;
@@ -412,6 +472,11 @@ async function bulkUpdateStatus(value) {
     if (!value) return;
     const allowed = new Set(userStatusOptions.value.map(o => o.value));
     if (!allowed.has(value)) { toast.error('Недоступный статус для вашей роли'); return; }
+    // Restrict: Performer cannot bulk-change status for any accepted tasks
+    if (isPerformer.value) {
+        const hasAccepted = selectedTasks.value.some(t => t.status === 'accepted');
+        if (hasAccepted) { toast.error('Исполнитель не может менять статус принятых задач'); return; }
+    }
     if (value === 'question') {
         // Open modal to capture question
         questionContext.value = { mode: 'bulk', task: null };
@@ -503,10 +568,22 @@ const showLightbox = ref(false);
 const lightboxSrc = ref('');
 const lightboxType = ref('image');
 const lightboxMeta = ref(null); // { id, path } for temp cleanup
-function openLightbox(url, meta = null) {
+const lightboxItems = ref([]); // optional array of URLs for navigation
+const lightboxIndex = ref(0);
+const commentPrefill = ref('');
+function openLightbox(url, meta = null, items = null) {
     lightboxType.value = 'image';
-    lightboxSrc.value = url;
     lightboxMeta.value = meta || null;
+    if (Array.isArray(items) && items.length > 0) {
+        lightboxItems.value = items;
+        const idx = items.indexOf(url);
+        lightboxIndex.value = idx >= 0 ? idx : 0;
+        lightboxSrc.value = lightboxItems.value[lightboxIndex.value] || url;
+    } else {
+        lightboxItems.value = [];
+        lightboxIndex.value = 0;
+        lightboxSrc.value = url;
+    }
     showLightbox.value = true;
 }
 function closeLightbox() {
@@ -515,6 +592,8 @@ function closeLightbox() {
     lightboxMeta.value = null;
     setTimeout(() => {
         lightboxSrc.value = '';
+        lightboxItems.value = [];
+        lightboxIndex.value = 0;
         lightboxType.value = 'image';
     }, 150);
     // Cleanup temp file if meta present
@@ -532,6 +611,16 @@ function closeLightbox() {
             });
         }
     } catch (e) { console.warn('Temp cleanup failed', e); }
+}
+function lightboxPrev() {
+    if (!lightboxItems.value.length) return;
+    lightboxIndex.value = (lightboxIndex.value - 1 + lightboxItems.value.length) % lightboxItems.value.length;
+    lightboxSrc.value = lightboxItems.value[lightboxIndex.value];
+}
+function lightboxNext() {
+    if (!lightboxItems.value.length) return;
+    lightboxIndex.value = (lightboxIndex.value + 1) % lightboxItems.value.length;
+    lightboxSrc.value = lightboxItems.value[lightboxIndex.value];
 }
 
 </script>
@@ -586,7 +675,11 @@ function closeLightbox() {
                                         </option>
                                     </select>
                                 </div>
-                                <div class="ms-auto">
+                                <div class="ms-auto d-flex align-items-center gap-2">
+                                    <button v-if="isAdmin" class="btn btn-sm btn-outline-danger"
+                                        @click="onBulkDelete">
+                                        <i class="ti ti-trash me-1"></i> Удалить
+                                    </button>
                                     <button class="btn btn-sm btn-outline-secondary me-2" @click="clearSelection">
                                         <i class="ti ti-x me-1"></i> Снять выделение
                                     </button>
@@ -622,11 +715,12 @@ function closeLightbox() {
         <RenameTaskModal :show="showRename" :renaming="renaming" :renameName="renameName" @cancel="cancelRename"
             @submit="(v) => { renameName = v; submitRename(); }" />
         <LightboxModal :show="showLightbox" :lightboxSrc="lightboxSrc" :lightboxType="lightboxType"
-            @close="closeLightbox" />
+            :items="lightboxItems" :index="lightboxIndex" @close="closeLightbox" @prev="lightboxPrev"
+            @next="lightboxNext" @comment="onLightboxComment" />
 
         <!-- Offcanvas -->
         <TaskOffcanvas :show="showTaskOffcanvas" :task="offcanvasTask" :brands="brands" :activeTab="activeOcTab"
-            :currentUser="currentUser" @close="closeTaskOffcanvas" @update-tab="(t) => activeOcTab = t"
+            :currentUser="currentUser" :commentPrefill="commentPrefill" @close="closeTaskOffcanvas" @update-tab="(t) => activeOcTab = t"
             @open-lightbox="openLightbox" />
         <SourceOffcanvas :show="showSourceOffcanvas" :task="sourceTask" :brands="brands" :currentUser="currentUser"
             :initialTab="sourceInitialTab" @close="closeSourceOffcanvas" @open-lightbox="openLightbox"

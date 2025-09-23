@@ -8,7 +8,8 @@ const props = defineProps({
     task: { type: Object, default: null },
     brands: { type: Array, required: true },
     activeTab: { type: String, default: 'comments' },
-    currentUser: { type: Object, default: null }
+    currentUser: { type: Object, default: null },
+    commentPrefill: { type: String, default: '' },
 });
 
 const toast = useToast();
@@ -33,10 +34,7 @@ const isManager = computed(() => {
 watch(() => props.show, async (val) => {
     await nextTick();
     if (val) {
-        // Set public folder URL from task
         publicFolderUrl.value = props.task?.public_link || '';
-
-        // Capture stable IDs for comment operations
         if (props.task) {
             commentCtx.value = { brandId: props.task.brand_id, taskId: props.task.id };
         } else {
@@ -46,7 +44,6 @@ watch(() => props.show, async (val) => {
         if (offcanvasInstance) {
             offcanvasInstance.show();
         }
-        // Lazy load content depending on active tab
         if (props.activeTab === 'files') {
             loadYandexFiles();
         } else {
@@ -59,13 +56,29 @@ watch(() => props.show, async (val) => {
     }
 });
 
-const emit = defineEmits(['close', 'update-tab', 'open-lightbox']);
+const emit = defineEmits(['close', 'show', 'update-tab', 'open-lightbox']);
 
-// Watch for tab changes to ensure publicFolderUrl is set
 watch(() => props.activeTab, (newTab) => {
     if (newTab === 'files' && props.task?.public_link && !publicFolderUrl.value) {
         publicFolderUrl.value = props.task.public_link;
     }
+    if (newTab === 'files') {
+        // Load thumbnails alongside files
+        loadLocalThumbnails();
+    }
+});
+
+// When parent provides a prefill (e.g., from Lightbox "КОММЕНТАРИЙ"),
+// insert it into the new comment, switch tab to comments and focus the textarea
+watch(() => props.commentPrefill, async (val) => {
+    const txt = (typeof val === 'string') ? val.trim() : '';
+    if (!txt) return;
+    // Prepend filename if not already included
+    newComment.value = newComment.value ? `${txt} — ${newComment.value}` : txt;
+    // Switch to comments tab
+    emit('update-tab', 'comments');
+    await nextTick();
+    try { newCommentTextarea.value?.focus(); } catch (_) { }
 });
 
 const offcanvasEl = ref(null);
@@ -76,10 +89,10 @@ const hasOffcanvas = ref(false);
 const commentsLoading = ref(false);
 const comments = ref([]);
 const newComment = ref('');
+const newCommentTextarea = ref(null);
 const submitting = ref(false);
 const commentImageInput = ref(null);
 const selectedCommentImages = ref([]);
-// Stable identifiers to avoid race conditions
 const commentCtx = ref({ brandId: null, taskId: null });
 
 // Files state
@@ -90,6 +103,11 @@ const publicFolderUrl = ref('');
 const fileInputRef = ref(null);
 const uploading = ref(false);
 const uploadError = ref('');
+const uploadProgress = ref(0); // 0..100 overall
+const uploadFileName = ref('');
+const uploadStatus = ref('');
+// Local thumbnails map: { [filename]: url }
+const localThumbs = ref({});
 
 onMounted(async () => {
     await nextTick();
@@ -113,24 +131,6 @@ watch(offcanvasEl, (el) => {
 function closeOffcanvas() {
     if (offcanvasInstance) offcanvasInstance.hide();
     else emit('close');
-}
-
-function openCommentsOffcanvas(task) {
-    const brandName = task.brand?.name || (props.brands.find(b => b.id === task.brand_id)?.name) || '';
-    // Set task data
-    comments.value = [];
-    newComment.value = '';
-    publicFolderUrl.value = task.public_link || '';
-    emit('open-comments', task);
-    if (offcanvasInstance) offcanvasInstance.show();
-}
-
-function openFilesOffcanvas(task) {
-    const brandName = task.brand?.name || (props.brands.find(b => b.id === task.brand_id)?.name) || '';
-    // Set task data
-    publicFolderUrl.value = task.public_link || '';
-    emit('open-files', task);
-    if (offcanvasInstance) offcanvasInstance.show();
 }
 
 async function loadComments() {
@@ -186,63 +186,97 @@ async function addComment() {
 
 function onCommentImagesSelected(event) {
     const files = event.target.files;
-    selectedCommentImages.value = files ? Array.from(files) : [];
+    selectedCommentImages.value = files ? [...selectedCommentImages.value, ...Array.from(files)] : [];
+}
+
+function openCommentFileDialog() {
+    if (commentImageInput.value) {
+        commentImageInput.value.value = null;
+        commentImageInput.value.click();
+    }
+}
+
+function onCommentPaste(e) {
+    try {
+        const items = e.clipboardData?.items || [];
+        const images = [];
+        for (const it of items) {
+            if (it.kind === 'file') {
+                const file = it.getAsFile();
+                if (file && /^image\//i.test(file.type)) images.push(file);
+            }
+        }
+        if (images.length) {
+            selectedCommentImages.value = [...selectedCommentImages.value, ...images];
+            e.preventDefault();
+        }
+    } catch (_) { }
+}
+
+async function addImagesFromClipboard() {
+    try {
+        if (!navigator.clipboard?.read) {
+            toast.info('Браузер не поддерживает чтение из буфера. Используйте Ctrl+V в поле комментария.');
+            return;
+        }
+        const items = await navigator.clipboard.read();
+        const newFiles = [];
+        for (const item of items) {
+            for (const type of item.types) {
+                if (type.startsWith('image/')) {
+                    const blob = await item.getType(type);
+                    // Give the blob a name so previews are stable
+                    const file = new File([blob], `clipboard-${Date.now()}.${type.split('/')[1] || 'png'}`, { type });
+                    newFiles.push(file);
+                }
+            }
+        }
+        if (newFiles.length) {
+            selectedCommentImages.value = [...selectedCommentImages.value, ...newFiles];
+            toast.success(`Добавлено изображений: ${newFiles.length}`);
+        } else {
+            toast.info('В буфере обмена не найдено изображений. Скопируйте изображение и попробуйте снова.');
+        }
+    } catch (e) {
+        console.warn('Clipboard read failed', e);
+        toast.error('Не удалось прочитать буфер обмена. Разрешите доступ или используйте Ctrl+V.');
+    }
 }
 
 function clearCommentForm() {
     newComment.value = '';
     selectedCommentImages.value = [];
-    if (commentImageInput.value) {
-        commentImageInput.value.value = null;
-    }
+    if (commentImageInput.value) { commentImageInput.value.value = null; }
 }
 
 function canDeleteComment(comment) {
     if (!props.currentUser) return false;
-
     const isAdmin = props.currentUser.roles?.some(r => r.name === 'Administrator' || r.name === 'admin') || props.currentUser.is_admin;
-    // Administrators can delete any comment at any time
     if (isAdmin) return true;
-
-    // Only the author can delete their own comment
     const isOwnComment = comment.user_id === props.currentUser.id;
     if (!isOwnComment) return false;
-
-    // Non-admins: allow deletion only within 1 minute of creation
     const createdAt = new Date(comment.created_at).getTime();
     if (!createdAt || Number.isNaN(createdAt)) return false;
     const elapsed = Date.now() - createdAt;
-    const windowMs = 60 * 1000; // 1 minute
+    const windowMs = 60 * 1000;
     return elapsed <= windowMs;
 }
 
 async function deleteComment(comment) {
     if (!commentCtx.value?.taskId || !canDeleteComment(comment)) return;
-
-    if (!confirm('Вы уверены, что хотите удалить этот комментарий?')) {
-        return;
-    }
-
+    if (!confirm('Вы уверены, что хотите удалить этот комментарий?')) return;
     const url = route('brands.tasks.comments.destroy', {
         brand: commentCtx.value.brandId,
         task: commentCtx.value.taskId,
         comment: comment.id
     });
-
     try {
         const response = await fetch(url, {
             method: 'DELETE',
-            headers: {
-                'Accept': 'application/json',
-                'X-XSRF-TOKEN': getXsrfToken()
-            },
+            headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() },
             credentials: 'same-origin'
         });
-
-        if (!response.ok) {
-            throw new Error('Ошибка при удалении комментария');
-        }
-
+        if (!response.ok) throw new Error('Ошибка при удалении комментария');
         comments.value = comments.value.filter(x => x.id !== comment.id);
     } catch (e) {
         console.error(e);
@@ -257,14 +291,10 @@ function getXsrfToken() {
 
 async function copyFolderPath() {
     const text = publicFolderUrl.value;
-    if (!text) {
-        toast.error('URL папки не найден');
-        return;
-    }
+    if (!text) { toast.error('URL папки не найден'); return; }
     try {
-        if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(text);
-        } else {
+        if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+        else {
             const ta = document.createElement('textarea');
             ta.value = text;
             document.body.appendChild(ta);
@@ -281,10 +311,7 @@ async function copyFolderPath() {
 
 function openFolderUrl() {
     const url = publicFolderUrl.value;
-    if (!url) {
-        toast.error('URL папки не найден');
-        return;
-    }
+    if (!url) { toast.error('URL папки не найден'); return; }
     window.open(url, '_blank');
 }
 
@@ -303,9 +330,7 @@ function yandexFolderPath() {
     if (!brandName || !leafBase) return null;
     const prefix = (props.task.type?.prefix || '').toLowerCase();
     const leaf = `${prefix ? prefix + '_' : ''}${leafBase}`;
-    return typeName
-        ? `disk:/${brandName}/${typeName}/${leaf}`
-        : `disk:/${brandName}/${leaf}`;
+    return typeName ? `disk:/${brandName}/${typeName}/${leaf}` : `disk:/${brandName}/${leaf}`;
 }
 
 async function loadYandexFiles() {
@@ -318,13 +343,10 @@ async function loadYandexFiles() {
         const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-
-        // Set the public URL from the API response
-        if (data && data.public_url) {
-            publicFolderUrl.value = data.public_url;
-        }
-
-        yandexItems.value = (data && data._embedded && Array.isArray(data._embedded.items)) ? data._embedded.items : [];
+        if (data && data.public_url) publicFolderUrl.value = data.public_url;
+        yandexItems.value = (data?._embedded?.items && Array.isArray(data._embedded.items)) ? data._embedded.items : [];
+        // Load local thumbnails after listing
+        await loadLocalThumbnails();
     } catch (e) {
         console.error(e);
         filesError.value = 'Не удалось загрузить список файлов.';
@@ -332,6 +354,46 @@ async function loadYandexFiles() {
     } finally {
         filesLoading.value = false;
     }
+}
+
+async function loadLocalThumbnails() {
+    try {
+        if (!props.task?.id || !props.task?.brand_id) return;
+        const url = route('brands.tasks.files.index', { brand: props.task.brand_id, task: props.task.id });
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) return;
+        const arr = await res.json();
+        const map = {};
+        if (Array.isArray(arr)) {
+            for (const f of arr) {
+                if (f?.name && f?.thumbnail_url) map[f.name] = f.thumbnail_url;
+            }
+        }
+        localThumbs.value = map;
+    } catch (_) { /* noop */ }
+}
+
+// Register a generated thumbnail on backend and update localThumbs map
+async function registerThumbnail(file) {
+    try {
+        if (!props.task?.id || !props.task?.brand_id) return;
+        const fd = new FormData();
+        fd.append('file', file, file.name);
+        fd.append('name', file.name);
+        fd.append('max', '1000');
+        const url = route('brands.tasks.files.thumbnail', { brand: props.task.brand_id, task: props.task.id });
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'X-XSRF-TOKEN': getXsrfToken() },
+            credentials: 'same-origin',
+            body: fd,
+        });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (data?.name && data?.thumbnail_url) {
+            localThumbs.value = { ...localThumbs.value, [data.name]: data.thumbnail_url };
+        }
+    } catch (_) { /* noop */ }
 }
 
 async function downloadYandexItem(item) {
@@ -347,41 +409,30 @@ async function downloadYandexItem(item) {
         const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        if (data && data.href) window.open(data.href, '_blank');
+        if (data?.href) window.open(data.href, '_blank');
     } catch (e) { console.error(e); }
 }
 
-// Delete a single file from Yandex.Disk
 async function deleteYandexItem(item) {
     if (!item || item.type !== 'file') return;
+    if (!confirm(`Удалить файл «${item.name}» из Яндекс.Диска?`)) return;
+    let reqPath = item.path;
+    if (!reqPath) {
+        const folder = yandexFolderPath();
+        if (!folder) return;
+        reqPath = `${folder}/${item.name}`;
+    }
     try {
-        // Confirm deletion
-        if (!confirm(`Удалить файл «${item.name}» из Яндекс.Диска?`)) return;
-
-        // Determine path
-        let reqPath = item.path;
-        if (!reqPath) {
-            const folder = yandexFolderPath();
-            if (!folder) return;
-            reqPath = `${folder}/${item.name}`;
-        }
-
         const res = await fetch(route('integrations.yandex.delete'), {
             method: 'DELETE',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'X-XSRF-TOKEN': getXsrfToken(),
-            },
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() },
             credentials: 'same-origin',
             body: JSON.stringify({ path: reqPath, permanently: false })
         });
-
         if (!res.ok) {
             const txt = await res.text().catch(() => '');
             throw new Error(`Ошибка удаления (${res.status}): ${txt}`);
         }
-
         toast.success('Файл удалён');
         await loadYandexFiles();
     } catch (e) {
@@ -407,34 +458,61 @@ async function uploadFiles(files) {
     if (!folder) return;
     uploading.value = true;
     uploadError.value = '';
+    uploadProgress.value = 0;
+    uploadFileName.value = '';
+    uploadStatus.value = '';
     try {
-        for (const f of files) {
-            const fd = new FormData();
-            fd.append('path', `${folder}/${f.name}`);
-            fd.append('file', f, f.name);
-            const res = await fetch(route('integrations.yandex.upload'), {
-                method: 'POST',
-                headers: { 'X-XSRF-TOKEN': getXsrfToken() },
-                credentials: 'same-origin',
-                body: fd,
+        const total = files.length;
+        for (let i = 0; i < total; i++) {
+            const f = files[i];
+            uploadFileName.value = f.name;
+            uploadStatus.value = `Загрузка ${i + 1} из ${total}`;
+            const percentBase = (i / total) * 100;
+            await new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', route('integrations.yandex.upload'));
+                xhr.setRequestHeader('X-XSRF-TOKEN', getXsrfToken());
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const filePct = (e.loaded / e.total) * (100 / total);
+                        uploadProgress.value = Math.min(100, Math.floor(percentBase + filePct));
+                    }
+                };
+                xhr.onload = async () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        uploadProgress.value = Math.min(100, Math.floor(((i + 1) / total) * 100));
+                        // Generate/register thumbnail on backend
+                        try { await registerThumbnail(f); } catch (_) {}
+                        resolve();
+                    } else {
+                        reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText || ''}`));
+                    }
+                };
+                xhr.onerror = () => reject(new Error('Network error'));
+                const fd = new FormData();
+                fd.append('path', `${folder}/${f.name}`);
+                fd.append('file', f, f.name);
+                xhr.send(fd);
             });
-            if (!res.ok) {
-                const text = await res.text();
-                throw new Error(`Upload failed (${res.status}): ${text}`);
-            }
         }
         await loadYandexFiles();
+        await loadLocalThumbnails();
+        toast.success('Файлы загружены');
     } catch (e) {
         console.error(e);
         uploadError.value = 'Ошибка загрузки файлов. Попробуйте ещё раз.';
-    } finally { uploading.value = false; }
+    } finally {
+        uploading.value = false;
+        uploadStatus.value = '';
+        uploadFileName.value = '';
+        uploadProgress.value = 0;
+    }
 }
 
 function isImageName(name) {
     return /\.(jpe?g|png|gif|webp|bmp|svg|heic|heif)$/i.test(name || '');
 }
 
-// Prefer best preview URL from item.sizes, then preview/file
 function getBestSizeUrl(item) {
     const sizes = Array.isArray(item?.sizes) ? item.sizes : [];
     if (sizes.length) {
@@ -452,15 +530,19 @@ function getBestSizeUrl(item) {
 
 async function viewYandexItemInLightbox(item) {
     if (!item || item.type !== 'file') return;
-    // Try resolver-based approach first
+    // If local thumbnail is available, open it directly with gallery of thumbnails
+    const thumb = localThumbs.value?.[item.name];
+    if (thumb) {
+        const images = yandexItems.value.filter(x => x.type === 'file' && isImageName(x.name))
+            .map(x => localThumbs.value?.[x.name] || getBestSizeUrl(x))
+            .filter(Boolean);
+        emit('open-lightbox', thumb, { name: item.name }, images);
+        return;
+    }
     try {
-        const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
         const res = await fetch(route('integrations.yandex.resolve_from_item'), {
             method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'X-XSRF-TOKEN': getXsrfToken(),
-            },
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() },
             credentials: 'same-origin',
             body: JSON.stringify({ item })
         });
@@ -468,20 +550,19 @@ async function viewYandexItemInLightbox(item) {
             const data = await res.json();
             const href = data?.href;
             if (href) {
-                // Pipe via temp public download for safe inline viewing and cleanup
                 const tempRes = await fetch(route('integrations.yandex.download_public_to_temp'), {
                     method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json',
-                        'X-XSRF-TOKEN': getXsrfToken(),
-                    },
+                    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() },
                     body: JSON.stringify({ direct_url: href }),
                     credentials: 'same-origin'
                 });
                 if (tempRes.ok) {
                     const temp = await tempRes.json();
-                    if (temp?.url) { emit('open-lightbox', temp.url, { id: temp.id, path: temp.path }); return; }
+                    if (temp?.url) {
+                        const images = yandexItems.value.filter(x => x.type === 'file' && isImageName(x.name)).map(x => getBestSizeUrl(x)).filter(Boolean);
+                        emit('open-lightbox', temp.url, { id: temp.id, path: temp.path, name: item.name }, images);
+                        return;
+                    }
                 }
                 emit('open-lightbox', href);
                 return;
@@ -491,32 +572,32 @@ async function viewYandexItemInLightbox(item) {
         console.warn('resolve_from_item failed, trying direct URL', e);
     }
 
-    // Fallback: try direct sizes URL
     const direct = getBestSizeUrl(item);
     if (direct) {
         try {
-            const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
             const tempRes = await fetch(route('integrations.yandex.download_public_to_temp'), {
                 method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                    'X-XSRF-TOKEN': getXsrfToken(),
-                },
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() },
                 body: JSON.stringify({ direct_url: direct }),
                 credentials: 'same-origin'
             });
             if (tempRes.ok) {
                 const temp = await tempRes.json();
-                if (temp?.url) { emit('open-lightbox', temp.url, { id: temp.id, path: temp.path }); return; }
+                if (temp?.url) { emit('open-lightbox', temp.url, { id: temp.id, path: temp.path, name: item.name }); return; }
             }
         } catch { }
-        emit('open-lightbox', direct);
+        const images = yandexItems.value.filter(x => x.type === 'file' && isImageName(x.name)).map(x => getBestSizeUrl(x)).filter(Boolean);
+        emit('open-lightbox', direct, { name: item.name }, images);
         return;
     }
-
-    // Final fallback: backend public download url flow for non-image or unknown types
     return downloadYandexItem(item);
+}
+
+function getObjectURL(file) {
+    try {
+        const URL_ = (typeof window !== 'undefined' && (window.URL || window.webkitURL)) || null;
+        return URL_ ? URL_.createObjectURL(file) : '';
+    } catch (_) { return ''; }
 }
 </script>
 
@@ -527,8 +608,8 @@ async function viewYandexItemInLightbox(item) {
             :style="show && !hasOffcanvas ? 'visibility: visible; z-index: 1045;' : ''">
             <div class="offcanvas-header">
                 <h5 class="offcanvas-title" :id="'task-offcanvas-title'">
-                    {{task?.brand?.name || (brands?.find(b => b.id === task?.brand_id)?.name) || ''}} / {{ task?.name
-                        || task?.article?.name || '' }}
+                    {{task?.brand?.name || (brands?.find(b => b.id === task?.brand_id)?.name) || ''}} / {{ task?.name ||
+                        task?.article?.name || '' }}
                 </h5>
                 <button type="button" class="btn-close text-reset" aria-label="Close" @click="closeOffcanvas"></button>
             </div>
@@ -572,7 +653,7 @@ async function viewYandexItemInLightbox(item) {
                                     <div class="d-flex align-items-center gap-2">
                                         <span class="badge"
                                             :class="it.type === 'dir' ? 'bg-secondary' : 'bg-primary'">{{ it.type ===
-                                                'dir' ? 'Папка' : 'Файл' }}</span>
+                                            'dir' ? 'Папка' : 'Файл' }}</span>
                                         <span>{{ it.name }}</span>
                                         <span v-if="it.size && it.type === 'file'" class="text-secondary small">{{
                                             (it.size / 1024 / 1024).toFixed(2) }} MB</span>
@@ -599,6 +680,16 @@ async function viewYandexItemInLightbox(item) {
                         </button>
                         <span v-if="uploadError" class="text-danger small">{{ uploadError }}</span>
                     </div>
+                    <div v-if="uploading" class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <div class="small text-secondary">{{ uploadStatus }} <span v-if="uploadFileName">— {{ uploadFileName }}</span></div>
+                            <div class="small">{{ uploadProgress }}%</div>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar" role="progressbar" :style="{ width: uploadProgress + '%' }"
+                                :aria-valuenow="uploadProgress" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <div v-else>
@@ -615,7 +706,7 @@ async function viewYandexItemInLightbox(item) {
                                     <div v-if="c.image_path" class="mt-2">
                                         <img :src="'/storage/' + c.image_path" class="img-fluid rounded cursor-pointer"
                                             style="max-width: 300px; max-height: 200px;"
-                                            @click="() => emit('open-lightbox', '/storage/' + c.image_path)" />
+                                            @click="() => emit('open-lightbox', '/storage/' + c.image_path, null, comments.filter(x => x.image_path).map(x => '/storage/' + x.image_path))" />
                                     </div>
                                 </div>
                                 <button v-if="canDeleteComment(c)" class="btn btn-ghost-danger btn-sm ms-2"
@@ -625,13 +716,29 @@ async function viewYandexItemInLightbox(item) {
                         <div class="mt-3">
                             <form @submit.prevent="addComment">
                                 <div class="mb-2">
-                                    <textarea v-model="newComment" rows="2" class="form-control"
-                                        placeholder="Новый комментарий…"></textarea>
+                                    <textarea v-model="newComment" rows="2" class="form-control" ref="newCommentTextarea"
+                                        placeholder="Новый комментарий…" @paste="onCommentPaste"></textarea>
                                 </div>
                                 <div class="mb-2">
-                                    <input type="file" ref="commentImageInput" accept="image/*" multiple
-                                        class="form-control" @change="onCommentImagesSelected" />
-                                    <small class="text-secondary">Максимальный размер: 5MB на файл</small>
+                                    <input type="file" ref="commentImageInput" accept="image/*" multiple class="d-none"
+                                        @change="onCommentImagesSelected" />
+                                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                                        @click="openCommentFileDialog">
+                                        Вложение
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm ms-1"
+                                        @click="addImagesFromClipboard">
+                                        Из буфера обмена
+                                    </button>
+                                    <div v-if="selectedCommentImages && selectedCommentImages.length"
+                                        class="mt-2 d-flex flex-wrap gap-2">
+                                        <div v-for="(f, idx) in selectedCommentImages" :key="idx"
+                                            class="border rounded p-1">
+                                            <img :src="getObjectURL(f)" style="height: 60px; width: auto;" />
+                                        </div>
+                                    </div>
+                                    <small class="text-secondary d-block mt-1">Максимальный размер: 5MB на файл. Можно
+                                        вставлять изображение из буфера обмена (Ctrl+V).</small>
                                 </div>
                                 <div class="d-flex justify-content-end">
                                     <button type="button" class="btn btn-secondary me-2"
