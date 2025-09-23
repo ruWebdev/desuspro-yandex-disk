@@ -573,7 +573,12 @@ const lightboxIndex = ref(0);
 const commentPrefill = ref('');
 function openLightbox(url, meta = null, items = null) {
     lightboxType.value = 'image';
-    lightboxMeta.value = meta || null;
+    // Ensure meta is an object and include the file name if not already present
+    lightboxMeta.value = {
+        ...(meta || {}),
+        // If meta doesn't have a name but we can extract it from URL, use that
+        name: meta?.name || getFileNameFromUrl(url)
+    };
     if (Array.isArray(items) && items.length > 0) {
         lightboxItems.value = items;
         const idx = items.indexOf(url);

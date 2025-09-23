@@ -16,8 +16,11 @@ import { Head, useForm, router } from '@inertiajs/vue3'
 import ContentLayout from '@/Layouts/ContentLayout.vue';
 import { Modal } from 'bootstrap';
 
-// Получить сервис toast
-const toast = inject('toast') || window.toast;
+// Получить сервис toast без предупреждений, если провайдер отсутствует
+const toast = inject('toast', window.toast || {
+  success: (...args) => console.log('[toast.success]', ...args),
+  error: (...args) => console.error('[toast.error]', ...args),
+});
 
 const props = defineProps({
   users: { type: Array, default: () => [] },
@@ -38,18 +41,23 @@ let deleteRestrictedModal = null;
 const selected = ref(null);
 const passwordError = ref('');
 
+// Initialize modals when component is mounted
 onMounted(() => {
-  // Initialize modals
-  const createEl = document.getElementById('modal-create-executor');
-  const editEl = document.getElementById('modal-edit-executor');
-  const deleteEl = document.getElementById('modal-delete-executor');
-  const deleteRestrictedEl = document.getElementById('modal-delete-restricted');
-
-  if (createEl) createModal = new Modal(createEl);
-  if (editEl) editModal = new Modal(editEl);
-  if (deleteEl) deleteModal = new Modal(deleteEl);
-  if (deleteRestrictedEl) deleteRestrictedModal = new Modal(deleteRestrictedEl);
+  // We'll initialize modals on first use instead of here
 });
+
+// Function to get or initialize a modal
+const getOrCreateModal = (id) => {
+  const el = document.getElementById(id);
+  if (!el) return null;
+
+  // If modal instance exists, return it
+  const existingInstance = Modal.getInstance?.(el);
+  if (existingInstance) return existingInstance;
+
+  // Otherwise create a new instance
+  return new Modal(el);
+};
 
 const createForm = useForm({
   name: '',
@@ -76,45 +84,64 @@ const isFilled = (v) => typeof v === 'string' ? v.trim().length > 0 : !!v
 const createInvalid = computed(() => !(
   isFilled(createForm.last_name) &&
   isFilled(createForm.first_name) &&
-  isFilled(createForm.middle_name) &&
+  // middle_name необязательно
   isFilled(createForm.email) &&
   isFilled(createForm.password)
 ))
 const editInvalid = computed(() => !(
   isFilled(editForm.last_name) &&
   isFilled(editForm.first_name) &&
-  isFilled(editForm.middle_name) &&
+  // middle_name необязательно
   isFilled(editForm.email)
 ))
 
 function openCreate() {
   createForm.reset();
   passwordError.value = '';
-  const modal = new bootstrap.Modal(document.getElementById('modal-create-executor'));
-  modal.show();
+
+  // Get or create modal instance
+  const modal = getOrCreateModal('modal-create-executor');
+  if (modal) {
+    createModal = modal;
+    modal.show();
+  } else {
+    console.error('Could not find or initialize create modal');
+  }
 }
 
 function openEdit(user) {
   selected.value = user;
   editForm.reset();
-  editForm.email = user.email;
 
-  // Разобрать полное имя на отдельные поля
+  // Разобрать полное имя на отдельные поля и подготовить форму ДО показа модалки
   const nameParts = (user.name || '').split(' ').filter(Boolean);
   editForm.last_name = nameParts[0] || '';
   editForm.first_name = nameParts[1] || '';
   editForm.middle_name = nameParts[2] || '';
-
+  editForm.email = user.email;
   editForm.is_blocked = !!user.is_blocked;
   passwordError.value = '';
-  const modal = new bootstrap.Modal(document.getElementById('modal-edit-executor'));
-  modal.show();
+
+  // Затем показать модалку
+  const modal = getOrCreateModal('modal-edit-executor');
+  if (modal) {
+    editModal = modal;
+    modal.show();
+  } else {
+    console.error('Could not find or initialize edit modal');
+  }
 }
 
 function openDelete(user) {
   selected.value = user;
-  const modal = new bootstrap.Modal(document.getElementById('modal-delete-executor'));
-  modal.show();
+  // Get or create modal instance
+  const modal = getOrCreateModal('modal-delete-executor');
+  if (modal) {
+    deleteModal = modal;
+    modal.show();
+  } else {
+    console.error('Could not find or initialize delete modal');
+  }
 }
 
 function generatePassword(target) {
@@ -200,8 +227,15 @@ function submitDelete() {
     },
     onError: (errors) => {
       if (errors.restricted) {
-        deleteModal.hide()
-        deleteRestrictedModal.show()
+        deleteModal && deleteModal.hide()
+        // Ensure restricted modal is available
+        const modal = getOrCreateModal('modal-delete-restricted');
+        if (modal) {
+          deleteRestrictedModal = modal;
+          modal.show();
+        } else {
+          console.error('Could not find or initialize restricted delete modal');
+        }
       } else {
         const errorMessage = errors?.message || 'Ошибка при удалении исполнителя'
         toast.error(errorMessage)
@@ -250,7 +284,7 @@ function submitDelete() {
               <td>
                 <span :class="['badge', 'text-light', u.is_blocked ? 'bg-red' : 'bg-green']">{{ u.is_blocked ? 'Да' :
                   'Нет'
-                }}</span>
+                  }}</span>
               </td>
               <td class="text-end">
                 <div class="btn-list flex-nowrap">
@@ -409,3 +443,19 @@ function submitDelete() {
   </div>
 
 </template>
+
+<style>
+/* Ensure modals always stack above backdrops (handles custom theme overrides) */
+.modal-backdrop.show {
+  z-index: 1050;
+}
+
+.modal.show {
+  z-index: 1000000000;
+}
+
+
+/* If your theme raises backdrops higher, uncomment stronger values below */
+/* .modal-backdrop.show { z-index: 2000; }
+.modal.show { z-index: 2010; } */
+</style>

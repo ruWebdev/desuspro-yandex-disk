@@ -53,11 +53,13 @@ if (typeof window !== 'undefined') {
                         style="min-height: 60vh;">
                         <img v-if="lightboxSrc" :src="lightboxSrc" alt="preview"
                             style="max-width: 100%; max-height: 80vh;" />
-                        <button v-if="items && items.length > 1" class="btn btn-light position-absolute start-0 top-50 translate-middle-y ms-2"
+                        <button v-if="items && items.length > 1"
+                            class="btn btn-light position-absolute start-0 top-50 translate-middle-y ms-2"
                             style="opacity: 0.8;" @click.stop="emit('prev')">
                             ‹
                         </button>
-                        <button v-if="items && items.length > 1" class="btn btn-light position-absolute end-0 top-50 translate-middle-y me-2"
+                        <button v-if="items && items.length > 1"
+                            class="btn btn-light position-absolute end-0 top-50 translate-middle-y me-2"
                             style="opacity: 0.8;" @click.stop="emit('next')">
                             ›
                         </button>
@@ -65,7 +67,12 @@ if (typeof window !== 'undefined') {
                     <div class="modal-footer border-0 justify-content-between">
                         <div class="d-flex align-items-center gap-2">
                             <button type="button" class="btn btn-primary" @click="onCommentClick">КОММЕНТАРИЙ</button>
-                            <div class="text-white-50 small" v-if="items && items.length">{{ index + 1 }} / {{ items.length }}</div>
+                            <div class="text-white-50 small" v-if="items && items.length">{{ index + 1 }} / {{
+                                items.length }}</div>
+                        </div>
+                        <div class="text-black-50 text-truncate mx-2" v-if="$props.meta?.name || lightboxSrc"
+                            :title="$props.meta?.name || getFilenameFromUrl(lightboxSrc)">
+                            {{ $props.meta?.name || getFilenameFromUrl(lightboxSrc) }}
                         </div>
                         <button type="button" class="btn btn-light ms-auto" @click="emit('close')">Закрыть</button>
                     </div>

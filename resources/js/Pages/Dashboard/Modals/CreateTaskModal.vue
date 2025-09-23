@@ -291,26 +291,28 @@ watch(() => props.show, (val) => {
                                 </div>
                             </div>
                             <div class="col-md-6">
+                                <label class="form-label">Приоритет</label>
+                                <select class="form-select" v-model="createForm.priority">
+                                    <option v-for="priority in [
+                                        { value: 'low', label: 'Низкий' },
+                                        { value: 'medium', label: 'Средний' },
+                                        { value: 'high', label: 'Срочный' }
+                                    ]" :key="priority.value" :value="priority.value">
+                                        {{ priority.label }}
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="col-md-12">
                                 <label class="form-label">Название (необязательно)</label>
                                 <input type="text" class="form-control" v-model="createForm.name"
                                     placeholder="По умолчанию — название статьи" />
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-12">
                                 <label class="form-label">Исполнитель</label>
                                 <select class="form-select" v-model="createForm.assignee_id">
                                     <option value="">Не назначен</option>
                                     <option v-for="u in performers" :key="u.id" :value="u.id">{{ u.name }}<span
                                             v-if="u.is_blocked"> — ЗАБЛОКИРОВАН</span></option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Приоритет</label>
-                                <select class="form-select" v-model="createForm.priority">
-                                    <option
-                                        v-for="p in [{ value: 'low', label: 'Низкий' }, { value: 'medium', label: 'Средний' }, { value: 'high', label: 'Высокий' }, { value: 'urgent', label: 'Срочный' }]"
-                                        :key="p.value" :value="p.value">
-                                        {{ p.label }}
-                                    </option>
                                 </select>
                             </div>
                             <div class="col-12">

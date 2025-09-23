@@ -69,12 +69,12 @@ watch(() => props.activeTab, (newTab) => {
 });
 
 // When parent provides a prefill (e.g., from Lightbox "КОММЕНТАРИЙ"),
-// insert it into the new comment, switch tab to comments and focus the textarea
+// replace the comment content, switch tab to comments and focus the textarea
 watch(() => props.commentPrefill, async (val) => {
     const txt = (typeof val === 'string') ? val.trim() : '';
     if (!txt) return;
-    // Prepend filename if not already included
-    newComment.value = newComment.value ? `${txt} — ${newComment.value}` : txt;
+    // Replace the comment content
+    newComment.value = txt;
     // Switch to comments tab
     emit('update-tab', 'comments');
     await nextTick();
@@ -482,7 +482,7 @@ async function uploadFiles(files) {
                     if (xhr.status >= 200 && xhr.status < 300) {
                         uploadProgress.value = Math.min(100, Math.floor(((i + 1) / total) * 100));
                         // Generate/register thumbnail on backend
-                        try { await registerThumbnail(f); } catch (_) {}
+                        try { await registerThumbnail(f); } catch (_) { }
                         resolve();
                     } else {
                         reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText || ''}`));
@@ -653,7 +653,7 @@ function getObjectURL(file) {
                                     <div class="d-flex align-items-center gap-2">
                                         <span class="badge"
                                             :class="it.type === 'dir' ? 'bg-secondary' : 'bg-primary'">{{ it.type ===
-                                            'dir' ? 'Папка' : 'Файл' }}</span>
+                                                'dir' ? 'Папка' : 'Файл' }}</span>
                                         <span>{{ it.name }}</span>
                                         <span v-if="it.size && it.type === 'file'" class="text-secondary small">{{
                                             (it.size / 1024 / 1024).toFixed(2) }} MB</span>
@@ -674,7 +674,8 @@ function getObjectURL(file) {
                     <div v-if="!isManager" class="mt-3 d-flex align-items-center gap-2">
                         <input type="file" accept="image/*" multiple ref="fileInputRef" class="d-none"
                             @change="onFilesChosen" />
-                        <button class="btn btn-primary" :disabled="uploading" @click="openUploader">
+                        <button class="btn btn-primary" :disabled="uploading || props.task?.status === 'accepted'"
+                            @click="openUploader">
                             <span v-if="!uploading">Загрузить фото</span>
                             <span v-else>Загрузка…</span>
                         </button>
@@ -682,7 +683,8 @@ function getObjectURL(file) {
                     </div>
                     <div v-if="uploading" class="mt-3">
                         <div class="d-flex justify-content-between align-items-center mb-1">
-                            <div class="small text-secondary">{{ uploadStatus }} <span v-if="uploadFileName">— {{ uploadFileName }}</span></div>
+                            <div class="small text-secondary">{{ uploadStatus }} <span v-if="uploadFileName">— {{
+                                    uploadFileName }}</span></div>
                             <div class="small">{{ uploadProgress }}%</div>
                         </div>
                         <div class="progress" style="height: 8px;">
@@ -716,8 +718,9 @@ function getObjectURL(file) {
                         <div class="mt-3">
                             <form @submit.prevent="addComment">
                                 <div class="mb-2">
-                                    <textarea v-model="newComment" rows="2" class="form-control" ref="newCommentTextarea"
-                                        placeholder="Новый комментарий…" @paste="onCommentPaste"></textarea>
+                                    <textarea v-model="newComment" rows="2" class="form-control"
+                                        ref="newCommentTextarea" placeholder="Новый комментарий…"
+                                        @paste="onCommentPaste"></textarea>
                                 </div>
                                 <div class="mb-2">
                                     <input type="file" ref="commentImageInput" accept="image/*" multiple class="d-none"

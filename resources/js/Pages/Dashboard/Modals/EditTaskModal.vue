@@ -233,39 +233,34 @@ watch(() => editForm.value.brand_id, async (newBrandId) => {
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label">Бренд</label>
-                                <select class="form-select" :value="editForm.brand_id"
-                                    @input="editForm.brand_id = $event.target.value">
-                                    <option value="">Выберите бренд</option>
-                                    <option v-for="b in brands" :key="b.id" :value="b.id">{{ b.name }}</option>
-                                </select>
+                                <input type="text" class="form-control bg-light"
+                                    :value="brands.find(b => b.id == editForm.brand_id)?.name || ''" readonly>
+                                <input type="hidden" v-model="editForm.brand_id">
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Тип задачи</label>
-                                <select class="form-select" :value="editForm.task_type_id"
-                                    @input="editForm.task_type_id = $event.target.value">
-                                    <option value="">Выберите тип</option>
-                                    <option v-for="tt in taskTypes" :key="tt.id" :value="tt.id">{{ tt.name }}</option>
-                                </select>
+                                <input type="text" class="form-control bg-light"
+                                    :value="taskTypes.find(tt => tt.id == editForm.task_type_id)?.name || ''" readonly>
+                                <input type="hidden" v-model="editForm.task_type_id">
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Артикул</label>
-                                <div class="position-relative">
-                                    <input type="text" class="form-control" :value="editArticleSearch"
-                                        @input="editArticleSearch = $event.target.value; onEditArticleSearchInput()"
-                                        @focus="showEditArticleDropdown = true" @blur="hideEditDropdown"
-                                        :placeholder="editSelectedArticle ? editSelectedArticle.name : 'Выберите артикул'"
-                                        :disabled="!editForm.brand_id" />
-                                    <div v-show="showEditArticleDropdown && editFilteredArticles.length"
-                                        class="position-absolute top-100 start-0 w-100 bg-white border rounded shadow"
-                                        style="z-index: 1000; max-height: 200px; overflow-y: auto;">
-                                        <div v-for="a in editFilteredArticles" :key="a.id"
-                                            class="p-2 cursor-pointer hover-bg-light" @click="selectEditArticle(a)">
-                                            {{ a.name }}
-                                        </div>
-                                    </div>
-                                </div>
+                                <input type="text" class="form-control bg-light"
+                                    :value="editSelectedArticle?.name || ''" readonly>
+                                <input type="hidden" v-model="editForm.article_id">
                             </div>
                             <div class="col-md-6">
+                                <label class="form-label">Приоритет</label>
+                                <select class="form-select" :value="editForm.priority"
+                                    @input="editForm.priority = $event.target.value">
+                                    <option
+                                        v-for="p in [{ value: 'low', label: 'Низкий' }, { value: 'medium', label: 'Средний' }, { value: 'high', label: 'Срочный' }]"
+                                        :key="p.value" :value="p.value">
+                                        {{ p.label }}
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="col-md-12">
                                 <label class="form-label">Наименование задачи</label>
                                 <input type="text" class="form-control" :value="editForm.name"
                                     @input="editForm.name = $event.target.value" placeholder="Наименование задачи" />
@@ -277,17 +272,6 @@ watch(() => editForm.value.brand_id, async (newBrandId) => {
                                     <option value="">Не назначен</option>
                                     <option v-for="u in performers" :key="u.id" :value="u.id">{{ u.name }}<span
                                             v-if="u.is_blocked"> — ЗАБЛОКИРОВАН</span></option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Приоритет</label>
-                                <select class="form-select" :value="editForm.priority"
-                                    @input="editForm.priority = $event.target.value">
-                                    <option
-                                        v-for="p in [{ value: 'low', label: 'Низкий' }, { value: 'medium', label: 'Средний' }, { value: 'high', label: 'Высокий' }, { value: 'urgent', label: 'Срочный' }]"
-                                        :key="p.value" :value="p.value">
-                                        {{ p.label }}
-                                    </option>
                                 </select>
                             </div>
                         </div>
