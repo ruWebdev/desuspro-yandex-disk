@@ -1,10 +1,13 @@
 <script setup>
+import { computed } from 'vue';
+
 const props = defineProps({
     show: { type: Boolean, default: false },
     lightboxSrc: { type: String, default: '' },
     lightboxType: { type: String, default: 'image' },
     items: { type: Array, default: () => [] },
     index: { type: Number, default: 0 },
+    meta: { type: Object, default: null },
 });
 
 const emit = defineEmits(['close', 'prev', 'next', 'comment']);
@@ -25,8 +28,11 @@ function getFilenameFromUrl(url) {
     }
 }
 
+const displayName = computed(() => props.meta?.name ?? getFilenameFromUrl(props.lightboxSrc));
+const hasDisplayName = computed(() => Boolean(displayName.value));
+
 function onCommentClick() {
-    const fname = getFilenameFromUrl(props.lightboxSrc);
+    const fname = props.meta?.name ?? getFilenameFromUrl(props.lightboxSrc);
     emit('comment', fname);
 }
 
@@ -70,9 +76,9 @@ if (typeof window !== 'undefined') {
                             <div class="text-white-50 small" v-if="items && items.length">{{ index + 1 }} / {{
                                 items.length }}</div>
                         </div>
-                        <div class="text-black-50 text-truncate mx-2" v-if="$props.meta?.name || lightboxSrc"
-                            :title="$props.meta?.name || getFilenameFromUrl(lightboxSrc)">
-                            {{ $props.meta?.name || getFilenameFromUrl(lightboxSrc) }}
+                        <div class="text-black-50 text-truncate mx-2" v-if="hasDisplayName"
+                            :title="displayName">
+                            {{ displayName }}
                         </div>
                         <button type="button" class="btn btn-light ms-auto" @click="emit('close')">Закрыть</button>
                     </div>

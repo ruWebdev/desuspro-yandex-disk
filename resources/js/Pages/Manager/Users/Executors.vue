@@ -15,12 +15,11 @@ import { ref, computed, onMounted, inject } from 'vue'
 import { Head, useForm, router } from '@inertiajs/vue3'
 import ContentLayout from '@/Layouts/ContentLayout.vue';
 import { Modal } from 'bootstrap';
+import { useToastService } from '@/plugins/toast';
 
-// Получить сервис toast без предупреждений, если провайдер отсутствует
-const toast = inject('toast', window.toast || {
-  success: (...args) => console.log('[toast.success]', ...args),
-  error: (...args) => console.error('[toast.error]', ...args),
-});
+// Получить сервис toast и fallback на встроенный сервис
+const injectedToast = inject('toast', null);
+const toast = injectedToast || useToastService();
 
 const props = defineProps({
   users: { type: Array, default: () => [] },
@@ -188,17 +187,17 @@ function submitEdit() {
   // вывести отображаемое имя из ФИО
   const name = [editForm.last_name, editForm.first_name, editForm.middle_name].filter(Boolean).join(' ').trim();
   const payload = {
+    ...editForm.data(),
     name,
-    email: editForm.email,
-    last_name: editForm.last_name,
-    first_name: editForm.first_name,
-    middle_name: editForm.middle_name,
-    is_blocked: editForm.is_blocked,
   };
 
-  if (pwd.length > 0) payload.password = pwd;
+  if (!(pwd.length > 0)) {
+    delete payload.password;
+  } else {
+    payload.password = pwd;
+  }
 
-  editForm.put(route('users.executors.update', selected.value.id), {
+  editForm.transform(() => payload).put(route('users.executors.update', selected.value.id), {
     onSuccess: () => {
       editForm.reset()
       editModal.hide()

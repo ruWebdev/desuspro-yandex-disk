@@ -720,8 +720,8 @@ function lightboxNext() {
         <RenameTaskModal :show="showRename" :renaming="renaming" :renameName="renameName" @cancel="cancelRename"
             @submit="(v) => { renameName = v; submitRename(); }" />
         <LightboxModal :show="showLightbox" :lightboxSrc="lightboxSrc" :lightboxType="lightboxType"
-            :items="lightboxItems" :index="lightboxIndex" @close="closeLightbox" @prev="lightboxPrev"
-            @next="lightboxNext" @comment="onLightboxComment" />
+            :items="lightboxItems" :index="lightboxIndex" :meta="lightboxMeta" @close="closeLightbox"
+            @prev="lightboxPrev" @next="lightboxNext" @comment="onLightboxComment" />
 
         <!-- Offcanvas -->
         <TaskOffcanvas :show="showTaskOffcanvas" :task="offcanvasTask" :brands="brands" :activeTab="activeOcTab"
