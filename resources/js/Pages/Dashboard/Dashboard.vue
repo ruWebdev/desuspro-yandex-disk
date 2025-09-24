@@ -568,27 +568,76 @@ const showLightbox = ref(false);
 const lightboxSrc = ref('');
 const lightboxType = ref('image');
 const lightboxMeta = ref(null); // { id, path } for temp cleanup
-const lightboxItems = ref([]); // optional array of URLs for navigation
+const lightboxItems = ref([]); // optional array of normalized items { src, meta }
 const lightboxIndex = ref(0);
 const commentPrefill = ref('');
+
+function normalizeLightboxItems(items) {
+    if (!Array.isArray(items)) return [];
+    return items
+        .map((entry) => {
+            if (!entry) return null;
+            if (typeof entry === 'string') {
+                return { src: entry, meta: null };
+            }
+            if (typeof entry === 'object') {
+                if (entry.src) return { src: entry.src, meta: entry.meta ?? null };
+                if (entry.url) return { src: entry.url, meta: entry.meta ?? null };
+            }
+            return null;
+        })
+        .filter((item) => item && item.src);
+}
+
+function ensureLightboxMeta(metaCandidate, url) {
+    const base = (metaCandidate && typeof metaCandidate === 'object') ? { ...metaCandidate } : {};
+    if (!base.name) base.name = getFileNameFromUrl(url);
+    return base;
+}
+
+function applyLightboxIndex(idx) {
+    if (!Array.isArray(lightboxItems.value) || !lightboxItems.value.length) {
+        lightboxSrc.value = '';
+        lightboxMeta.value = null;
+        return;
+    }
+    const safeIndex = ((idx % lightboxItems.value.length) + lightboxItems.value.length) % lightboxItems.value.length;
+    const current = lightboxItems.value[safeIndex];
+    lightboxIndex.value = safeIndex;
+    lightboxSrc.value = current?.src || '';
+    lightboxMeta.value = ensureLightboxMeta(current?.meta, lightboxSrc.value);
+}
+
 function openLightbox(url, meta = null, items = null) {
     lightboxType.value = 'image';
-    // Ensure meta is an object and include the file name if not already present
-    lightboxMeta.value = {
-        ...(meta || {}),
-        // If meta doesn't have a name but we can extract it from URL, use that
-        name: meta?.name || getFileNameFromUrl(url)
-    };
-    if (Array.isArray(items) && items.length > 0) {
-        lightboxItems.value = items;
-        const idx = items.indexOf(url);
-        lightboxIndex.value = idx >= 0 ? idx : 0;
-        lightboxSrc.value = lightboxItems.value[lightboxIndex.value] || url;
-    } else {
-        lightboxItems.value = [];
-        lightboxIndex.value = 0;
-        lightboxSrc.value = url;
+    const normalized = normalizeLightboxItems(items);
+    let workingItems = normalized;
+    let idx = -1;
+
+    if (workingItems.length) {
+        idx = workingItems.findIndex((item) => item.src === url);
+        if (idx === -1 && url) {
+            const injectedMeta = ensureLightboxMeta(meta, url);
+            workingItems = [{ src: url, meta: injectedMeta }, ...workingItems];
+            idx = 0;
+        }
     }
+
+    if (!workingItems.length && url) {
+        const injectedMeta = ensureLightboxMeta(meta, url);
+        workingItems = [{ src: url, meta: injectedMeta }];
+        idx = 0;
+    }
+
+    lightboxItems.value = workingItems;
+    if (idx < 0) idx = 0;
+
+    const currentMeta = (workingItems[idx] && workingItems[idx].meta) ? workingItems[idx].meta : meta;
+    const resolvedMeta = ensureLightboxMeta(currentMeta, workingItems[idx]?.src || url);
+
+    lightboxMeta.value = resolvedMeta;
+    lightboxSrc.value = workingItems[idx]?.src || url;
+    lightboxIndex.value = idx;
     showLightbox.value = true;
 }
 function closeLightbox() {
@@ -619,13 +668,11 @@ function closeLightbox() {
 }
 function lightboxPrev() {
     if (!lightboxItems.value.length) return;
-    lightboxIndex.value = (lightboxIndex.value - 1 + lightboxItems.value.length) % lightboxItems.value.length;
-    lightboxSrc.value = lightboxItems.value[lightboxIndex.value];
+    applyLightboxIndex(lightboxIndex.value - 1);
 }
 function lightboxNext() {
     if (!lightboxItems.value.length) return;
-    lightboxIndex.value = (lightboxIndex.value + 1) % lightboxItems.value.length;
-    lightboxSrc.value = lightboxItems.value[lightboxIndex.value];
+    applyLightboxIndex(lightboxIndex.value + 1);
 }
 
 </script>

@@ -528,15 +528,29 @@ function getBestSizeUrl(item) {
     return null;
 }
 
+function buildGalleryItems() {
+    return yandexItems.value
+        .filter(x => x.type === 'file' && isImageName(x.name))
+        .map(x => {
+            const src = localThumbs.value?.[x.name] || getBestSizeUrl(x);
+            if (!src) return null;
+            return {
+                src,
+                meta: { name: x.name },
+            };
+        })
+        .filter(Boolean);
+}
+
 async function viewYandexItemInLightbox(item) {
     if (!item || item.type !== 'file') return;
+    const openWithGallery = (src, meta = null) => {
+        emit('open-lightbox', src, meta, buildGalleryItems());
+    };
     // If local thumbnail is available, open it directly with gallery of thumbnails
     const thumb = localThumbs.value?.[item.name];
     if (thumb) {
-        const images = yandexItems.value.filter(x => x.type === 'file' && isImageName(x.name))
-            .map(x => localThumbs.value?.[x.name] || getBestSizeUrl(x))
-            .filter(Boolean);
-        emit('open-lightbox', thumb, { name: item.name }, images);
+        openWithGallery(thumb, { name: item.name });
         return;
     }
     try {
@@ -559,12 +573,11 @@ async function viewYandexItemInLightbox(item) {
                 if (tempRes.ok) {
                     const temp = await tempRes.json();
                     if (temp?.url) {
-                        const images = yandexItems.value.filter(x => x.type === 'file' && isImageName(x.name)).map(x => getBestSizeUrl(x)).filter(Boolean);
-                        emit('open-lightbox', temp.url, { id: temp.id, path: temp.path, name: item.name }, images);
+                        openWithGallery(temp.url, { id: temp.id, path: temp.path, name: item.name });
                         return;
                     }
                 }
-                emit('open-lightbox', href);
+                openWithGallery(href, { name: item.name });
                 return;
             }
         }
@@ -583,11 +596,10 @@ async function viewYandexItemInLightbox(item) {
             });
             if (tempRes.ok) {
                 const temp = await tempRes.json();
-                if (temp?.url) { emit('open-lightbox', temp.url, { id: temp.id, path: temp.path, name: item.name }); return; }
+                if (temp?.url) { openWithGallery(temp.url, { id: temp.id, path: temp.path, name: item.name }); return; }
             }
         } catch { }
-        const images = yandexItems.value.filter(x => x.type === 'file' && isImageName(x.name)).map(x => getBestSizeUrl(x)).filter(Boolean);
-        emit('open-lightbox', direct, { name: item.name }, images);
+        openWithGallery(direct, { name: item.name });
         return;
     }
     return downloadYandexItem(item);
