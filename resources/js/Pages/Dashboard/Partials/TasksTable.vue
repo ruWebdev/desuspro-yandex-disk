@@ -418,7 +418,9 @@ function updateBodyScrollClass() {
                         </td>
                         <td style="vertical-align: middle;">
                             <div class="d-flex align-items-center gap-2">
-                                <select class="form-select form-select-sm w-auto" :value="t.status" @change="(e) => {
+                                <select class="form-select form-select-sm w-auto" :value="t.status"
+                                    :disabled="isPerformer && t.status === 'accepted'"
+                                    @change="(e) => {
                                     if (isAllowedStatusValue(e.target.value)) {
                                         emit('update-status', t, e.target.value);
                                     } else {
