@@ -7,32 +7,44 @@ on:
       - main
 
 jobs:
-  deploy-test:
-    if: github.ref == 'refs/heads/develop'
-    runs-on: [self-hosted, linux, dev]
+  deploy:
+    runs-on: self-hosted
+    strategy:
+      matrix:
+        branch: [develop, main]
+
+    if: github.ref == 'refs/heads/${{ matrix.branch }}'
+
     steps:
+      # ----------------------
+      # Checkout code
       - name: Checkout code
         uses: actions/checkout@v3
 
       # ----------------------
-      # Кэш PHP зависимостей
+      # Cache PHP dependencies
       - name: Cache PHP dependencies
         uses: actions/cache@v3
         with:
           path: vendor
           key: vendor-${{ hashFiles('**/composer.lock') }}
 
+      # ----------------------
+      # Install PHP dependencies (только недостающие)
       - name: Install PHP dependencies
-        run: composer install --no-dev --optimize-autoloader
+        run: |
+          composer install --no-dev --optimize-autoloader --prefer-dist --no-interaction --ignore-platform-reqs
 
       # ----------------------
-      # Кэш Node зависимостей
+      # Cache Node dependencies
       - name: Cache Node dependencies
         uses: actions/cache@v3
         with:
           path: node_modules
           key: node-modules-${{ hashFiles('package-lock.json') }}
 
+      # ----------------------
+      # Build frontend
       - name: Build frontend
         run: |
           npm install
@@ -40,55 +52,23 @@ jobs:
 
       # ----------------------
       # Deploy code
-      - name: Deploy to test
+      - name: Deploy to server
         run: |
-          # Синхронизация файлов, исключая .env, storage и bootstrap/cache
-          rsync -avz --exclude='.git' --exclude='.env' --exclude='storage' --exclude='bootstrap/cache' ./ /var/www/art/dev
+          if [ "${{ matrix.branch }}" == "develop" ]; then
+            DEPLOY_PATH="/var/www/art/dev"
+          else
+            DEPLOY_PATH="/var/www/art/prod"
+          fi
 
-          # Artisan команды под www-data
-          sudo -u www-data php /var/www/art/dev/artisan migrate --force
-          sudo -u www-data php /var/www/art/dev/artisan config:clear
-          sudo -u www-data php /var/www/art/dev/artisan cache:clear
+          # Синхронизация кода, исключая vendor и другие директории
+          rsync -avz --exclude='.git' --exclude='.env' --exclude='storage' --exclude='bootstrap/cache' --exclude='vendor' ./ "$DEPLOY_PATH"
 
-  deploy-prod:
-    if: github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux, prod]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+          cd "$DEPLOY_PATH"
 
-      # ----------------------
-      # Кэш PHP зависимостей
-      - name: Cache PHP dependencies
-        uses: actions/cache@v3
-        with:
-          path: vendor
-          key: vendor-${{ hashFiles('**/composer.lock') }}
+          # Устанавливаем новые пакеты, не трогая старые
+          composer install --no-dev --optimize-autoloader --prefer-dist --no-interaction --ignore-platform-reqs
 
-      - name: Install PHP dependencies
-        run: composer install --no-dev --optimize-autoloader
-
-      # ----------------------
-      # Кэш Node зависимостей
-      - name: Cache Node dependencies
-        uses: actions/cache@v3
-        with:
-          path: node_modules
-          key: node-modules-${{ hashFiles('package-lock.json') }}
-
-      - name: Build frontend
-        run: |
-          npm install
-          npm run build
-
-      # ----------------------
-      # Deploy code
-      - name: Deploy to prod
-        run: |
-          rsync -avz --exclude='.git' --exclude='.env' --exclude='storage' --exclude='bootstrap/cache' ./ /var/www/art/prod
-
-          sudo -u www-data php /var/www/art/prod/artisan migrate --force
-          sudo -u www-data php /var/www/art/prod/artisan config:clear
-          sudo -u www-data php /var/www/art/prod/artisan cache:clear
-
-#NUDAVAI!BLYATSUKA!NAHESHERAZ!AAA!
+          # Artisan команды
+          sudo -u www-data php artisan migrate --force
+          sudo -u www-data php artisan config:clear
+          sudo -u www-data php artisan cache:clear
