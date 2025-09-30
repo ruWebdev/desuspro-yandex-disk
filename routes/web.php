@@ -140,6 +140,7 @@ Route::middleware('auth')->group(function () {
         // Task files thumbnails
         Route::get('/files', [\App\Http\Controllers\TaskFileController::class, 'index'])->name('brands.tasks.files.index');
         Route::post('/files/thumbnail', [\App\Http\Controllers\TaskFileController::class, 'thumbnail'])->name('brands.tasks.files.thumbnail');
+        Route::delete('/files', [\App\Http\Controllers\TaskFileController::class, 'destroy'])->name('brands.tasks.files.destroy');
     });
 });
 

@@ -86,4 +86,30 @@ class TaskFileController extends Controller
             'thumbnail_url' => Storage::url($record->thumbnail_path),
         ]);
     }
+
+    // DELETE /brands/{brand}/tasks/{task}/files
+    public function destroy(Request $request, Brand $brand, Task $task)
+    {
+        $request->validate([
+            'filename' => ['required', 'string', 'max:255'],
+        ]);
+
+        $filename = $request->input('filename');
+
+        $record = TaskFileThumbnail::query()
+            ->where('task_id', $task->id)
+            ->where('name', $filename)
+            ->first();
+
+        if ($record) {
+            // Delete file from storage
+            if (Storage::disk('public')->exists($record->thumbnail_path)) {
+                Storage::disk('public')->delete($record->thumbnail_path);
+            }
+            // Delete DB record
+            $record->delete();
+        }
+
+        return response()->json(['success' => true]);
+    }
 }

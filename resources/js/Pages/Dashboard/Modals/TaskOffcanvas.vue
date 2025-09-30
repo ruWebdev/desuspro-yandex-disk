@@ -415,29 +415,52 @@ async function downloadYandexItem(item) {
 
 async function deleteYandexItem(item) {
     if (!item || item.type !== 'file') return;
-    if (!confirm(`Удалить файл «${item.name}» из Яндекс.Диска?`)) return;
+    if (!confirm(`Удалить файл «${item.name}» из Яндекс.Диска и локальную копию?`)) return;
+
     let reqPath = item.path;
     if (!reqPath) {
         const folder = yandexFolderPath();
         if (!folder) return;
         reqPath = `${folder}/${item.name}`;
     }
+
     try {
-        const res = await fetch(route('integrations.yandex.delete'), {
+        // Delete from Yandex
+        const yandexRes = await fetch(route('integrations.yandex.delete'), {
             method: 'DELETE',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() },
             credentials: 'same-origin',
             body: JSON.stringify({ path: reqPath, permanently: false })
         });
-        if (!res.ok) {
-            const txt = await res.text().catch(() => '');
-            throw new Error(`Ошибка удаления (${res.status}): ${txt}`);
+        if (!yandexRes.ok) {
+            const txt = await yandexRes.text().catch(() => '');
+            throw new Error(`Ошибка удаления с Яндекс.Диска (${yandexRes.status}): ${txt}`);
         }
+
+        // Delete local thumbnail
+        if (props.task?.id && props.task?.brand_id && localThumbs.value?.[item.name]) {
+            try {
+                const localRes = await fetch(route('brands.tasks.files.destroy', { brand: props.task.brand_id, task: props.task.id }), {
+                    method: 'DELETE',
+                    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ filename: item.name })
+                });
+                if (!localRes.ok) {
+                    toast.warning('Файл удален с Яндекс.Диска, но не удалось удалить локальную копию.');
+                }
+            } catch (e) {
+                 console.warn('Failed to delete local thumbnail', e);
+                 toast.warning('Файл удален с Яндекс.Диска, но произошла ошибка при удалении локальной копии.');
+            }
+        }
+
         toast.success('Файл удалён');
-        await loadYandexFiles();
+        await loadYandexFiles(); // This will also trigger loadLocalThumbnails
+
     } catch (e) {
         console.error('deleteYandexItem failed', e);
-        toast.error('Не удалось удалить файл. Попробуйте ещё раз.');
+        toast.error(e.message || 'Не удалось удалить файл. Попробуйте ещё раз.');
     }
 }
 
@@ -530,16 +553,11 @@ function getBestSizeUrl(item) {
 
 function buildGalleryItems() {
     return yandexItems.value
-        .filter(x => x.type === 'file' && isImageName(x.name))
-        .map(x => {
-            const src = localThumbs.value?.[x.name] || getBestSizeUrl(x);
-            if (!src) return null;
-            return {
-                src,
-                meta: { name: x.name },
-            };
-        })
-        .filter(Boolean);
+        .filter(x => x.type === 'file' && isImageName(x.name) && localThumbs.value?.[x.name])
+        .map(x => ({
+            src: localThumbs.value[x.name],
+            meta: { name: x.name },
+        }));
 }
 
 async function viewYandexItemInLightbox(item) {
