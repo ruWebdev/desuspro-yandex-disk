@@ -14,6 +14,11 @@ class TaskFileThumbnail extends Model
         'task_id',
         'name',
         'thumbnail_path',
+        'accepted_at',
+    ];
+
+    protected $casts = [
+        'accepted_at' => 'datetime',
     ];
 
     public function task(): BelongsTo

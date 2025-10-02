@@ -736,20 +736,27 @@ class TaskController extends Controller
     }
 
     /**
-     * Delete local thumbnail files and DB records for a task.
+     * Mark thumbnails as accepted (for delayed cleanup after 14 days).
+     * Does NOT delete files immediately - they will be cleaned up by scheduled command.
      */
     private function cleanupTaskThumbnails(Task $task): void
     {
         try {
-            // Remove files under public storage
-            Storage::disk('public')->deleteDirectory("tasks/{$task->id}/thumbnails");
+            // Mark all thumbnails for this task with accepted_at timestamp
+            // Only mark those that haven't been marked yet
+            TaskFileThumbnail::where('task_id', $task->id)
+                ->whereNull('accepted_at')
+                ->update(['accepted_at' => now()]);
+            
+            Log::info('Marked thumbnails for delayed cleanup', [
+                'task_id' => $task->id,
+                'cleanup_after' => now()->addDays(14)->toDateTimeString()
+            ]);
         } catch (\Throwable $e) {
-            Log::warning('Failed to delete thumbnails directory', ['task_id' => $task->id, 'error' => $e->getMessage()]);
-        }
-        try {
-            TaskFileThumbnail::where('task_id', $task->id)->delete();
-        } catch (\Throwable $e) {
-            Log::warning('Failed to delete thumbnail DB records', ['task_id' => $task->id, 'error' => $e->getMessage()]);
+            Log::error('Failed to mark thumbnails for cleanup', [
+                'task_id' => $task->id,
+                'error' => $e->getMessage()
+            ]);
         }
     }
 }
