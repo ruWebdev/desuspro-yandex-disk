@@ -27,32 +27,43 @@ class BrandArticleController extends Controller
             $token = $disk->ensureValidToken($token);
         }
         $brandName = $this->sanitizeName($brand->name);
-        $data = $articles->map(function ($a) use ($types, $token, $disk, $brandName) {
-            $has = false;
-            if ($token && $types->isNotEmpty()) {
-                foreach ($types as $type) {
-                    $typeName = $this->sanitizeName($type->name);
-                    $prefix = $type->prefix ?: mb_substr($typeName, 0, 1);
-                    $articleName = $this->sanitizeName($a->name);
-                    $leaf = '/' . $brandName . '/' . $typeName . '/' . $prefix . '_' . $articleName;
-                    try {
-                        $disk->getResource($token->access_token, $leaf, ['path']);
-                        $has = true; // exists
-                        break;
-                    } catch (\Illuminate\Http\Client\RequestException $ex) {
-                        $status = optional($ex->response)->status();
-                        if ($status === 404) {
-                            // not found, continue to next type
-                        } else {
-                            // other errors log and continue
-                            Log::warning('Yandex getResource error during has_folder check', [
-                                'status' => $status,
-                                'leaf' => $leaf,
-                            ]);
-                        }
-                    } catch (\Throwable $e) {
-                        Log::warning('Yandex error during has_folder check', ['error' => $e->getMessage()]);
+        // Build a set of existing leaf folder names under each Brand/Type once
+        $existingSets = [];
+        if ($token && $types->isNotEmpty()) {
+            foreach ($types as $type) {
+                $typeName = $this->sanitizeName($type->name);
+                $typePath = '/' . $brandName . '/' . $typeName;
+                try {
+                    // Request many items per page; adjust if needed
+                    $json = $disk->listResources($token->access_token, $typePath, 1000);
+                    $items = \Illuminate\Support\Arr::get($json, '_embedded.items', []);
+                    // Store names (folder/file names) in a set for quick lookup
+                    $names = [];
+                    foreach ($items as $it) {
+                        $nm = \Illuminate\Support\Arr::get($it, 'name');
+                        if ($nm !== null) { $names[$nm] = true; }
                     }
+                    $existingSets[$typeName] = $names;
+                } catch (\Throwable $e) {
+                    Log::warning('Yandex listResources failed during batch has_folder', [
+                        'type_path' => $typePath,
+                        'error' => $e->getMessage(),
+                    ]);
+                    $existingSets[$typeName] = [];
+                }
+            }
+        }
+
+        $data = $articles->map(function ($a) use ($types, $existingSets) {
+            $has = false;
+            foreach ($types as $type) {
+                $typeName = $this->sanitizeName($type->name);
+                $prefix = $type->prefix ?: mb_substr($typeName, 0, 1);
+                $articleName = $this->sanitizeName($a->name);
+                $leafName = $prefix . '_' . $articleName;
+                if (!empty($existingSets[$typeName]) && isset($existingSets[$typeName][$leafName])) {
+                    $has = true;
+                    break;
                 }
             }
             return [
