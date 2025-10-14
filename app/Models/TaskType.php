@@ -12,5 +12,10 @@ class TaskType extends Model
     protected $fillable = [
         'name',
         'prefix',
+        'create_empty_folder',
+    ];
+
+    protected $casts = [
+        'create_empty_folder' => 'boolean',
     ];
 }

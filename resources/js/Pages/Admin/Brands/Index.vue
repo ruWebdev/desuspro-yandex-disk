@@ -53,6 +53,9 @@ const articlesLoading = ref(false);
 const articleName = ref('');
 const bulkFile = ref(null);
 const articlesErrors = ref({});
+const creatingArticle = ref(false);
+const uploadingArticles = ref(false);
+const folderLoading = ref({});
 
 const anyModalOpen = computed(() => showCreate.value || showEdit.value || showDelete.value);
 watch(anyModalOpen, (open) => {
@@ -151,11 +154,14 @@ async function addArticle() {
   if (!articlesBrand.value || !articleName.value.trim()) return;
   articlesErrors.value = {};
   try {
+    creatingArticle.value = true;
     await window.axios.post(route('brands.articles.store', articlesBrand.value.id), { name: articleName.value.trim() });
     articleName.value = '';
     await loadArticles();
   } catch (e) {
     if (e.response?.status === 422) articlesErrors.value = e.response.data.errors || {};
+  } finally {
+    creatingArticle.value = false;
   }
 }
 
@@ -165,11 +171,14 @@ async function bulkUploadArticles(evt) {
   const form = new FormData();
   form.append('file', file);
   try {
+    uploadingArticles.value = true;
     await window.axios.post(route('brands.articles.bulk_upload', articlesBrand.value.id), form, { headers: { 'Content-Type': 'multipart/form-data' } });
     evt.target.value = '';
     await loadArticles();
   } catch (e) {
     console.error(e);
+  } finally {
+    uploadingArticles.value = false;
   }
 }
 
@@ -180,6 +189,19 @@ async function deleteArticle(article) {
     await loadArticles();
   } catch (e) {
     console.error(e);
+  }
+}
+
+async function createFolders(article) {
+  if (!articlesBrand.value || !article?.id) return;
+  folderLoading.value[article.id] = true;
+  try {
+    await window.axios.post(route('brands.articles.create_folders', { brand: articlesBrand.value.id, article: article.id }));
+    await loadArticles();
+  } catch (e) {
+    console.error(e);
+  } finally {
+    folderLoading.value[article.id] = false;
   }
 }
 </script>
@@ -275,8 +297,11 @@ async function deleteArticle(article) {
           <label class="form-label">Добавить артикул</label>
           <div class="input-group">
             <input v-model="articleName" type="text" class="form-control" placeholder="Наименование артикула"
-              @keyup.enter="addArticle" />
-            <button class="btn btn-primary" @click="addArticle">Добавить</button>
+              @keyup.enter="addArticle" :disabled="creatingArticle || articlesLoading" />
+            <button class="btn btn-primary" @click="addArticle" :disabled="creatingArticle || articlesLoading">
+              <span v-if="creatingArticle" class="spinner-border spinner-border-sm me-2" />
+              Добавить
+            </button>
           </div>
           <div v-if="Object.keys(articlesErrors).length" class="text-danger small mt-1">
             <div v-for="(err, key) in articlesErrors" :key="key">{{ err }}</div>
@@ -285,7 +310,11 @@ async function deleteArticle(article) {
 
         <div class="mb-3">
           <label class="form-label">Массовая загрузка (.txt, каждая строка — отдельный артикул)</label>
-          <input type="file" accept=".txt" class="form-control" @change="bulkUploadArticles" />
+          <input type="file" accept=".txt" class="form-control" @change="bulkUploadArticles" :disabled="uploadingArticles || articlesLoading" />
+          <div class="form-text">
+            <span v-if="uploadingArticles" class="spinner-border spinner-border-sm me-2"></span>
+            <span v-if="uploadingArticles">Создание артикулов и папок...</span>
+          </div>
         </div>
 
         <div class="mb-2 d-flex align-items-center justify-content-between">
@@ -299,7 +328,14 @@ async function deleteArticle(article) {
           <div v-for="a in articles" :key="a.id"
             class="list-group-item d-flex justify-content-between align-items-center">
             <div class="text-truncate">{{ a.name }}</div>
-            <button class="btn btn-sm btn-link text-danger" @click="deleteArticle(a)">Удалить</button>
+            <div class="d-flex align-items-center gap-2">
+              <button v-if="!a.has_folder" class="btn btn-sm btn-outline-primary" @click="createFolders(a)" :disabled="folderLoading[a.id]">
+                <span v-if="folderLoading[a.id]" class="spinner-border spinner-border-sm me-1"></span>
+                Создать пустую папку
+              </button>
+              <span v-else class="badge bg-success">Папка есть</span>
+              <button class="btn btn-sm btn-link text-danger" @click="deleteArticle(a)">Удалить</button>
+            </div>
           </div>
         </div>
       </div>

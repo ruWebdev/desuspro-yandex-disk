@@ -217,6 +217,7 @@ Route::middleware(['auth', 'role:Manager|Administrator|Performer'])->group(funct
         Route::get('/articles', [BrandArticleController::class, 'index'])->name('brands.articles.index');
         Route::post('/articles', [BrandArticleController::class, 'store'])->name('brands.articles.store');
         Route::post('/articles/bulk-upload', [BrandArticleController::class, 'bulkUpload'])->name('brands.articles.bulk_upload');
+        Route::post('/articles/{article}/create-folders', [BrandArticleController::class, 'createFolders'])->name('brands.articles.create_folders');
         Route::delete('/articles/{article}', [BrandArticleController::class, 'destroy'])->name('brands.articles.destroy');
     });
 
