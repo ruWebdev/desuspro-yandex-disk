@@ -14,6 +14,9 @@ export default {
 import ContentLayout from '@/Layouts/ContentLayout.vue';
 import { Head, useForm, Link } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
+import { useToast } from 'vue-toastification';
+
+const toast = useToast();
 
 const props = defineProps({
   brands: { type: Array, default: () => [] },
@@ -187,8 +190,14 @@ async function deleteArticle(article) {
   try {
     await window.axios.delete(route('brands.articles.destroy', { brand: articlesBrand.value.id, article: article.id }));
     await loadArticles();
+    toast.success('Артикул успешно удален');
   } catch (e) {
     console.error(e);
+    if (e.response?.data?.error) {
+      toast.error(e.response.data.error);
+    } else {
+      toast.error('Ошибка при удалении артикула');
+    }
   }
 }
 

@@ -197,6 +197,17 @@ class BrandArticleController extends Controller
     public function destroy(Request $request, Brand $brand, Article $article): RedirectResponse|JsonResponse
     {
         abort_unless($article->brand_id === $brand->id, 404);
+        
+        // Check if article has any associated tasks
+        if ($article->tasks()->exists()) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'error' => 'Невозможно удалить артикул, так как для него созданы задачи в системе'
+                ], 422);
+            }
+            return back()->with('error', 'Невозможно удалить артикул, так как для него созданы задачи в системе');
+        }
+        
         $article->delete();
         if ($request->expectsJson()) {
             return response()->json(['status' => 'deleted']);
