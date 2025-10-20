@@ -151,11 +151,19 @@ class TaskController extends Controller
 
         $tasks = $query->get(['id','brand_id','task_type_id','article_id','name','status','priority','assignee_id','public_link','created_at']);
 
-        $brands = Brand::query()->orderBy('name')->get(['id','name']);
+        // Cache static data for 1 hour to reduce database load
+        $brands = cache()->remember('brands_list', 3600, function () {
+            return Brand::query()->orderBy('name')->get(['id','name']);
+        });
 
-        // Assignee options
-        $performers = User::role('Performer')->get(['id','name','is_blocked']);
-        $taskTypes = TaskType::query()->orderBy('name')->get(['id','name','prefix']);
+        // Assignee options - cache for 5 minutes (more dynamic due to blocking status)
+        $performers = cache()->remember('performers_list', 300, function () {
+            return User::role('Performer')->get(['id','name','is_blocked']);
+        });
+        
+        $taskTypes = cache()->remember('task_types_list', 3600, function () {
+            return TaskType::query()->orderBy('name')->get(['id','name','prefix']);
+        });
 
         return Inertia::render('Tasks/All', [
             'tasks' => $tasks,
@@ -191,8 +199,14 @@ class TaskController extends Controller
 
         $tasks = $query->get([ 'id','brand_id','task_type_id','article_id','name','status','assignee_id','public_link','highlighted','comment','size','created_at' ]);
 
-        $performers = User::role('Performer')->get(['id','name','is_blocked']);
-        $taskTypes = TaskType::query()->orderBy('name')->get(['id','name','prefix']);
+        // Cache static data for 5 minutes (more dynamic due to blocking status)
+        $performers = cache()->remember('performers_list', 300, function () {
+            return User::role('Performer')->get(['id','name','is_blocked']);
+        });
+        
+        $taskTypes = cache()->remember('task_types_list', 3600, function () {
+            return TaskType::query()->orderBy('name')->get(['id','name','prefix']);
+        });
 
         return Inertia::render('Tasks/Index', [
             'brand' => $brand->only(['id','name']),

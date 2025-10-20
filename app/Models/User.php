@@ -87,4 +87,17 @@ class User extends Authenticatable
             'manager_id'
         )->withTimestamps();
     }
+
+    protected static function booted(): void
+    {
+        // Clear performers cache when a user is created, updated, or deleted
+        // This ensures the performers list stays fresh (especially for is_blocked status)
+        static::saved(function () {
+            \Illuminate\Support\Facades\Cache::forget('performers_list');
+        });
+
+        static::deleted(function () {
+            \Illuminate\Support\Facades\Cache::forget('performers_list');
+        });
+    }
 }

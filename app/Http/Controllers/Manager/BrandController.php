@@ -11,7 +11,10 @@ class BrandController extends Controller
 {
     public function index()
     {
-        $brands = Brand::orderBy('name')->get();
+        // Cache brands list for 1 hour to reduce database load
+        $brands = cache()->remember('brands_list_full', 3600, function () {
+            return Brand::orderBy('name')->get();
+        });
 
         return Inertia::render('Manager/Brands/Index', [
             'brands' => $brands
