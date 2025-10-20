@@ -244,13 +244,15 @@ class TaskController extends Controller
 
     /**
      * Create a task globally with specified brand.
+     * Supports creating multiple tasks for multiple articles.
      */
     public function storeGlobal(Request $request): RedirectResponse
     {
         $data = $request->validate([
             'brand_id' => ['required','exists:brands,id'],
             'task_type_id' => ['required','exists:task_types,id'],
-            'article_id' => ['required','exists:articles,id'],
+            'article_ids' => ['required','array','min:1'],
+            'article_ids.*' => ['required','exists:articles,id'],
             'name' => ['nullable','string','max:255'],
             'assignee_id' => ['nullable','exists:users,id'],
             'priority' => ['nullable','in:low,medium,high,urgent'],
@@ -260,35 +262,43 @@ class TaskController extends Controller
         ]);
 
         $brand = Brand::findOrFail($data['brand_id']);
-        $article = Article::findOrFail($data['article_id']);
         $type = TaskType::findOrFail($data['task_type_id']);
-
-        $task = Task::create([
-            'brand_id' => $brand->id,
-            'created_by' => $request->user()->id,
-            'task_type_id' => $type->id,
-            'article_id' => $article->id,
-            'name' => $data['name'] ?? $article->name,
-            'assignee_id' => $data['assignee_id'] ?? null,
-            'priority' => $data['priority'] ?? 'medium',
-            'status' => isset($data['assignee_id']) ? 'assigned' : 'created',
-            'source_files' => $data['source_files'] ?? null,
-        ]);
-
-        // If an initial source comment is provided, store it in task_source_comments (parity with brand-scoped store)
-        if (!empty(trim((string)($data['source_comment'] ?? '')))) {
-            TaskSourceComment::create([
-                'task_id' => $task->id,
-                'user_id' => $request->user()->id,
-                'content' => trim((string)$data['source_comment']),
-                'image_path' => null,
+        
+        $createdTasks = [];
+        
+        // Create a task for each article
+        foreach ($data['article_ids'] as $articleId) {
+            $article = Article::findOrFail($articleId);
+            
+            $task = Task::create([
+                'brand_id' => $brand->id,
+                'created_by' => $request->user()->id,
+                'task_type_id' => $type->id,
+                'article_id' => $article->id,
+                'name' => $data['name'] ?? $article->name,
+                'assignee_id' => $data['assignee_id'] ?? null,
+                'priority' => $data['priority'] ?? 'medium',
+                'status' => isset($data['assignee_id']) ? 'assigned' : 'created',
+                'source_files' => $data['source_files'] ?? null,
             ]);
+
+            // If an initial source comment is provided, store it in task_source_comments
+            if (!empty(trim((string)($data['source_comment'] ?? '')))) {
+                TaskSourceComment::create([
+                    'task_id' => $task->id,
+                    'user_id' => $request->user()->id,
+                    'content' => trim((string)$data['source_comment']),
+                    'image_path' => null,
+                ]);
+            }
+
+            // Create Yandex.Disk folder structure
+            $this->createYandexFolderStructure($request, $brand, $task, $type, $article);
+            
+            $createdTasks[] = $task;
         }
 
-        // Create Yandex.Disk folder structure
-        $this->createYandexFolderStructure($request, $brand, $task, $type, $article);
-
-        return back()->with('status', 'task-created');
+        return back()->with('status', 'task-created')->with('tasks_count', count($createdTasks));
     }
 
     public function update(Request $request, Brand $brand, Task $task)
