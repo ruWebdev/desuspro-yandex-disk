@@ -33,7 +33,7 @@ class TaskFileController extends Controller
     public function thumbnail(Request $request, Brand $brand, Task $task)
     {
         $request->validate([
-            'file' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,gif,bmp'],
+            'file' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,bmp'],
             'name' => ['nullable', 'string', 'max:255'],
             'max'  => ['nullable', 'integer', 'min:100', 'max:4000'],
         ]);

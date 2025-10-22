@@ -504,8 +504,12 @@ async function uploadFiles(files) {
                 xhr.onload = async () => {
                     if (xhr.status >= 200 && xhr.status < 300) {
                         uploadProgress.value = Math.min(100, Math.floor(((i + 1) / total) * 100));
-                        // Generate/register thumbnail on backend
-                        try { await registerThumbnail(f); } catch (_) { }
+                        // Generate/register thumbnail on backend only for eligible image types
+                        try {
+                            if (isThumbEligibleName(f.name)) {
+                                await registerThumbnail(f);
+                            }
+                        } catch (_) { }
                         resolve();
                     } else {
                         reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText || ''}`));
@@ -536,6 +540,10 @@ function isImageName(name) {
     return /\.(jpe?g|png|gif|webp|bmp|svg|heic|heif)$/i.test(name || '');
 }
 
+function isThumbEligibleName(name) {
+    return /\.(jpe?g|png|webp|bmp)$/i.test(name || '');
+}
+
 function getBestSizeUrl(item) {
     const sizes = Array.isArray(item?.sizes) ? item.sizes : [];
     if (sizes.length) {
@@ -562,6 +570,8 @@ function buildGalleryItems() {
 
 async function viewYandexItemInLightbox(item) {
     if (!item || item.type !== 'file') return;
+    // Only allow preview for eligible image types
+    if (!isThumbEligibleName(item.name)) return;
     const openWithGallery = (src, meta = null) => {
         emit('open-lightbox', src, meta, buildGalleryItems());
     };
@@ -689,7 +699,7 @@ function getObjectURL(file) {
                                             (it.size / 1024 / 1024).toFixed(2) }} MB</span>
                                     </div>
                                     <div class="d-flex gap-2">
-                                        <button v-if="it.type === 'file'" class="btn btn-sm btn-outline-primary"
+                                        <button v-if="it.type === 'file' && isThumbEligibleName(it.name)" class="btn btn-sm btn-outline-primary"
                                             @click="() => viewYandexItemInLightbox(it)">ПОСМОТРЕТЬ</button>
                                         <button v-if="it.type === 'file' && isPerformer"
                                             class="btn btn-sm btn-outline-danger"
@@ -702,11 +712,11 @@ function getObjectURL(file) {
                     </div>
 
                     <div v-if="!isManager" class="mt-3 d-flex align-items-center gap-2">
-                        <input type="file" accept="image/*" multiple ref="fileInputRef" class="d-none"
+                        <input type="file" multiple ref="fileInputRef" class="d-none"
                             @change="onFilesChosen" />
                         <button class="btn btn-primary" :disabled="uploading || props.task?.status === 'accepted'"
                             @click="openUploader">
-                            <span v-if="!uploading">Загрузить фото</span>
+                            <span v-if="!uploading">Загрузить файлы</span>
                             <span v-else>Загрузка…</span>
                         </button>
                         <span v-if="uploadError" class="text-danger small">{{ uploadError }}</span>
