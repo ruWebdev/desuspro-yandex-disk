@@ -251,8 +251,6 @@ class TaskController extends Controller
                 'image_path' => null,
             ]);
         }
-        // Create Yandex.Disk folder
-        $this->createYandexFolderStructure($request, $brand, $task, $type, $article);
         return back()->with('status', 'task-created');
     }
 
@@ -305,10 +303,6 @@ class TaskController extends Controller
                     'image_path' => null,
                 ]);
             }
-
-            // Create Yandex.Disk folder structure
-            $this->createYandexFolderStructure($request, $brand, $task, $type, $article);
-            
             $createdTasks[] = $task;
         }
 

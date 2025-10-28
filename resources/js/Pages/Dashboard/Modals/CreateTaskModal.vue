@@ -29,9 +29,14 @@ const createForm = ref({
 
 const brandArticles = ref([]);
 const creating = ref(false);
+const validating = ref(false);
 const articleSearch = ref('');
 const selectedArticles = ref([]); // Changed to array
 const showArticleDropdown = ref(false);
+
+const xlsMode = ref(false);
+const xlsRows = ref([]);
+const fileInputEl = ref(null);
 
 // Duplicate check state
 const duplicateExists = ref(false);
@@ -47,9 +52,13 @@ const filteredArticles = computed(() => {
     );
 });
 
-// Button availability: require brand, at least one article, and task type
 const canSubmit = computed(() => {
-    return !!(createForm.value.brand_id && createForm.value.task_type_id && createForm.value.article_ids.length > 0);
+    if (!createForm.value.brand_id || !createForm.value.task_type_id) return false;
+    if (xlsMode.value) {
+        const validCount = xlsRows.value.filter(r => r.articleId).length;
+        return validCount > 0 && !validating.value && !creating.value;
+    }
+    return createForm.value.article_ids.length > 0 && !validating.value && !creating.value;
 });
 
 // Removed duplicate check for multi-article mode
@@ -135,6 +144,8 @@ function open() {
     };
     brandArticles.value = [];
     selectedArticles.value = [];
+    xlsMode.value = false;
+    xlsRows.value = [];
     emit('open');
 }
 
@@ -143,46 +154,79 @@ function close() {
 }
 
 async function submitCreate() {
-    // Validate that all selected articles exist in the list
-    if (createForm.value.article_ids.length === 0) {
-        toast.error('Пожалуйста, выберите хотя бы один артикул.');
+    if (!createForm.value.brand_id || !createForm.value.task_type_id) return;
+    if (!xlsMode.value) {
+        if (createForm.value.article_ids.length === 0) {
+            toast.error('Пожалуйста, выберите хотя бы один артикул.');
+            return;
+        }
+        const payload = buildCommonPayload(createForm.value.article_ids);
+        creating.value = true;
+        try {
+            await axios.post(route('tasks.store'), payload);
+            toast.success(`Создано задач: ${payload.article_ids.length}`);
+            emit('created');
+            close();
+        } catch (error) {
+            console.error('Error creating task:', error);
+            toast.error('Ошибка при создании задач');
+        } finally {
+            creating.value = false;
+        }
         return;
     }
-
-    const payload = {
-        brand_id: createForm.value.brand_id ? Number(createForm.value.brand_id) : null,
-        task_type_id: createForm.value.task_type_id ? Number(createForm.value.task_type_id) : null,
-        article_ids: createForm.value.article_ids.map(id => Number(id)), // Send array of article IDs
-        name: createForm.value.name?.trim() || undefined,
-        assignee_id: createForm.value.assignee_id ? Number(createForm.value.assignee_id) : null,
-        priority: createForm.value.priority || 'medium',
-        // optional source comment
-        ...(createForm.value.source_comment && createForm.value.source_comment.trim().length
-            ? { source_comment: createForm.value.source_comment.trim() }
-            : {}),
-        // Only send non-empty text file entries
-        ...(Array.isArray(createForm.value.source_files)
-            ? (() => {
-                const files = createForm.value.source_files
-                    .map(v => (v ?? '').toString().trim())
-                    .filter(v => v.length > 0);
-                return files.length ? { source_files: files } : {};
-            })()
-            : {})
-    };
-    if (!payload.brand_id || !payload.task_type_id || !payload.article_ids.length) return;
+    const validRows = xlsRows.value.filter(r => r.articleId);
+    if (!validRows.length) {
+        toast.error('Нет валидных артикулов для создания задач.');
+        return;
+    }
     creating.value = true;
     try {
-        await axios.post(route('tasks.store'), payload);
-        toast.success(`Создано задач: ${payload.article_ids.length}`);
+        const anyLinks = validRows.some(r => (r.link ?? '').toString().trim().length > 0);
+        if (anyLinks) {
+            for (const r of validRows) {
+                const perRowPayload = buildCommonPayload([r.articleId], (r.link ?? '').toString().trim() ? [r.link.toString().trim()] : undefined);
+                await axios.post(route('tasks.store'), perRowPayload);
+            }
+            toast.success(`Создано задач: ${validRows.length}`);
+        } else {
+            const ids = validRows.map(r => r.articleId);
+            const payload = buildCommonPayload(ids);
+            await axios.post(route('tasks.store'), payload);
+            toast.success(`Создано задач: ${ids.length}`);
+        }
         emit('created');
         close();
     } catch (error) {
-        console.error('Error creating task:', error);
+        console.error('Error creating task(s):', error);
         toast.error('Ошибка при создании задач');
     } finally {
         creating.value = false;
     }
+}
+
+function buildCommonPayload(articleIds, overrideSourceFiles) {
+    return {
+        brand_id: createForm.value.brand_id ? Number(createForm.value.brand_id) : null,
+        task_type_id: createForm.value.task_type_id ? Number(createForm.value.task_type_id) : null,
+        article_ids: articleIds.map(id => Number(id)),
+        name: createForm.value.name?.trim() || undefined,
+        assignee_id: createForm.value.assignee_id ? Number(createForm.value.assignee_id) : null,
+        priority: createForm.value.priority || 'medium',
+        ...(createForm.value.source_comment && createForm.value.source_comment.trim().length
+            ? { source_comment: createForm.value.source_comment.trim() }
+            : {}),
+        ...(overrideSourceFiles
+            ? { source_files: overrideSourceFiles }
+            : (Array.isArray(createForm.value.source_files)
+                ? (() => {
+                    const files = createForm.value.source_files
+                        .map(v => (v ?? '').toString().trim())
+                        .filter(v => v.length > 0);
+                    return files.length ? { source_files: files } : {};
+                })()
+                : {}))
+    };
 }
 
 // Handlers for dynamic FILE text fields (Create modal)
@@ -229,6 +273,9 @@ watch(() => createForm.value.brand_id, (newVal) => {
     createForm.value.article_ids = [];
     selectedArticles.value = [];
     articleSearch.value = '';
+    if (xlsMode.value) {
+        validateXlsRows();
+    }
 });
 
 // Reset all form data on each modal open
@@ -248,8 +295,92 @@ watch(() => props.show, (val) => {
         articleSearch.value = '';
         selectedArticles.value = [];
         showArticleDropdown.value = false;
+        xlsMode.value = false;
+        xlsRows.value = [];
     }
 });
+
+function onClickFileButton() {
+    if (!createForm.value.brand_id) {
+        toast.error('Сначала выберите бренд');
+        return;
+    }
+    fileInputEl.value?.click();
+}
+
+async function onFileChosen(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+        const buf = await file.arrayBuffer();
+        const XLSX = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm');
+        const wb = XLSX.read(buf, { type: 'array' });
+        const wsName = wb.SheetNames[0];
+        const ws = wb.Sheets[wsName];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
+        const parsed = [];
+        for (let i = 0; i < rows.length; i++) {
+            const r = rows[i];
+            if (!r || r.length === 0) continue;
+            const c0 = (r[0] ?? '').toString().trim();
+            const c1 = (r[1] ?? '').toString().trim();
+            if (i === 0 && /артик/i.test(c0)) continue;
+            if (!c0) continue;
+            parsed.push({ article: c0, link: c1, exists: null, articleId: null });
+        }
+        if (!parsed.length) {
+            toast.error('Файл не содержит данных');
+            return;
+        }
+        xlsRows.value = parsed;
+        xlsMode.value = true;
+        await validateXlsRows();
+    } catch (err) {
+        console.error(err);
+        toast.error('Не удалось прочитать файл XLS');
+    } finally {
+        if (e.target) e.target.value = '';
+    }
+}
+
+async function validateXlsRows() {
+    if (!createForm.value.brand_id || !xlsRows.value.length) return;
+    validating.value = true;
+    try {
+        if (!brandArticles.value.length) {
+            await loadArticlesForBrand(Number(createForm.value.brand_id));
+        }
+        const byName = new Map(
+            brandArticles.value.map(a => [a.name.toLowerCase().trim(), a])
+        );
+        let anyFound = false;
+        xlsRows.value = xlsRows.value.map(r => {
+            const key = r.article.toLowerCase().trim();
+            const found = byName.get(key) || null;
+            if (found) anyFound = true;
+            return { ...r, exists: !!found, articleId: found ? found.id : null };
+        });
+        createForm.value.article_ids = xlsRows.value.filter(r => r.articleId).map(r => r.articleId);
+        if (!anyFound) {
+            toast.warning('Ни один артикул из файла не найден в базе для выбранного бренда');
+        }
+    } catch (e) {
+        console.error(e);
+        toast.error('Ошибка при проверке артикулов');
+    } finally {
+        validating.value = false;
+    }
+}
+
+function removeXlsRow(idx) {
+    xlsRows.value.splice(idx, 1);
+    createForm.value.article_ids = xlsRows.value.filter(r => r.articleId).map(r => r.articleId);
+}
+
+function clearXlsMode() {
+    xlsMode.value = false;
+    xlsRows.value = [];
+}
 </script>
 
 <template>
@@ -292,8 +423,14 @@ watch(() => props.show, (val) => {
                                     </option>
                                 </select>
                             </div>
-                            <div class="col-md-12">
-                                <label class="form-label">Артикул(ы)</label>
+                            <div class="col-md-12" v-if="!xlsMode">
+                                <label class="form-label d-flex align-items-center justify-content-between">
+                                    <span>Артикул(ы)</span>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" @click="onClickFileButton">ФАЙЛ</button>
+                                    </div>
+                                </label>
+                                <input ref="fileInputEl" type="file" accept=".xls,.xlsx" class="d-none" @change="onFileChosen" />
                                 <div class="position-relative">
                                     <input type="text" class="form-control" v-model="articleSearch"
                                         @input="onArticleSearchInput" @focus="showArticleDropdown = true"
@@ -320,6 +457,41 @@ watch(() => props.show, (val) => {
                                     </div>
                                 </div>
                             </div>
+                            <div class="col-md-12" v-else>
+                                <label class="form-label d-flex align-items-center justify-content-between">
+                                    <span>Импорт из файла</span>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" @click="onClickFileButton">Заменить файл</button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" @click="clearXlsMode">Сбросить</button>
+                                    </div>
+                                </label>
+                                <input ref="fileInputEl" type="file" accept=".xls,.xlsx" class="d-none" @change="onFileChosen" />
+                                <div class="table-responsive" style="max-height: 260px; overflow-y: auto;">
+                                    <table class="table table-sm table-hover align-middle">
+                                        <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                                            <tr>
+                                                <th style="width: 40%;">Артикул</th>
+                                                <th style="width: 50%;">Ссылка</th>
+                                                <th style="width: 10%;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="(row, idx) in xlsRows" :key="idx" :class="{'table-danger': row.exists === false}">
+                                                <td>{{ row.article }}</td>
+                                                <td>
+                                                    <input type="text" class="form-control form-control-sm" v-model="row.link" placeholder="Ссылка (необязательно)" />
+                                                </td>
+                                                <td class="text-end">
+                                                    <button type="button" class="btn btn-sm btn-outline-danger" @click="removeXlsRow(idx)">Удалить</button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="form-text" :class="{'text-danger': xlsRows.some(r => r.exists === false)}">
+                                    Строки, отмеченные красным, отсутствуют в БД для выбранного бренда.
+                                </div>
+                            </div>
                             <div class="col-md-12">
                                 <label class="form-label">Название (необязательно)</label>
                                 <input type="text" class="form-control" v-model="createForm.name"
@@ -333,7 +505,7 @@ watch(() => props.show, (val) => {
                                             v-if="u.is_blocked"> — ЗАБЛОКИРОВАН</span></option>
                                 </select>
                             </div>
-                            <div class="col-12">
+                            <div class="col-12" v-if="!xlsMode">
                                 <label class="form-label d-flex align-items-center justify-content-between">
                                     <span>ФАЙЛ(ы)</span>
                                     <div>
@@ -363,9 +535,9 @@ watch(() => props.show, (val) => {
                         <button type="button" class="btn btn-link link-secondary" data-bs-dismiss="modal"
                             @click="close">Отмена</button>
                         <button type="button" class="btn btn-primary ms-auto" @click="submitCreate"
-                            :disabled="creating || !canSubmit">
-                            <span v-if="creating" class="spinner-border spinner-border-sm me-2" role="status"></span>
-                            {{ creating ? 'Создание...' : 'Создать' }}
+                            :disabled="creating || validating || !canSubmit">
+                            <span v-if="creating || validating" class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            {{ creating ? 'Создание...' : (validating ? 'Проверка...' : 'Создать') }}
                         </button>
                     </div>
                 </div>
