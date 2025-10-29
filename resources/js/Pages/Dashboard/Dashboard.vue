@@ -100,6 +100,7 @@ const page = ref(1);
 const perPage = ref(20);
 const hasMore = ref(true);
 const loading = ref(false);
+let folderPollTimer = null;
 
 // Сбросить фильтры
 function resetFilters() {
@@ -199,10 +200,14 @@ onMounted(() => {
     const container = scrollContainer.value || window;
     container.addEventListener('scroll', handleScroll, { passive: true });
     checkScroll();
+    // Start polling folder status
+    try { if (folderPollTimer) clearInterval(folderPollTimer); } catch (_) {}
+    folderPollTimer = setInterval(pollPendingFolderStatus, 30000);
 });
 onUnmounted(() => {
     try { const container = scrollContainer.value || window; container.removeEventListener('scroll', handleScroll); } catch (_) { }
     if (scrollTimeout) clearTimeout(scrollTimeout);
+    if (folderPollTimer) { try { clearInterval(folderPollTimer); } catch (_) {} folderPollTimer = null; }
 });
 
 // Filters reactive watchers
@@ -224,6 +229,32 @@ watch(brandFilter, async (val) => {
 });
 
 const displayedTasks = computed(() => items.value);
+
+async function pollPendingFolderStatus() {
+    try {
+        const pending = items.value.filter(t => t && t.folder_created === false).map(t => t.id);
+        if (!pending.length) return;
+        const base = route('tasks.folder_status');
+        const qs = pending.map(id => 'ids[]=' + encodeURIComponent(id)).join('&');
+        const url = base + '?' + qs;
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) return;
+        const data = await res.json();
+        const list = Array.isArray(data?.data) ? data.data : [];
+        if (!list.length) return;
+        const map = new Map(list.map(x => [x.id, x]));
+        items.value = items.value.map(t => {
+            const upd = map.get(t.id);
+            if (!upd) return t;
+            // If folder_created flipped to true, also refresh public_link and source_files if provided
+            const next = { ...t };
+            if (typeof upd.folder_created !== 'undefined') next.folder_created = upd.folder_created;
+            if (upd.public_link) next.public_link = upd.public_link;
+            if (Array.isArray(upd.source_files)) next.source_files = upd.source_files;
+            return next;
+        });
+    } catch (e) { /* silent */ }
+}
 
 // Selection
 const selectedIds = ref([]);

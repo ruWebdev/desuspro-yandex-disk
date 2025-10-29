@@ -10,3 +10,5 @@ Artisan::command('inspire', function () {
 
 // Schedule automatic cleanup of old thumbnails (daily at 3:00 AM)
 Schedule::command('thumbnails:cleanup')->dailyAt('03:00');
+// Ensure Yandex.Disk folders for tasks without folders (every 5 minutes)
+Schedule::command('tasks:ensure-folders')->everyFiveMinutes();

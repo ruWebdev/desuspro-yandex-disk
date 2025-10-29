@@ -363,8 +363,9 @@ function updateBodyScrollClass() {
                                 </button>
                             </div>
                         </td>
-                        <td style="vertical-align: middle;">
-                            <div class="d-flex gap-1">
+                        <td style="vertical-align: middle;" class="text-center">
+                            <div v-if="t.folder_created === false" class="text-danger">Папка создается</div>
+                            <div v-else class="d-flex gap-1">
                                 <button class="btn btn-icon btn-ghost-secondary" @click="emit('open-comments', t)">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
                                         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -419,14 +420,13 @@ function updateBodyScrollClass() {
                         <td style="vertical-align: middle;">
                             <div class="d-flex align-items-center gap-2">
                                 <select class="form-select form-select-sm w-auto" :value="t.status"
-                                    :disabled="isPerformer && t.status === 'accepted'"
-                                    @change="(e) => {
-                                    if (isAllowedStatusValue(e.target.value)) {
-                                        emit('update-status', t, e.target.value);
-                                    } else {
-                                        e.target.value = t.status; // Reset to current value if not allowed
-                                    }
-                                }">
+                                    :disabled="isPerformer && t.status === 'accepted'" @change="(e) => {
+                                        if (isAllowedStatusValue(e.target.value)) {
+                                            emit('update-status', t, e.target.value);
+                                        } else {
+                                            e.target.value = t.status; // Reset to current value if not allowed
+                                        }
+                                    }">
                                     <option v-for="s in statusOptions" :key="s.value" :value="s.value"
                                         :disabled="!isAllowedStatusValue(s.value)">
                                         {{ s.label }}

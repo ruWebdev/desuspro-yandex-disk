@@ -30,6 +30,26 @@ class TaskController extends Controller
     }
 
     /**
+     * Return folder_created status for specified task IDs.
+     * GET /tasks/folder-status?ids[]=1&ids[]=2
+     */
+    public function folderStatus(Request $request)
+    {
+        $data = $request->validate([
+            'ids' => ['required','array','min:1'],
+            'ids.*' => ['integer','exists:tasks,id'],
+        ]);
+
+        $tasks = Task::query()
+            ->whereIn('id', $data['ids'])
+            ->get(['id','folder_created','public_link','source_files']);
+
+        return response()->json([
+            'data' => $tasks,
+        ]);
+    }
+
+    /**
      * Конечная точка поиска JSON для менеджера: фильтры на стороне сервера + пагинация (по умолчанию 20 на страницу).
      */
     public function search(Request $request)

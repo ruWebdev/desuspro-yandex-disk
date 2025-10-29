@@ -23,6 +23,7 @@ class Task extends Model
         'ownership',
         'assignee_id',
         'public_link',
+        'folder_created',
         'highlighted',
         'comment',
         'size',
@@ -31,6 +32,7 @@ class Task extends Model
 
     protected $casts = [
         'highlighted' => 'boolean',
+        'folder_created' => 'boolean',
         'size' => 'integer',
         'source_files' => 'array',
     ];
