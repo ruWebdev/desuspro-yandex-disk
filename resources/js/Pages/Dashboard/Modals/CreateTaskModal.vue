@@ -584,7 +584,7 @@ const xlsTotalCount = computed(() => xlsRows.value.length);
         <div v-if="examplePreviewVisible"
             :style="{ position: 'fixed', top: examplePreviewY + 'px', left: examplePreviewX + 'px', zIndex: 3000, pointerEvents: 'none', transform: 'translate(12px, 12px)' }">
             <img src="/dist/img/primer.png" alt="Пример файла"
-                style="max-width: 380px; max-height: 200px; border: 1px solid rgba(0,0,0,0.1); box-shadow: 0 4px 16px rgba(0,0,0,0.15); background: #fff;" />
+                style="max-width: 520px; max-height: 270px; border: 1px solid rgba(0,0,0,0.1); box-shadow: 0 4px 16px rgba(0,0,0,0.15); background: #fff;" />
         </div>
     </teleport>
 </template>
