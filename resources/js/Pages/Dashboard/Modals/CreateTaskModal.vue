@@ -38,6 +38,24 @@ const xlsMode = ref(false);
 const xlsRows = ref([]);
 const fileInputEl = ref(null);
 
+const examplePreviewVisible = ref(false);
+const examplePreviewX = ref(0);
+const examplePreviewY = ref(0);
+
+function onExampleEnter(e) {
+    examplePreviewVisible.value = true;
+    examplePreviewX.value = e.clientX;
+    examplePreviewY.value = e.clientY;
+}
+function onExampleMove(e) {
+    if (!examplePreviewVisible.value) return;
+    examplePreviewX.value = e.clientX;
+    examplePreviewY.value = e.clientY;
+}
+function onExampleLeave() {
+    examplePreviewVisible.value = false;
+}
+
 // Duplicate check state
 const duplicateExists = ref(false);
 const duplicateChecking = ref(false);
@@ -381,6 +399,9 @@ function clearXlsMode() {
     xlsMode.value = false;
     xlsRows.value = [];
 }
+
+const xlsAddedCount = computed(() => xlsRows.value.filter(r => r.articleId).length);
+const xlsTotalCount = computed(() => xlsRows.value.length);
 </script>
 
 <template>
@@ -427,10 +448,15 @@ function clearXlsMode() {
                                 <label class="form-label d-flex align-items-center justify-content-between">
                                     <span>Артикул(ы)</span>
                                     <div class="d-flex align-items-center gap-2">
-                                        <button type="button" class="btn btn-sm btn-outline-secondary" @click="onClickFileButton">ФАЙЛ</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            @click="onClickFileButton">XLS ФАЙЛ</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            @mouseenter="onExampleEnter" @mousemove="onExampleMove"
+                                            @mouseleave="onExampleLeave">ПРИМЕР ФАЙЛА</button>
                                     </div>
                                 </label>
-                                <input ref="fileInputEl" type="file" accept=".xls,.xlsx" class="d-none" @change="onFileChosen" />
+                                <input ref="fileInputEl" type="file" accept=".xls,.xlsx" class="d-none"
+                                    @change="onFileChosen" />
                                 <div class="position-relative">
                                     <input type="text" class="form-control" v-model="articleSearch"
                                         @input="onArticleSearchInput" @focus="showArticleDropdown = true"
@@ -459,13 +485,20 @@ function clearXlsMode() {
                             </div>
                             <div class="col-md-12" v-else>
                                 <label class="form-label d-flex align-items-center justify-content-between">
-                                    <span>Импорт из файла</span>
+                                    <span>Импорт из файла
+                                        <small class="text-muted ms-2" v-if="xlsRows.length">
+                                            (добавляется {{ xlsAddedCount }} из {{ xlsTotalCount }})
+                                        </small>
+                                    </span>
                                     <div class="d-flex align-items-center gap-2">
-                                        <button type="button" class="btn btn-sm btn-outline-secondary" @click="onClickFileButton">Заменить файл</button>
-                                        <button type="button" class="btn btn-sm btn-outline-danger" @click="clearXlsMode">Сбросить</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            @click="onClickFileButton">Заменить файл</button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                            @click="clearXlsMode">Сбросить</button>
                                     </div>
                                 </label>
-                                <input ref="fileInputEl" type="file" accept=".xls,.xlsx" class="d-none" @change="onFileChosen" />
+                                <input ref="fileInputEl" type="file" accept=".xls,.xlsx" class="d-none"
+                                    @change="onFileChosen" />
                                 <div class="table-responsive" style="max-height: 260px; overflow-y: auto;">
                                     <table class="table table-sm table-hover align-middle">
                                         <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
@@ -476,19 +509,22 @@ function clearXlsMode() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <tr v-for="(row, idx) in xlsRows" :key="idx" :class="{'table-danger': row.exists === false}">
+                                            <tr v-for="(row, idx) in xlsRows" :key="idx"
+                                                :class="{ 'table-danger': row.exists === false }">
                                                 <td>{{ row.article }}</td>
                                                 <td>
-                                                    <input type="text" class="form-control form-control-sm" v-model="row.link" placeholder="Ссылка (необязательно)" />
+                                                    <input type="text" class="form-control form-control-sm"
+                                                        v-model="row.link" placeholder="Ссылка (необязательно)" />
                                                 </td>
                                                 <td class="text-end">
-                                                    <button type="button" class="btn btn-sm btn-outline-danger" @click="removeXlsRow(idx)">Удалить</button>
+                                                    <button type="button" class="btn btn-sm btn-outline-danger"
+                                                        @click="removeXlsRow(idx)">Удалить</button>
                                                 </td>
                                             </tr>
                                         </tbody>
                                     </table>
                                 </div>
-                                <div class="form-text" :class="{'text-danger': xlsRows.some(r => r.exists === false)}">
+                                <div class="form-text" :class="{ 'text-danger': xlsRows.some(r => r.exists === false) }">
                                     Строки, отмеченные красным, отсутствуют в БД для выбранного бренда.
                                 </div>
                             </div>
@@ -536,12 +572,16 @@ function clearXlsMode() {
                             @click="close">Отмена</button>
                         <button type="button" class="btn btn-primary ms-auto" @click="submitCreate"
                             :disabled="creating || validating || !canSubmit">
-                            <span v-if="creating || validating" class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            <span v-if="creating || validating" class="spinner-border spinner-border-sm me-2"
+                                role="status"></span>
                             {{ creating ? 'Создание...' : (validating ? 'Проверка...' : 'Создать') }}
                         </button>
                     </div>
                 </div>
             </div>
+        </div>
+        <div v-if="examplePreviewVisible" :style="{ position: 'fixed', top: examplePreviewY + 'px', left: examplePreviewX + 'px', zIndex: 3000, pointerEvents: 'none', transform: 'translate(12px, 12px)'}">
+            <img src="/dist/img/primer.png" alt="Пример файла" style="max-width: 280px; max-height: 200px; border: 1px solid rgba(0,0,0,0.1); box-shadow: 0 4px 16px rgba(0,0,0,0.15); background: #fff;" />
         </div>
     </teleport>
 </template>
