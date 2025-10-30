@@ -57,6 +57,20 @@ const toast = useToast();
 function getCsrfToken() {
     return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 }
+
+function getStatusColor(value) {
+    switch (value) {
+        case 'created': return '#6c757d';
+        case 'assigned': return '#0d6efd';
+        case 'in_progress': return '#0dcaf0';
+        case 'on_review': return '#ffc107';
+        case 'rework': return '#dc3545';
+        case 'accepted': return '#198754';
+        case 'question': return '#6f42c1';
+        case 'cancelled': return '#212529';
+        default: return '#495057';
+    }
+}
 function getFileNameFromUrl(url) {
     try {
         const u = new URL(url, window.location.origin);
@@ -743,9 +757,7 @@ function lightboxNext() {
                                     <select class="form-select form-select-sm w-auto"
                                         @change="(e) => bulkUpdateStatus(e.target.value)">
                                         <option value="" selected disabled>Выбрать…</option>
-                                        <option v-for="s in userStatusOptions" :key="s.value" :value="s.value">{{
-                                            s.label }}
-                                        </option>
+                                        <option v-for="s in userStatusOptions" :key="s.value" :value="s.value" :style="{ color: getStatusColor(s.value) }">{{ s.label }}</option>
                                     </select>
                                 </div>
                                 <div class="d-flex align-items-center gap-1" v-if="!isPerformer">

@@ -34,6 +34,7 @@ const isManager = computed(() => {
 watch(() => props.show, async (val) => {
     await nextTick();
     if (val) {
+        comments.value = [];
         publicFolderUrl.value = props.task?.public_link || '';
         if (props.task) {
             commentCtx.value = { brandId: props.task.brand_id, taskId: props.task.id };
@@ -65,6 +66,24 @@ watch(() => props.activeTab, (newTab) => {
     if (newTab === 'files') {
         // Load thumbnails alongside files
         loadLocalThumbnails();
+    }
+    if (newTab === 'comments') {
+        comments.value = [];
+        if (props.task) commentCtx.value = { brandId: props.task.brand_id, taskId: props.task.id };
+        else commentCtx.value = { brandId: null, taskId: null };
+        loadComments();
+    }
+});
+
+watch(() => props.task?.id, async (newId, oldId) => {
+    await nextTick();
+    if (!newId) { comments.value = []; return; }
+    commentCtx.value = { brandId: props.task.brand_id, taskId: props.task.id };
+    if (props.activeTab === 'comments') {
+        comments.value = [];
+        loadComments();
+    } else if (props.activeTab === 'files') {
+        loadYandexFiles();
     }
 });
 
@@ -106,8 +125,22 @@ const uploadError = ref('');
 const uploadProgress = ref(0); // 0..100 overall
 const uploadFileName = ref('');
 const uploadStatus = ref('');
-// Local thumbnails map: { [filename]: url }
 const localThumbs = ref({});
+const selectedFileNames = ref([]);
+const isFileSelected = (name) => selectedFileNames.value.includes(name);
+function toggleFileSelection(name, checked) {
+    if (!name) return;
+    const arr = selectedFileNames.value.slice();
+    const idx = arr.indexOf(name);
+    if (checked) {
+        if (idx === -1) arr.push(name);
+    } else {
+        if (idx !== -1) arr.splice(idx, 1);
+    }
+    selectedFileNames.value = arr;
+}
+const anyFilesSelected = computed(() => selectedFileNames.value.length > 0);
+function clearFileSelection() { selectedFileNames.value = []; }
 
 onMounted(async () => {
     await nextTick();
@@ -347,6 +380,7 @@ async function loadYandexFiles() {
         yandexItems.value = (data?._embedded?.items && Array.isArray(data._embedded.items)) ? data._embedded.items : [];
         // Load local thumbnails after listing
         await loadLocalThumbnails();
+        clearFileSelection();
     } catch (e) {
         console.error(e);
         filesError.value = 'Не удалось загрузить список файлов.';
@@ -413,6 +447,35 @@ async function downloadYandexItem(item) {
     } catch (e) { console.error(e); }
 }
 
+async function removeYandexAndLocal(reqPath, name) {
+    const yandexRes = await fetch(route('integrations.yandex.delete'), {
+        method: 'DELETE',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() },
+        credentials: 'same-origin',
+        body: JSON.stringify({ path: reqPath, permanently: false })
+    });
+    if (!yandexRes.ok) {
+        const txt = await yandexRes.text().catch(() => '');
+        throw new Error(`Ошибка удаления с Яндекс.Диска (${yandexRes.status}): ${txt}`);
+    }
+    if (props.task?.id && props.task?.brand_id && localThumbs.value?.[name]) {
+        try {
+            const localRes = await fetch(route('brands.tasks.files.destroy', { brand: props.task.brand_id, task: props.task.id }), {
+                method: 'DELETE',
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() },
+                credentials: 'same-origin',
+                body: JSON.stringify({ filename: name })
+            });
+            if (!localRes.ok) {
+                toast.warning('Файл удален с Яндекс.Диска, но не удалось удалить локальную копию.');
+            }
+        } catch (e) {
+             console.warn('Failed to delete local thumbnail', e);
+             toast.warning('Файл удален с Яндекс.Диска, но произошла ошибка при удалении локальной копии.');
+        }
+    }
+}
+
 async function deleteYandexItem(item) {
     if (!item || item.type !== 'file') return;
     if (!confirm(`Удалить файл «${item.name}» из Яндекс.Диска и локальную копию?`)) return;
@@ -425,35 +488,7 @@ async function deleteYandexItem(item) {
     }
 
     try {
-        // Delete from Yandex
-        const yandexRes = await fetch(route('integrations.yandex.delete'), {
-            method: 'DELETE',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() },
-            credentials: 'same-origin',
-            body: JSON.stringify({ path: reqPath, permanently: false })
-        });
-        if (!yandexRes.ok) {
-            const txt = await yandexRes.text().catch(() => '');
-            throw new Error(`Ошибка удаления с Яндекс.Диска (${yandexRes.status}): ${txt}`);
-        }
-
-        // Delete local thumbnail
-        if (props.task?.id && props.task?.brand_id && localThumbs.value?.[item.name]) {
-            try {
-                const localRes = await fetch(route('brands.tasks.files.destroy', { brand: props.task.brand_id, task: props.task.id }), {
-                    method: 'DELETE',
-                    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-XSRF-TOKEN': getXsrfToken() },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ filename: item.name })
-                });
-                if (!localRes.ok) {
-                    toast.warning('Файл удален с Яндекс.Диска, но не удалось удалить локальную копию.');
-                }
-            } catch (e) {
-                 console.warn('Failed to delete local thumbnail', e);
-                 toast.warning('Файл удален с Яндекс.Диска, но произошла ошибка при удалении локальной копии.');
-            }
-        }
+        await removeYandexAndLocal(reqPath, item.name);
 
         toast.success('Файл удалён');
         await loadYandexFiles(); // This will also trigger loadLocalThumbnails
@@ -461,6 +496,31 @@ async function deleteYandexItem(item) {
     } catch (e) {
         console.error('deleteYandexItem failed', e);
         toast.error(e.message || 'Не удалось удалить файл. Попробуйте ещё раз.');
+    }
+}
+
+async function bulkDeleteSelected() {
+    const names = [...selectedFileNames.value];
+    if (!names.length) return;
+    if (!confirm(`Удалить выбранные файлы (${names.length} шт.) из Яндекс.Диска и локальные копии?`)) return;
+    try {
+        const folder = yandexFolderPath();
+        if (!folder) return;
+        for (const name of names) {
+            const item = yandexItems.value.find(x => x.type === 'file' && x.name === name);
+            const reqPath = item?.path ? item.path : `${folder}/${name}`;
+            try {
+                await removeYandexAndLocal(reqPath, name);
+            } catch (e) {
+                console.warn(`Failed to delete ${name}`, e);
+            }
+        }
+        toast.success('Выбранные файлы удалены');
+        clearFileSelection();
+        await loadYandexFiles();
+    } catch (e) {
+        console.error('bulkDeleteSelected failed', e);
+        toast.error('Не удалось удалить некоторые файлы');
     }
 }
 
@@ -681,6 +741,11 @@ function getObjectURL(file) {
                             <button class="btn btn-secondary" type="button" @click="openFolderUrl">Перейти</button>
                         </div>
                     </div>
+                    <div v-if="isPerformer && anyFilesSelected" class="mb-2">
+                        <button class="btn btn-sm btn-danger" :disabled="props.task?.status === 'accepted'" @click="bulkDeleteSelected">
+                            УДАЛИТЬ ВЫБРАННЫЕ
+                        </button>
+                    </div>
 
                     <div v-if="filesLoading" class="text-secondary">Загрузка списка файлов…</div>
                     <div v-else>
@@ -691,6 +756,10 @@ function getObjectURL(file) {
                                 <li v-for="it in yandexItems" :key="it.resource_id || it.path || it.name"
                                     class="list-group-item d-flex justify-content-between align-items-center">
                                     <div class="d-flex align-items-center gap-2">
+                                        <input v-if="isPerformer && it.type === 'file'" type="checkbox" class="form-check-input"
+                                            :checked="isFileSelected(it.name)"
+                                            :disabled="props.task?.status === 'accepted'"
+                                            @change="(e) => toggleFileSelection(it.name, e.target.checked)" />
                                         <span class="badge"
                                             :class="it.type === 'dir' ? 'bg-secondary' : 'bg-primary'">{{ it.type ===
                                                 'dir' ? 'Папка' : 'Файл' }}</span>

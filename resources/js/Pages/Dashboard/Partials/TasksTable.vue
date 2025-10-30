@@ -67,6 +67,19 @@ const isAdmin = computed(() => {
 
 const toast = useToast();
 
+const activeRowId = ref(null);
+function onRowClick(task, event) {
+    const target = event?.target;
+    const rowId = task?.id;
+    if (!rowId) return;
+    const interactive = target && (target.closest('button, a, input, select, textarea, [role="button"], .btn, .form-check-input'));
+    if (!interactive && activeRowId.value === rowId) {
+        activeRowId.value = null;
+    } else {
+        activeRowId.value = rowId;
+    }
+}
+
 // Helper functions
 function statusLabel(status) {
     switch (status) {
@@ -95,6 +108,21 @@ function statusClass(status) {
         case 'cancelled': return 'bg-dark';
         case 'done': return 'bg-success';
         default: return 'bg-secondary';
+    }
+}
+
+function getStatusColor(value) {
+    switch (value) {
+        case 'created': return '#6c757d';
+        case 'assigned': return '#0d6efd';
+        case 'in_progress': return '#0dcaf0';
+        case 'on_review': return '#ffc107';
+        case 'rework': return '#dc3545';
+        case 'accepted': return '#198754';
+        case 'question': return '#6f42c1';
+        case 'cancelled': return '#212529';
+        case 'done': return '#198754';
+        default: return '#495057';
     }
 }
 
@@ -277,7 +305,8 @@ function updateBodyScrollClass() {
                     <tr v-if="tasks.length === 0">
                         <td :colspan="isPerformer ? 10 : 11" class="text-center text-secondary py-4">Нет задач</td>
                     </tr>
-                    <tr v-for="t in tasks" :key="t.id" style="font-size: 13px !important;">
+                    <tr v-for="t in tasks" :key="t.id" style="font-size: 13px !important;"
+                        :class="{ 'row-active': activeRowId === t.id }" @click="onRowClick(t, $event)">
                         <td class="text-center" style="vertical-align: middle;">
                             <input type="checkbox" class="form-check-input" :checked="isSelected(t.id)"
                                 @change="emit('toggle-row', t.id)" />
@@ -324,12 +353,10 @@ function updateBodyScrollClass() {
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
                                         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                         stroke-linejoin="round"
-                                        class="icon icon-tabler icons-tabler-outline icon-tabler-files">
+                                        class="icon icon-tabler icons-tabler-outline icon-tabler-paperclip">
                                         <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                        <path d="M15 3v4a1 1 0 0 0 1 1h4" />
                                         <path
-                                            d="M18 17h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h4l5 5v7a2 2 0 0 1 -2 2z" />
-                                        <path d="M16 17v2a2 2 0 0 1 -2 2h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h2" />
+                                            d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3l6.5 -6.5a3 3 0 0 0 -6 -6l-6.5 6.5a4.5 4.5 0 0 0 9 9l6.5 -6.5" />
                                     </svg>
                                 </button>
                                 <button class="btn btn-icon btn-ghost-secondary" @click="copySourcePublicLink(t)"
@@ -339,12 +366,12 @@ function updateBodyScrollClass() {
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
                                         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                         stroke-linejoin="round"
-                                        class="icon icon-tabler icons-tabler-outline icon-tabler-copy">
+                                        class="icon icon-tabler icons-tabler-outline icon-tabler-files">
                                         <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                        <path d="M15 3v4a1 1 0 0 0 1 1h4" />
                                         <path
-                                            d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
-                                        <path
-                                            d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
+                                            d="M18 17h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h4l5 5v7a2 2 0 0 1 -2 2z" />
+                                        <path d="M16 17v2a2 2 0 0 1 -2 2h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h2" />
                                     </svg>
                                 </button>
                                 <button class="btn btn-icon btn-ghost-primary" @click="openSourceFileLink(t)"
@@ -382,25 +409,23 @@ function updateBodyScrollClass() {
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
                                         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                         stroke-linejoin="round"
+                                        class="icon icon-tabler icons-tabler-outline icon-tabler-paperclip">
+                                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                        <path
+                                            d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3l6.5 -6.5a3 3 0 0 0 -6 -6l-6.5 6.5a4.5 4.5 0 0 0 9 9l6.5 -6.5" />
+                                    </svg>
+                                </button>
+                                <button class="btn btn-icon btn-ghost-primary" @click="emit('copy-link', t)"
+                                    type="button">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round"
                                         class="icon icon-tabler icons-tabler-outline icon-tabler-files">
                                         <path stroke="none" d="M0 0h24v24H0z" fill="none" />
                                         <path d="M15 3v4a1 1 0 0 0 1 1h4" />
                                         <path
                                             d="M18 17h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h4l5 5v7a2 2 0 0 1 -2 2z" />
                                         <path d="M16 17v2a2 2 0 0 1 -2 2h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h2" />
-                                    </svg>
-                                </button>
-                                <button class="btn btn-icon btn-ghost-primary" @click="emit('copy-link', t)"
-                                    type="button">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        class="icon icon-tabler icons-tabler-outline icon-tabler-copy">
-                                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                        <path
-                                            d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
-                                        <path
-                                            d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
                                     </svg>
                                 </button>
                                 <button class="btn btn-icon btn-ghost-primary" @click="emit('open-link', t)"
@@ -420,6 +445,7 @@ function updateBodyScrollClass() {
                         <td style="vertical-align: middle;">
                             <div class="d-flex align-items-center gap-2">
                                 <select class="form-select form-select-sm w-auto" :value="t.status"
+                                    :style="{ color: getStatusColor(t.status) }"
                                     :disabled="isPerformer && t.status === 'accepted'" @change="(e) => {
                                         if (isAllowedStatusValue(e.target.value)) {
                                             emit('update-status', t, e.target.value);
@@ -428,9 +454,9 @@ function updateBodyScrollClass() {
                                         }
                                     }">
                                     <option v-for="s in statusOptions" :key="s.value" :value="s.value"
-                                        :disabled="!isAllowedStatusValue(s.value)">
+                                        :disabled="!isAllowedStatusValue(s.value)"
+                                        :style="{ color: getStatusColor(s.value) }">
                                         {{ s.label }}
-                                        {{ !isAllowedStatusValue(s.value) ? '' : '' }}
                                     </option>
                                 </select>
                             </div>
@@ -520,5 +546,9 @@ function updateBodyScrollClass() {
 :global(.hide-main-scroll::-webkit-scrollbar) {
     display: none;
     /* Chrome, Safari, Opera */
+}
+
+.row-active {
+    background-color: rgba(13, 110, 253, 0.08);
 }
 </style>
