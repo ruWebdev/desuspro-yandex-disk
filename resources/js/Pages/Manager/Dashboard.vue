@@ -1719,13 +1719,12 @@ async function onReplaceFileSelected(event) {
     const targetPath = replacingFile.value.path || `${yandexFolderPath()}/${replacingFile.value.name}`;
     const expectedName = replacingFile.value.name;
 
-    // Check filename match
+    // STRICT: filename must match exactly - no option to continue if different
     if (file.name !== expectedName) {
-        if (!confirm(`Имя файла не совпадает!\n\nОжидается: ${expectedName}\nВыбрано: ${file.name}\n\nПродолжить замену?`)) {
-            replaceFileInput.value.value = null;
-            replacingFile.value = null;
-            return;
-        }
+        toast.error(`Имя файла должно совпадать!\n\nОжидается: ${expectedName}\nВыбрано: ${file.name}`);
+        replaceFileInput.value.value = null;
+        replacingFile.value = null;
+        return;
     }
 
     // Confirm replacement
@@ -2017,7 +2016,7 @@ const copySourcePublicLink = async (task) => {
                                         @change="(e) => bulkUpdatePriority(e.target.value)">
                                         <option value="" selected disabled>Выбрать…</option>
                                         <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{ p.label
-                                        }}</option>
+                                            }}</option>
                                     </select>
                                 </div>
 
@@ -2073,7 +2072,7 @@ const copySourcePublicLink = async (task) => {
                                 <td style="vertical-align: middle;">{{ t.type?.name || '' }}</td>
                                 <td style="vertical-align: middle;" class="text-end">
                                     <span v-if="t.assignee?.name" class="text-secondary me-2">{{ t.assignee.name
-                                    }}</span>
+                                        }}</span>
                                     <button class="btn btn-sm btn-outline-primary" @click="openAssign(t)">
                                         {{ t.assignee?.name ? 'Изменить' : 'Назначить' }}
                                     </button>

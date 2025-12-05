@@ -416,15 +416,19 @@ class YandexDiskService
 
     /**
      * Move or rename a resource on Yandex.Disk.
+     * Note: Yandex API requires parameters in query string, not body.
      */
     public function moveResource(string $accessToken, string $from, string $to, bool $overwrite = false): array
     {
+        $query = http_build_query([
+            'from' => $this->normalizePath($from),
+            'path' => $this->normalizePath($to),
+            'overwrite' => $overwrite ? 'true' : 'false',
+        ]);
+        
         $res = Http::withHeaders($this->authHeaders($accessToken))
-            ->post($this->apiBase.'/resources/move', [
-                'from' => $this->normalizePath($from),
-                'path' => $this->normalizePath($to),
-                'overwrite' => $overwrite ? 'true' : 'false',
-            ])->throw();
+            ->post($this->apiBase.'/resources/move?'.$query)
+            ->throw();
 
         // 201 Created or 202 Accepted are success for async moves
         if (in_array($res->status(), [200, 201, 202])) {

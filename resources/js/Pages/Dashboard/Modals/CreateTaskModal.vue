@@ -39,6 +39,9 @@ const xlsMode = ref(false);
 const xlsRows = ref([]);
 const fileInputEl = ref(null);
 
+// Flag to skip brand watcher reset during basedOnTask initialization
+let skipBrandWatcherReset = false;
+
 const examplePreviewVisible = ref(false);
 const examplePreviewX = ref(0);
 const examplePreviewY = ref(0);
@@ -62,6 +65,15 @@ const duplicateExists = ref(false);
 const duplicateChecking = ref(false);
 let duplicateTimer = null;
 
+// Filter task types: exclude the source task's type when creating based on existing task
+const availableTaskTypes = computed(() => {
+    if (!props.basedOnTask || !props.basedOnTask.task_type_id) {
+        return props.taskTypes;
+    }
+    // Exclude the source task's type
+    return props.taskTypes.filter(tt => tt.id !== props.basedOnTask.task_type_id);
+});
+
 const filteredArticles = computed(() => {
     if (!articleSearch.value) return brandArticles.value;
     const search = articleSearch.value.toLowerCase();
@@ -73,6 +85,8 @@ const filteredArticles = computed(() => {
 
 const canSubmit = computed(() => {
     if (!createForm.value.brand_id || !createForm.value.task_type_id) return false;
+    // Block if duplicate check is in progress or duplicate exists
+    if (duplicateChecking.value || duplicateExists.value) return false;
     if (xlsMode.value) {
         const validCount = xlsRows.value.filter(r => r.articleId).length;
         return validCount > 0 && !validating.value && !creating.value;
@@ -80,7 +94,58 @@ const canSubmit = computed(() => {
     return createForm.value.article_ids.length > 0 && !validating.value && !creating.value;
 });
 
-// Removed duplicate check for multi-article mode
+// Check for duplicate task (same brand, article, task_type)
+async function checkDuplicate() {
+    // Only check in single article mode (not XLS) and when all required fields are set
+    if (xlsMode.value) {
+        duplicateExists.value = false;
+        return;
+    }
+    if (!createForm.value.brand_id || !createForm.value.task_type_id || createForm.value.article_ids.length !== 1) {
+        duplicateExists.value = false;
+        return;
+    }
+
+    duplicateChecking.value = true;
+    try {
+        const response = await axios.get(route('tasks.check_duplicate'), {
+            params: {
+                brand_id: createForm.value.brand_id,
+                article_id: createForm.value.article_ids[0],
+                task_type_id: createForm.value.task_type_id
+            }
+        });
+        duplicateExists.value = response.data?.exists === true;
+        if (duplicateExists.value) {
+            toast.warning('Задача с таким брендом, артикулом и типом уже существует!');
+        }
+    } catch (e) {
+        console.error('Duplicate check failed:', e);
+        duplicateExists.value = false;
+    } finally {
+        duplicateChecking.value = false;
+    }
+}
+
+// Debounced duplicate check
+function scheduleDuplicateCheck() {
+    if (duplicateTimer) clearTimeout(duplicateTimer);
+    duplicateTimer = setTimeout(() => {
+        checkDuplicate();
+    }, 500);
+}
+
+// Watch for changes that require duplicate check
+watch(
+    () => [createForm.value.brand_id, createForm.value.task_type_id, createForm.value.article_ids],
+    () => {
+        // Only check when we have a single article (basedOnTask mode)
+        if (props.basedOnTask && createForm.value.article_ids.length === 1) {
+            scheduleDuplicateCheck();
+        }
+    },
+    { deep: true }
+);
 
 async function loadArticlesForBrand(brandId) {
     brandArticles.value = [];
@@ -284,6 +349,11 @@ watch(() => createForm.value.source_files, (arr) => {
 
 // Watch for brand changes
 watch(() => createForm.value.brand_id, (newVal) => {
+    // Skip reset during basedOnTask initialization
+    if (skipBrandWatcherReset) {
+        skipBrandWatcherReset = false;
+        return;
+    }
     if (newVal) {
         loadArticlesForBrand(Number(newVal));
     } else {
@@ -303,6 +373,9 @@ watch(() => props.show, async (val) => {
         // Check if creating based on existing task
         if (props.basedOnTask) {
             const sourceTask = props.basedOnTask;
+
+            // Set flag to skip brand watcher reset
+            skipBrandWatcherReset = true;
 
             // Build source files array
             const sourceFiles = [];
@@ -483,8 +556,12 @@ const xlsTotalCount = computed(() => xlsRows.value.length);
                                 <label class="form-label">Тип задачи</label>
                                 <select class="form-select" v-model="createForm.task_type_id">
                                     <option value="">Выберите тип</option>
-                                    <option v-for="tt in taskTypes" :key="tt.id" :value="tt.id">{{ tt.name }}</option>
+                                    <option v-for="tt in availableTaskTypes" :key="tt.id" :value="tt.id">{{ tt.name }}
+                                    </option>
                                 </select>
+                                <div v-if="basedOnTask && basedOnTask.task_type_id" class="form-text text-warning">
+                                    <i class="ti ti-alert-triangle me-1"></i>Тип исходной задачи недоступен для выбора
+                                </div>
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label">Приоритет</label>
@@ -623,6 +700,12 @@ const xlsTotalCount = computed(() => xlsRows.value.length);
                         </div>
                     </div>
                     <div class="modal-footer">
+                        <div v-if="duplicateExists" class="text-danger me-auto">
+                            <i class="ti ti-alert-circle me-1"></i>Такая задача уже существует!
+                        </div>
+                        <div v-else-if="duplicateChecking" class="text-secondary me-auto">
+                            <span class="spinner-border spinner-border-sm me-1"></span>Проверка дубликатов...
+                        </div>
                         <button type="button" class="btn btn-link link-secondary" data-bs-dismiss="modal"
                             @click="close">Отмена</button>
                         <button type="button" class="btn btn-primary ms-auto" @click="submitCreate"

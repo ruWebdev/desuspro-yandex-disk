@@ -77,12 +77,12 @@ async function onReplaceFileSelected(event) {
     const targetPath = replacingFile.value.path || `${folder}/${replacingFile.value.name}`;
     const expectedName = replacingFile.value.name;
 
+    // STRICT: filename must match exactly - no option to continue if different
     if (file.name !== expectedName) {
-        if (!confirm(`Имя файла не совпадает!\n\nОжидается: ${expectedName}\nВыбрано: ${file.name}\n\nПродолжить замену?`)) {
-            replaceFileInput.value.value = null;
-            replacingFile.value = null;
-            return;
-        }
+        toast.error(`Имя файла должно совпадать!\n\nОжидается: ${expectedName}\nВыбрано: ${file.name}`);
+        replaceFileInput.value.value = null;
+        replacingFile.value = null;
+        return;
     }
 
     if (!confirm(`Будет заменён файл: ${expectedName}\n\nВы уверены?`)) {
