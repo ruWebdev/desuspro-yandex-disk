@@ -59,14 +59,12 @@ const isFilled = (v) => typeof v === 'string' ? v.trim().length > 0 : !!v
 const createInvalid = computed(() => !(
   isFilled(createForm.last_name) &&
   isFilled(createForm.first_name) &&
-  isFilled(createForm.middle_name) &&
   isFilled(createForm.email) &&
   isFilled(createForm.password)
 ))
 const editInvalid = computed(() => !(
   isFilled(editForm.last_name) &&
   isFilled(editForm.first_name) &&
-  isFilled(editForm.middle_name) &&
   isFilled(editForm.email)
 ))
 
@@ -190,7 +188,7 @@ function submitDelete() {
             <td>
               <span :class="['badge', 'text-light', u.is_blocked ? 'bg-red' : 'bg-green']">{{ u.is_blocked ? 'Да' :
                 'Нет'
-              }}</span>
+                }}</span>
             </td>
             <td class="text-end">
               <div class="btn-list flex-nowrap">
