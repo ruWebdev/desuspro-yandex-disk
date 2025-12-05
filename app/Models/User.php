@@ -37,6 +37,7 @@ class User extends Authenticatable
         'middle_name',
         'is_blocked',
         'can_edit_result',
+        'executor_contacts',
     ];
 
     /**

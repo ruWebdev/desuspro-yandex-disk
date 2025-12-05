@@ -33,7 +33,7 @@ class ExecutorsController extends Controller
             });
         }
 
-        $users = $query->get(['id', 'name', 'email', 'last_name', 'first_name', 'middle_name', 'is_blocked', 'created_at']);
+        $users = $query->get(['id', 'name', 'email', 'last_name', 'first_name', 'middle_name', 'executor_contacts', 'is_blocked', 'created_at']);
 
         // Choose component based on role: Managers see Manager view; Admins see Admin view
         $component = 'Admin/Users/Executors';
@@ -63,6 +63,7 @@ class ExecutorsController extends Controller
             'last_name' => 'required|string|max:255',
             'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
+            'executor_contacts' => 'nullable|string|max:2000',
             'is_blocked' => 'sometimes|boolean',
         ]);
         $user = User::create([
@@ -72,6 +73,7 @@ class ExecutorsController extends Controller
             'last_name' => $data['last_name'] ?? null,
             'first_name' => $data['first_name'] ?? null,
             'middle_name' => $data['middle_name'] ?? null,
+            'executor_contacts' => $data['executor_contacts'] ?? null,
             'is_blocked' => (bool)($data['is_blocked'] ?? false),
         ]);
         if (method_exists($user, 'assignRole')) {
@@ -93,6 +95,7 @@ class ExecutorsController extends Controller
             'last_name' => 'required|string|max:255',
             'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
+            'executor_contacts' => 'nullable|string|max:2000',
             'is_blocked' => 'sometimes|boolean',
         ]);
         $user->fill([
@@ -101,6 +104,7 @@ class ExecutorsController extends Controller
             'last_name' => $data['last_name'] ?? null,
             'first_name' => $data['first_name'] ?? null,
             'middle_name' => $data['middle_name'] ?? null,
+            'executor_contacts' => $data['executor_contacts'] ?? $user->executor_contacts,
             'is_blocked' => (bool)($data['is_blocked'] ?? $user->is_blocked),
         ]);
         if (!empty($data['password'])) {

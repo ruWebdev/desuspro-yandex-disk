@@ -39,6 +39,7 @@ const createForm = useForm({
   last_name: '',
   first_name: '',
   middle_name: '',
+  executor_contacts: '',
   is_blocked: false,
 })
 
@@ -49,6 +50,7 @@ const editForm = useForm({
   last_name: '',
   first_name: '',
   middle_name: '',
+  executor_contacts: '',
   is_blocked: false,
 })
 
@@ -80,6 +82,7 @@ function openEdit(user) {
   editForm.last_name = user.last_name
   editForm.first_name = user.first_name
   editForm.middle_name = user.middle_name
+  editForm.executor_contacts = user.executor_contacts || ''
   editForm.is_blocked = !!user.is_blocked
   showEdit.value = true
 }
@@ -115,6 +118,7 @@ function submitEdit() {
     last_name: editForm.last_name,
     first_name: editForm.first_name,
     middle_name: editForm.middle_name,
+    executor_contacts: editForm.executor_contacts,
     is_blocked: editForm.is_blocked,
   }
   const pwd = (editForm.password || '').trim()
@@ -163,6 +167,7 @@ function submitDelete() {
           <tr>
             <th>ФИО</th>
             <th>E-mail</th>
+            <th>Контакты исполнителя</th>
             <th>Заблокирован</th>
             <th class="w-1"></th>
           </tr>
@@ -177,6 +182,12 @@ function submitDelete() {
             </td>
             <td>{{ u.email }}</td>
             <td>
+              <div v-if="u.executor_contacts" class="text-secondary" style="white-space: pre-line; max-width: 260px;">
+                {{ u.executor_contacts }}
+              </div>
+              <div v-else class="text-muted">—</div>
+            </td>
+            <td>
               <span :class="['badge', 'text-light', u.is_blocked ? 'bg-red' : 'bg-green']">{{ u.is_blocked ? 'Да' :
                 'Нет'
               }}</span>
@@ -190,7 +201,7 @@ function submitDelete() {
             </td>
           </tr>
           <tr v-if="props.users.length === 0">
-            <td colspan="4" class="text-center text-secondary py-5">Нет данных</td>
+            <td colspan="5" class="text-center text-secondary py-5">Нет данных</td>
           </tr>
         </tbody>
       </table>
@@ -230,6 +241,11 @@ function submitDelete() {
                 <input v-model="createForm.password" type="text" class="form-control" />
                 <button class="btn btn-outline" @click="generatePassword('create')">Сгенерировать</button>
               </div>
+            </div>
+            <div class="col-md-12">
+              <label class="form-label">Контакты исполнителя</label>
+              <textarea v-model="createForm.executor_contacts" class="form-control" rows="3"
+                placeholder="Телеграм, телефон, ссылки и т.п. (необязательно)"></textarea>
             </div>
             <div class="col-md-12">
               <label class="form-check">
@@ -282,6 +298,11 @@ function submitDelete() {
                 <input v-model="editForm.password" type="text" class="form-control" />
                 <button class="btn btn-outline" @click="generatePassword('edit')">Сгенерировать</button>
               </div>
+            </div>
+            <div class="col-md-12">
+              <label class="form-label">Контакты исполнителя</label>
+              <textarea v-model="editForm.executor_contacts" class="form-control" rows="3"
+                placeholder="Телеграм, телефон, ссылки и т.п. (необязательно)"></textarea>
             </div>
             <div class="col-md-12">
               <label class="form-check">
