@@ -42,6 +42,7 @@ const selectedResultFiles = ref([]);
 const archiveInProgress = ref(false);
 const archiveTotal = ref(0);
 const archiveCompleted = ref(0);
+const archiveCurrentName = ref('');
 
 const archivePercent = computed(() => {
     if (!archiveInProgress.value || !archiveTotal.value) return 0;
@@ -193,19 +194,25 @@ async function archiveSelectedFiles() {
         return;
     }
 
-    const paths = selectedResultFiles.value.map(f => f.path || `${folder}/${f.name}`);
+    const entries = selectedResultFiles.value.map(f => ({
+        path: f.path || `${folder}/${f.name}`,
+        name: f.name,
+    }));
 
     fileOperationLoading.value = true;
     archiveInProgress.value = true;
-    archiveTotal.value = paths.length;
+    archiveTotal.value = entries.length;
     archiveCompleted.value = 0;
+    archiveCurrentName.value = '';
 
     let totalArchived = 0;
     let totalErrors = 0;
     let sampleError = null;
 
     try {
-        for (const path of paths) {
+        for (const entry of entries) {
+            const path = entry.path;
+            archiveCurrentName.value = entry.name || '';
             try {
                 const res = await fetch(route('integrations.yandex.archive_files'), {
                     method: 'POST',
@@ -265,6 +272,7 @@ async function archiveSelectedFiles() {
         archiveInProgress.value = false;
         archiveTotal.value = 0;
         archiveCompleted.value = 0;
+        archiveCurrentName.value = '';
     }
 }
 
@@ -1013,10 +1021,12 @@ function getObjectURL(file) {
                     <div v-if="archiveInProgress" class="mb-3">
                         <div class="progress" style="height: 4px;">
                             <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning"
-                                style="width: 100%;"></div>
+                                role="progressbar" :style="{ width: archivePercent + '%' }"
+                                :aria-valuenow="archivePercent" aria-valuemin="0" aria-valuemax="100"></div>
                         </div>
                         <div class="small text-muted mt-1">
-                            Архивирование файлов<span v-if="archiveTotal"> ({{ archiveTotal }})</span>...
+                            Архивирование файлов: {{ archiveCompleted }} / {{ archiveTotal }} ({{ archivePercent }}%)
+                            <span v-if="archiveCurrentName"> — текущий файл: {{ archiveCurrentName }}</span>
                         </div>
                     </div>
                     <div v-if="canEditResult && isTaskAccepted" class="mb-3">
