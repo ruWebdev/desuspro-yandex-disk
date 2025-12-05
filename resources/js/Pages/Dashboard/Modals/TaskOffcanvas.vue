@@ -41,6 +41,13 @@ const fileOperationLoading = ref(false);
 const selectedResultFiles = ref([]);
 const archiveInProgress = ref(false);
 const archiveTotal = ref(0);
+const archiveCompleted = ref(0);
+
+const archivePercent = computed(() => {
+    if (!archiveInProgress.value || !archiveTotal.value) return 0;
+    const pct = Math.round((archiveCompleted.value / archiveTotal.value) * 100);
+    return Number.isFinite(pct) ? pct : 0;
+});
 
 function toggleResultFileSelection(item) {
     if (item.type !== 'file') return;
@@ -186,37 +193,66 @@ async function archiveSelectedFiles() {
         return;
     }
 
+    const paths = selectedResultFiles.value.map(f => f.path || `${folder}/${f.name}`);
+
     fileOperationLoading.value = true;
+    archiveInProgress.value = true;
+    archiveTotal.value = paths.length;
+    archiveCompleted.value = 0;
+
+    let totalArchived = 0;
+    let totalErrors = 0;
+    let sampleError = null;
 
     try {
-        const paths = selectedResultFiles.value.map(f => f.path || `${folder}/${f.name}`);
+        for (const path of paths) {
+            try {
+                const res = await fetch(route('integrations.yandex.archive_files'), {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-XSRF-TOKEN': getXsrfToken(),
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ paths: [path] }),
+                });
 
-        const res = await fetch(route('integrations.yandex.archive_files'), {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                'X-XSRF-TOKEN': getXsrfToken(),
-            },
-            credentials: 'same-origin',
-            body: JSON.stringify({ paths }),
-        });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.message || `HTTP ${res.status}`);
+                }
 
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(err.message || `HTTP ${res.status}`);
+                const result = await res.json();
+                if (Array.isArray(result.archived) && result.archived.length > 0) {
+                    totalArchived += result.archived.length;
+                }
+                if (Array.isArray(result.errors) && result.errors.length > 0) {
+                    totalErrors += result.errors.length;
+                    if (!sampleError) {
+                        sampleError = result.errors[0];
+                    }
+                }
+            } catch (e) {
+                totalErrors += 1;
+                if (!sampleError) {
+                    sampleError = { path, error: e.message };
+                }
+                console.error('Archive file error:', e);
+            } finally {
+                archiveCompleted.value++;
+            }
         }
 
-        const result = await res.json();
-        if (Array.isArray(result.archived) && result.archived.length > 0) {
-            toast.success(`Архивировано файлов: ${result.archived.length}`);
+        if (totalArchived > 0) {
+            toast.success(`Архивировано файлов: ${totalArchived}`);
         }
-        if (Array.isArray(result.errors) && result.errors.length > 0) {
-            const first = result.errors[0] || {};
-            const path = first.path || '';
+        if (totalErrors > 0 && sampleError) {
+            const first = sampleError;
+            const errPath = first.path || '';
             let msg = first.error || 'Не удалось архивировать некоторые файлы';
             if (first.status) msg += ` (HTTP ${first.status})`;
-            toast.error(`Не удалось архивировать ${result.errors.length} файл(ов).${path ? ` Пример: ${path} — ${msg}` : ` ${msg}`}`);
+            toast.error(`Не удалось архивировать ${totalErrors} файл(ов).${errPath ? ` Пример: ${errPath} — ${msg}` : ` ${msg}`}`);
         }
 
         clearResultFileSelection();
@@ -228,6 +264,7 @@ async function archiveSelectedFiles() {
         fileOperationLoading.value = false;
         archiveInProgress.value = false;
         archiveTotal.value = 0;
+        archiveCompleted.value = 0;
     }
 }
 
