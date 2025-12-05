@@ -215,13 +215,13 @@ onMounted(() => {
     container.addEventListener('scroll', handleScroll, { passive: true });
     checkScroll();
     // Start polling folder status
-    try { if (folderPollTimer) clearInterval(folderPollTimer); } catch (_) {}
+    try { if (folderPollTimer) clearInterval(folderPollTimer); } catch (_) { }
     folderPollTimer = setInterval(pollPendingFolderStatus, 30000);
 });
 onUnmounted(() => {
     try { const container = scrollContainer.value || window; container.removeEventListener('scroll', handleScroll); } catch (_) { }
     if (scrollTimeout) clearTimeout(scrollTimeout);
-    if (folderPollTimer) { try { clearInterval(folderPollTimer); } catch (_) {} folderPollTimer = null; }
+    if (folderPollTimer) { try { clearInterval(folderPollTimer); } catch (_) { } folderPollTimer = null; }
 });
 
 // Filters reactive watchers
@@ -563,9 +563,17 @@ function submitDelete() {
 
 // Create
 const showCreate = ref(false);
-function openCreate() { showCreate.value = true; }
-function closeCreate() { showCreate.value = false; }
+const createBasedOnTask = ref(null); // Task to create based on
+function openCreate() { createBasedOnTask.value = null; showCreate.value = true; }
+function closeCreate() { showCreate.value = false; createBasedOnTask.value = null; }
 function onCreated() { fetchPage(true); }
+
+// Create based on existing task
+function openCreateBasedOn(sourceTask) {
+    createBasedOnTask.value = sourceTask;
+    showCreate.value = true;
+    toast.info('Заполните тип задачи и при необходимости измените другие поля');
+}
 
 // Edit / Rename
 const showEdit = ref(false);
@@ -757,7 +765,8 @@ function lightboxNext() {
                                     <select class="form-select form-select-sm w-auto"
                                         @change="(e) => bulkUpdateStatus(e.target.value)">
                                         <option value="" selected disabled>Выбрать…</option>
-                                        <option v-for="s in userStatusOptions" :key="s.value" :value="s.value" :style="{ color: getStatusColor(s.value) }">{{ s.label }}</option>
+                                        <option v-for="s in userStatusOptions" :key="s.value" :value="s.value"
+                                            :style="{ color: getStatusColor(s.value) }">{{ s.label }}</option>
                                     </select>
                                 </div>
                                 <div class="d-flex align-items-center gap-1" v-if="!isPerformer">
@@ -766,13 +775,12 @@ function lightboxNext() {
                                         @change="(e) => bulkUpdatePriority(e.target.value)">
                                         <option value="" selected disabled>Выбрать…</option>
                                         <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{ p.label
-                                            }}
+                                        }}
                                         </option>
                                     </select>
                                 </div>
                                 <div class="ms-auto d-flex align-items-center gap-2">
-                                    <button v-if="isAdmin" class="btn btn-sm btn-outline-danger"
-                                        @click="onBulkDelete">
+                                    <button v-if="isAdmin" class="btn btn-sm btn-outline-danger" @click="onBulkDelete">
                                         <i class="ti ti-trash me-1"></i> Удалить
                                     </button>
                                     <button class="btn btn-sm btn-outline-secondary me-2" @click="clearSelection">
@@ -791,7 +799,7 @@ function lightboxNext() {
                     @open-source-comments="openSourceCommentsOffcanvas" @open-source-files="openSourceFilesOffcanvas"
                     @open-comments="openCommentsOffcanvas" @open-files="openFilesOffcanvas"
                     @copy-link="copyTaskPublicLink" @open-link="openTaskPublicLink" @edit-task="onEditTask"
-                    @delete-task="onDeleteTask" />
+                    @delete-task="onDeleteTask" @create-based-on="openCreateBasedOn" />
             </div>
         </div>
 
@@ -804,7 +812,7 @@ function lightboxNext() {
             @submit="submitBulkAssign" />
         <DeleteTaskModal :show="showDelete" :deleting="deleting" @cancel="cancelDelete" @confirm="submitDelete" />
         <CreateTaskModal :show="showCreate" :brands="brands" :taskTypes="taskTypes" :performers="performers"
-            @close="closeCreate" @created="onCreated" />
+            :basedOnTask="createBasedOnTask" @close="closeCreate" @created="onCreated" />
         <EditTaskModal :show="showEdit" :editingTask="editingTask" :brands="brands" :taskTypes="taskTypes"
             :performers="performers" @close="() => { showEdit = false; editingTask = null; }" @updated="onUpdated" />
         <RenameTaskModal :show="showRename" :renaming="renaming" :renameName="renameName" @cancel="cancelRename"
@@ -815,8 +823,8 @@ function lightboxNext() {
 
         <!-- Offcanvas -->
         <TaskOffcanvas :show="showTaskOffcanvas" :task="offcanvasTask" :brands="brands" :activeTab="activeOcTab"
-            :currentUser="currentUser" :commentPrefill="commentPrefill" @close="closeTaskOffcanvas" @update-tab="(t) => activeOcTab = t"
-            @open-lightbox="openLightbox" />
+            :currentUser="currentUser" :commentPrefill="commentPrefill" @close="closeTaskOffcanvas"
+            @update-tab="(t) => activeOcTab = t" @open-lightbox="openLightbox" />
         <SourceOffcanvas :show="showSourceOffcanvas" :task="sourceTask" :brands="brands" :currentUser="currentUser"
             :initialTab="sourceInitialTab" @close="closeSourceOffcanvas" @open-lightbox="openLightbox"
             @source-files-updated="handleSourceFilesUpdated" />

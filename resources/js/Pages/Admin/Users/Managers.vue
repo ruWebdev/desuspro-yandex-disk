@@ -66,6 +66,7 @@ const createForm = useForm({
     first_name: '',
     middle_name: '',
     is_blocked: false,
+    can_edit_result: false,
 })
 
 const editForm = useForm({
@@ -76,6 +77,7 @@ const editForm = useForm({
     first_name: '',
     middle_name: '',
     is_blocked: false,
+    can_edit_result: false,
 })
 
 // Validation: all fields must be filled
@@ -107,6 +109,7 @@ function openEdit(user) {
     editForm.first_name = user.first_name
     editForm.middle_name = user.middle_name
     editForm.is_blocked = !!user.is_blocked
+    editForm.can_edit_result = !!user.can_edit_result
     editModalInstance.show()
 }
 
@@ -145,6 +148,7 @@ function submitEdit() {
         first_name: editForm.first_name,
         middle_name: editForm.middle_name,
         is_blocked: editForm.is_blocked,
+        can_edit_result: editForm.can_edit_result,
     }
     const pwd = (editForm.password || '').trim()
     if (pwd.length > 0) payload.password = pwd
@@ -194,6 +198,7 @@ function submitDelete() {
                             <th>ФИО</th>
                             <th>E-mail</th>
                             <th>Заблокирован</th>
+                            <th>Править Результат</th>
                             <th class="w-1"></th>
                         </tr>
                     </thead>
@@ -209,6 +214,12 @@ function submitDelete() {
                                         'Нет'
                                 }}</span>
                             </td>
+                            <td>
+                                <span
+                                    :class="['badge', 'text-light', u.can_edit_result ? 'bg-green' : 'bg-secondary']">{{
+                                        u.can_edit_result ? 'Да' : 'Нет'
+                                    }}</span>
+                            </td>
                             <td class="text-end">
                                 <div class="btn-list flex-nowrap">
                                     <button class="btn btn-sm" @click="openEdit(u)"><i class="ti ti-edit"></i>
@@ -220,7 +231,7 @@ function submitDelete() {
                             </td>
                         </tr>
                         <tr v-if="props.users.length === 0">
-                            <td colspan="4" class="text-center text-secondary py-5">Нет данных</td>
+                            <td colspan="5" class="text-center text-secondary py-5">Нет данных</td>
                         </tr>
                     </tbody>
                 </table>
@@ -263,16 +274,23 @@ function submitDelete() {
                                     @click="generatePassword('create')">Сгенерировать</button>
                             </div>
                         </div>
-                        <div class="col-md-12">
+                        <div class="col-md-6">
                             <label class="form-check">
                                 <input class="form-check-input" type="checkbox" v-model="createForm.is_blocked" />
                                 <span class="form-check-label">Заблокирован</span>
                             </label>
                         </div>
+                        <div class="col-md-6">
+                            <label class="form-check">
+                                <input class="form-check-input" type="checkbox" v-model="createForm.can_edit_result" />
+                                <span class="form-check-label">Править Результат</span>
+                            </label>
+                            <small class="text-muted d-block">Разрешает заменять и архивировать файлы результата</small>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn me-auto" @click="showCreate = false">Отмена</button>
+                    <button class="btn me-auto" data-bs-dismiss="modal">Отмена</button>
                     <button class="btn btn-primary" @click="submitCreate"
                         :disabled="createForm.processing || createInvalid">
                         Создать
@@ -316,11 +334,18 @@ function submitDelete() {
                                 <button class="btn btn-outline" @click="generatePassword('edit')">Сгенерировать</button>
                             </div>
                         </div>
-                        <div class="col-md-12">
+                        <div class="col-md-6">
                             <label class="form-check">
                                 <input class="form-check-input" type="checkbox" v-model="editForm.is_blocked" />
                                 <span class="form-check-label">Заблокирован</span>
                             </label>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-check">
+                                <input class="form-check-input" type="checkbox" v-model="editForm.can_edit_result" />
+                                <span class="form-check-label">Править Результат</span>
+                            </label>
+                            <small class="text-muted d-block">Разрешает заменять и архивировать файлы результата</small>
                         </div>
                     </div>
                 </div>
@@ -369,3 +394,14 @@ function submitDelete() {
     </div>
 
 </template>
+
+<style scoped>
+/* Fix z-index issue with modals - ensure modal content is above backdrop */
+:deep(.modal) {
+    z-index: 1055 !important;
+}
+
+:deep(.modal-backdrop) {
+    z-index: 1050 !important;
+}
+</style>

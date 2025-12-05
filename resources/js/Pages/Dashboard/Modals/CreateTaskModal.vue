@@ -7,7 +7,8 @@ const props = defineProps({
     show: { type: Boolean, default: false },
     brands: { type: Array, required: true },
     taskTypes: { type: Array, required: true },
-    performers: { type: Array, required: true }
+    performers: { type: Array, required: true },
+    basedOnTask: { type: Object, default: null } // Task to create based on
 });
 
 const toast = useToast();
@@ -297,21 +298,74 @@ watch(() => createForm.value.brand_id, (newVal) => {
 });
 
 // Reset all form data on each modal open
-watch(() => props.show, (val) => {
+watch(() => props.show, async (val) => {
     if (val) {
-        createForm.value = {
-            name: '',
-            brand_id: '',
-            task_type_id: '',
-            article_ids: [],
-            assignee_id: '',
-            priority: 'medium',
-            source_files: [''],
-            source_comment: ''
-        };
-        brandArticles.value = [];
+        // Check if creating based on existing task
+        if (props.basedOnTask) {
+            const sourceTask = props.basedOnTask;
+
+            // Build source files array
+            const sourceFiles = [];
+            // 1. Add result folder URL (public_link) as first source
+            if (sourceTask.public_link) {
+                sourceFiles.push(sourceTask.public_link);
+            }
+            // 2. Add original source files
+            if (Array.isArray(sourceTask.source_files) && sourceTask.source_files.length > 0) {
+                sourceTask.source_files.forEach(f => {
+                    if (f && f.trim()) {
+                        sourceFiles.push(f.trim());
+                    }
+                });
+            }
+            // Ensure at least one empty field
+            if (sourceFiles.length === 0) {
+                sourceFiles.push('');
+            }
+
+            createForm.value = {
+                name: '',
+                brand_id: sourceTask.brand_id ? String(sourceTask.brand_id) : '',
+                task_type_id: '', // User should select new task type
+                article_ids: sourceTask.article_id ? [sourceTask.article_id] : [],
+                assignee_id: '',
+                priority: 'medium',
+                source_files: sourceFiles,
+                source_comment: `Создано на основании задачи #${sourceTask.id}`
+            };
+
+            // Load articles for the brand
+            if (sourceTask.brand_id) {
+                await loadArticlesForBrand(sourceTask.brand_id);
+
+                // Set selected article
+                if (sourceTask.article_id) {
+                    const article = brandArticles.value.find(a => a.id == sourceTask.article_id);
+                    if (article) {
+                        selectedArticles.value = [article];
+                    } else if (sourceTask.article?.name) {
+                        // Add the article to the list if not found
+                        const newArticle = { id: sourceTask.article_id, name: sourceTask.article.name };
+                        brandArticles.value.unshift(newArticle);
+                        selectedArticles.value = [newArticle];
+                    }
+                }
+            }
+        } else {
+            createForm.value = {
+                name: '',
+                brand_id: '',
+                task_type_id: '',
+                article_ids: [],
+                assignee_id: '',
+                priority: 'medium',
+                source_files: [''],
+                source_comment: ''
+            };
+            brandArticles.value = [];
+            selectedArticles.value = [];
+        }
         articleSearch.value = '';
-        selectedArticles.value = [];
         showArticleDropdown.value = false;
         xlsMode.value = false;
         xlsRows.value = [];

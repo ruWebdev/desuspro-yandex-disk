@@ -36,6 +36,7 @@ class User extends Authenticatable
         'first_name',
         'middle_name',
         'is_blocked',
+        'can_edit_result',
     ];
 
     /**
@@ -59,6 +60,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_blocked' => 'boolean',
+            'can_edit_result' => 'boolean',
         ];
     }
 

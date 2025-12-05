@@ -30,6 +30,199 @@ const isManager = computed(() => {
     );
 });
 
+const canEditResult = computed(() => props.currentUser?.can_edit_result === true);
+const isTaskAccepted = computed(() => props.task?.status === 'accepted');
+
+// File operations state for managers
+const replaceFileInput = ref(null);
+const addFileInput = ref(null);
+const replacingFile = ref(null);
+const fileOperationLoading = ref(false);
+const selectedResultFiles = ref([]);
+
+function toggleResultFileSelection(item) {
+    if (item.type !== 'file') return;
+    const name = item.name;
+    const idx = selectedResultFiles.value.findIndex(f => f.name === name);
+    if (idx >= 0) {
+        selectedResultFiles.value.splice(idx, 1);
+    } else {
+        selectedResultFiles.value.push(item);
+    }
+}
+
+function isResultFileSelected(item) {
+    if (item.type !== 'file') return false;
+    return selectedResultFiles.value.some(f => f.name === item.name);
+}
+
+function clearResultFileSelection() {
+    selectedResultFiles.value = [];
+}
+
+function openReplaceFilePicker(item) {
+    if (!canEditResult.value || isTaskAccepted.value) return;
+    replacingFile.value = item;
+    replaceFileInput.value?.click();
+}
+
+async function onReplaceFileSelected(event) {
+    const files = event.target.files;
+    if (!files || !files.length || !replacingFile.value) return;
+
+    const file = files[0];
+    const folder = yandexFolderPath();
+    if (!folder) return;
+
+    const targetPath = replacingFile.value.path || `${folder}/${replacingFile.value.name}`;
+    const expectedName = replacingFile.value.name;
+
+    if (file.name !== expectedName) {
+        if (!confirm(`Имя файла не совпадает!\n\nОжидается: ${expectedName}\nВыбрано: ${file.name}\n\nПродолжить замену?`)) {
+            replaceFileInput.value.value = null;
+            replacingFile.value = null;
+            return;
+        }
+    }
+
+    if (!confirm(`Будет заменён файл: ${expectedName}\n\nВы уверены?`)) {
+        replaceFileInput.value.value = null;
+        replacingFile.value = null;
+        return;
+    }
+
+    fileOperationLoading.value = true;
+
+    try {
+        const fd = new FormData();
+        fd.append('path', targetPath);
+        fd.append('file', file, expectedName);
+
+        const res = await fetch(route('integrations.yandex.replace_file'), {
+            method: 'POST',
+            headers: { 'X-XSRF-TOKEN': getXsrfToken() },
+            credentials: 'same-origin',
+            body: fd,
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.message || `HTTP ${res.status}`);
+        }
+
+        toast.success('Файл успешно заменён');
+        await loadYandexFiles();
+    } catch (e) {
+        console.error('Replace file error:', e);
+        toast.error(e.message || 'Ошибка замены файла');
+    } finally {
+        fileOperationLoading.value = false;
+        replaceFileInput.value.value = null;
+        replacingFile.value = null;
+    }
+}
+
+function openAddFilePicker() {
+    if (!canEditResult.value || isTaskAccepted.value) return;
+    addFileInput.value?.click();
+}
+
+async function onAddFileSelected(event) {
+    const files = event.target.files;
+    if (!files || !files.length) return;
+
+    const folder = yandexFolderPath();
+    if (!folder) {
+        toast.error('Не удалось определить путь к папке');
+        return;
+    }
+
+    fileOperationLoading.value = true;
+
+    try {
+        for (const file of files) {
+            const fd = new FormData();
+            fd.append('path', `${folder}/${file.name}`);
+            fd.append('file', file, file.name);
+
+            const res = await fetch(route('integrations.yandex.upload'), {
+                method: 'POST',
+                headers: { 'X-XSRF-TOKEN': getXsrfToken() },
+                credentials: 'same-origin',
+                body: fd,
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.message || `HTTP ${res.status}`);
+            }
+        }
+
+        toast.success(`Добавлено файлов: ${files.length}`);
+        await loadYandexFiles();
+    } catch (e) {
+        console.error('Add file error:', e);
+        toast.error(e.message || 'Ошибка добавления файла');
+    } finally {
+        fileOperationLoading.value = false;
+        addFileInput.value.value = null;
+    }
+}
+
+async function archiveSelectedFiles() {
+    if (!canEditResult.value || isTaskAccepted.value) return;
+    if (selectedResultFiles.value.length === 0) {
+        toast.error('Выберите файлы для архивирования');
+        return;
+    }
+
+    const folder = yandexFolderPath();
+    if (!folder) return;
+
+    const fileNames = selectedResultFiles.value.map(f => f.name).join('\n');
+    if (!confirm(`Следующие файлы будут перемещены в папку "old":\n\n${fileNames}\n\nПродолжить?`)) {
+        return;
+    }
+
+    fileOperationLoading.value = true;
+
+    try {
+        const paths = selectedResultFiles.value.map(f => f.path || `${folder}/${f.name}`);
+
+        const res = await fetch(route('integrations.yandex.archive_files'), {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-XSRF-TOKEN': getXsrfToken(),
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ paths }),
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.message || `HTTP ${res.status}`);
+        }
+
+        const result = await res.json();
+        if (result.archived?.length > 0) {
+            toast.success(`Архивировано файлов: ${result.archived.length}`);
+        }
+        if (result.errors?.length > 0) {
+            toast.error(`Ошибки: ${result.errors.length}`);
+        }
+
+        clearResultFileSelection();
+        await loadYandexFiles();
+    } catch (e) {
+        console.error('Archive files error:', e);
+        toast.error(e.message || 'Ошибка архивирования файлов');
+    } finally {
+        fileOperationLoading.value = false;
+    }
+}
+
 // React to parent-controlled visibility
 watch(() => props.show, async (val) => {
     await nextTick();
@@ -470,8 +663,8 @@ async function removeYandexAndLocal(reqPath, name) {
                 toast.warning('Файл удален с Яндекс.Диска, но не удалось удалить локальную копию.');
             }
         } catch (e) {
-             console.warn('Failed to delete local thumbnail', e);
-             toast.warning('Файл удален с Яндекс.Диска, но произошла ошибка при удалении локальной копии.');
+            console.warn('Failed to delete local thumbnail', e);
+            toast.warning('Файл удален с Яндекс.Диска, но произошла ошибка при удалении локальной копии.');
         }
     }
 }
@@ -707,11 +900,20 @@ function getObjectURL(file) {
             aria-hidden="true" :aria-labelledby="'task-offcanvas-title'" :class="{ show: show && !hasOffcanvas }"
             :style="show && !hasOffcanvas ? 'visibility: visible; z-index: 1045;' : ''">
             <div class="offcanvas-header">
+                <button type="button" class="btn btn-icon btn-outline-secondary btn-lg px-3 py-2 me-3"
+                    aria-label="Закрыть" @click="closeOffcanvas" title="Закрыть">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="icon icon-tabler icons-tabler-outline icon-tabler-x">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                        <path d="M18 6l-12 12" />
+                        <path d="M6 6l12 12" />
+                    </svg>
+                </button>
                 <h5 class="offcanvas-title" :id="'task-offcanvas-title'">
                     {{task?.brand?.name || (brands?.find(b => b.id === task?.brand_id)?.name) || ''}} / {{ task?.name ||
                         task?.article?.name || '' }}
                 </h5>
-                <button type="button" class="btn-close text-reset" aria-label="Close" @click="closeOffcanvas"></button>
             </div>
             <div class="offcanvas-body">
                 <div class="mb-3">
@@ -742,9 +944,31 @@ function getObjectURL(file) {
                         </div>
                     </div>
                     <div v-if="isPerformer && anyFilesSelected" class="mb-2">
-                        <button class="btn btn-sm btn-danger" :disabled="props.task?.status === 'accepted'" @click="bulkDeleteSelected">
+                        <button class="btn btn-sm btn-danger" :disabled="props.task?.status === 'accepted'"
+                            @click="bulkDeleteSelected">
                             УДАЛИТЬ ВЫБРАННЫЕ
                         </button>
+                    </div>
+
+                    <!-- Manager file operation buttons -->
+                    <div v-if="canEditResult && !isTaskAccepted" class="mb-3 d-flex flex-wrap gap-2 align-items-center">
+                        <input type="file" ref="replaceFileInput" class="d-none" @change="onReplaceFileSelected" />
+                        <input type="file" ref="addFileInput" multiple class="d-none" @change="onAddFileSelected" />
+                        <button class="btn btn-sm btn-outline-primary" :disabled="fileOperationLoading"
+                            @click="openAddFilePicker">
+                            <i class="ti ti-plus me-1"></i>Добавить
+                        </button>
+                        <button class="btn btn-sm btn-outline-warning"
+                            :disabled="fileOperationLoading || selectedResultFiles.length === 0"
+                            @click="archiveSelectedFiles">
+                            <i class="ti ti-archive me-1"></i>В Архив ({{ selectedResultFiles.length }})
+                        </button>
+                        <span v-if="fileOperationLoading" class="spinner-border spinner-border-sm text-primary"></span>
+                    </div>
+                    <div v-if="canEditResult && isTaskAccepted" class="mb-3">
+                        <div class="alert alert-info py-2 mb-0">
+                            <i class="ti ti-info-circle me-1"></i>Редактирование файлов недоступно для принятых задач
+                        </div>
                     </div>
 
                     <div v-if="filesLoading" class="text-secondary">Загрузка списка файлов…</div>
@@ -756,10 +980,15 @@ function getObjectURL(file) {
                                 <li v-for="it in yandexItems" :key="it.resource_id || it.path || it.name"
                                     class="list-group-item d-flex justify-content-between align-items-center">
                                     <div class="d-flex align-items-center gap-2">
-                                        <input v-if="isPerformer && it.type === 'file'" type="checkbox" class="form-check-input"
-                                            :checked="isFileSelected(it.name)"
+                                        <!-- Performer checkbox -->
+                                        <input v-if="isPerformer && it.type === 'file'" type="checkbox"
+                                            class="form-check-input" :checked="isFileSelected(it.name)"
                                             :disabled="props.task?.status === 'accepted'"
                                             @change="(e) => toggleFileSelection(it.name, e.target.checked)" />
+                                        <!-- Manager checkbox for archive -->
+                                        <input v-if="canEditResult && !isTaskAccepted && it.type === 'file'"
+                                            type="checkbox" class="form-check-input" :checked="isResultFileSelected(it)"
+                                            @change="() => toggleResultFileSelection(it)" />
                                         <span class="badge"
                                             :class="it.type === 'dir' ? 'bg-secondary' : 'bg-primary'">{{ it.type ===
                                                 'dir' ? 'Папка' : 'Файл' }}</span>
@@ -768,8 +997,13 @@ function getObjectURL(file) {
                                             (it.size / 1024 / 1024).toFixed(2) }} MB</span>
                                     </div>
                                     <div class="d-flex gap-2">
-                                        <button v-if="it.type === 'file' && isThumbEligibleName(it.name)" class="btn btn-sm btn-outline-primary"
+                                        <button v-if="it.type === 'file' && isThumbEligibleName(it.name)"
+                                            class="btn btn-sm btn-outline-primary"
                                             @click="() => viewYandexItemInLightbox(it)">ПОСМОТРЕТЬ</button>
+                                        <!-- Manager Replace button -->
+                                        <button v-if="it.type === 'file' && canEditResult && !isTaskAccepted"
+                                            class="btn btn-sm btn-outline-secondary" :disabled="fileOperationLoading"
+                                            @click="() => openReplaceFilePicker(it)">ЗАМЕНИТЬ</button>
                                         <button v-if="it.type === 'file' && isPerformer"
                                             class="btn btn-sm btn-outline-danger"
                                             :disabled="props.task?.status === 'accepted'"
@@ -781,8 +1015,7 @@ function getObjectURL(file) {
                     </div>
 
                     <div v-if="!isManager" class="mt-3 d-flex align-items-center gap-2">
-                        <input type="file" multiple ref="fileInputRef" class="d-none"
-                            @change="onFilesChosen" />
+                        <input type="file" multiple ref="fileInputRef" class="d-none" @change="onFilesChosen" />
                         <button class="btn btn-primary" :disabled="uploading || props.task?.status === 'accepted'"
                             @click="openUploader">
                             <span v-if="!uploading">Загрузить файлы</span>
@@ -793,7 +1026,7 @@ function getObjectURL(file) {
                     <div v-if="uploading" class="mt-3">
                         <div class="d-flex justify-content-between align-items-center mb-1">
                             <div class="small text-secondary">{{ uploadStatus }} <span v-if="uploadFileName">— {{
-                                    uploadFileName }}</span></div>
+                                uploadFileName }}</span></div>
                             <div class="small">{{ uploadProgress }}%</div>
                         </div>
                         <div class="progress" style="height: 8px;">

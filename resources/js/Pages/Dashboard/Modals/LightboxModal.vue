@@ -55,6 +55,12 @@ if (typeof window !== 'undefined') {
             @click.self="emit('close')">
             <div class="modal-dialog modal-xl" role="document">
                 <div class="modal-content bg-dark position-relative">
+                    <div class="modal-header border-0 pb-0">
+                        <button type="button" class="btn btn-light btn-lg px-3 py-2" aria-label="Закрыть"
+                            @click="emit('close')" title="Закрыть">
+                            <i class="ti ti-x fs-3"></i>
+                        </button>
+                    </div>
                     <div class="modal-body p-0 d-flex justify-content-center align-items-center position-relative"
                         style="min-height: 60vh;">
                         <img v-if="lightboxSrc" :src="lightboxSrc" alt="preview"
@@ -76,11 +82,9 @@ if (typeof window !== 'undefined') {
                             <div class="text-white-50 small" v-if="items && items.length">{{ index + 1 }} / {{
                                 items.length }}</div>
                         </div>
-                        <div class="text-black-50 text-truncate mx-2" v-if="hasDisplayName"
-                            :title="displayName">
+                        <div class="text-black-50 text-truncate mx-2" v-if="hasDisplayName" :title="displayName">
                             {{ displayName }}
                         </div>
-                        <button type="button" class="btn btn-light ms-auto" @click="emit('close')">Закрыть</button>
                     </div>
                 </div>
             </div>

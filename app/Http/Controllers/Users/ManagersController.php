@@ -30,7 +30,7 @@ class ManagersController extends Controller
             });
         }
 
-        $users = $query->get(['id', 'name', 'email', 'last_name', 'first_name', 'middle_name', 'is_blocked', 'created_at']);
+        $users = $query->get(['id', 'name', 'email', 'last_name', 'first_name', 'middle_name', 'is_blocked', 'can_edit_result', 'created_at']);
 
         return Inertia::render('Admin/Users/Managers', [
             'users' => $users,
@@ -50,6 +50,7 @@ class ManagersController extends Controller
             'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
             'is_blocked' => 'sometimes|boolean',
+            'can_edit_result' => 'sometimes|boolean',
         ]);
 
         $user = User::create([
@@ -60,6 +61,7 @@ class ManagersController extends Controller
             'first_name' => $data['first_name'] ?? null,
             'middle_name' => $data['middle_name'] ?? null,
             'is_blocked' => (bool)($data['is_blocked'] ?? false),
+            'can_edit_result' => (bool)($data['can_edit_result'] ?? false),
         ]);
 
         if (method_exists($user, 'assignRole')) {
@@ -84,6 +86,7 @@ class ManagersController extends Controller
             'first_name' => 'required|string|max:255',
             'middle_name' => 'nullable|string|max:255',
             'is_blocked' => 'sometimes|boolean',
+            'can_edit_result' => 'sometimes|boolean',
         ]);
 
         $user->fill([
@@ -93,6 +96,7 @@ class ManagersController extends Controller
             'first_name' => $data['first_name'] ?? null,
             'middle_name' => $data['middle_name'] ?? null,
             'is_blocked' => (bool)($data['is_blocked'] ?? $user->is_blocked),
+            'can_edit_result' => (bool)($data['can_edit_result'] ?? $user->can_edit_result),
         ]);
 
         if (!empty($data['password'])) {

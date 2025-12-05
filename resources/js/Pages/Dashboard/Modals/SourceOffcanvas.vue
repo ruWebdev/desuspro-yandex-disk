@@ -470,11 +470,19 @@ function getObjectURL(file) {
             :class="{ show: show && !hasSourceOffcanvas }"
             :style="show && !hasSourceOffcanvas ? 'visibility: visible; z-index: 1045;' : ''">
             <div class="offcanvas-header">
+                <button type="button" class="btn btn-icon btn-outline-secondary btn-lg px-3 py-2 me-3"
+                    aria-label="Закрыть" @click="closeSourceOffcanvas" title="Закрыть">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="icon icon-tabler icons-tabler-outline icon-tabler-x">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                        <path d="M18 6l-12 12" />
+                        <path d="M6 6l12 12" />
+                    </svg>
+                </button>
                 <h5 class="offcanvas-title" :id="'task-source-offcanvas-title'">
                     {{task?.brand?.name || (brands?.find(b => b.id === task?.brand_id)?.name) || ''}} / Исходник
                 </h5>
-                <button type="button" class="btn-close text-reset" aria-label="Close"
-                    @click="closeSourceOffcanvas"></button>
             </div>
             <div class="offcanvas-body">
                 <div class="mb-3">
@@ -525,11 +533,14 @@ function getObjectURL(file) {
                                     @click="openCommentFileDialog">
                                     Вложение
                                 </button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm ms-1" @click="addImagesFromClipboard">
+                                <button type="button" class="btn btn-outline-secondary btn-sm ms-1"
+                                    @click="addImagesFromClipboard">
                                     Из буфера обмена
                                 </button>
-                                <div v-if="selectedCommentImages && selectedCommentImages.length" class="mt-2 d-flex flex-wrap gap-2">
-                                    <div v-for="(f, idx) in selectedCommentImages" :key="idx" class="border rounded p-1">
+                                <div v-if="selectedCommentImages && selectedCommentImages.length"
+                                    class="mt-2 d-flex flex-wrap gap-2">
+                                    <div v-for="(f, idx) in selectedCommentImages" :key="idx"
+                                        class="border rounded p-1">
                                         <img :src="getObjectURL(f)" style="height: 60px; width: auto;" />
                                     </div>
                                 </div>

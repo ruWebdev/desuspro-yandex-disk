@@ -29,7 +29,8 @@ const emit = defineEmits([
     'copy-link',
     'open-link',
     'edit-task',
-    'delete-task'
+    'delete-task',
+    'create-based-on'
 ]);
 
 // Computed
@@ -137,11 +138,40 @@ function priorityLabel(priority) {
 
 function priorityClass(priority) {
     switch (priority) {
-        case 'low': return 'bg-secondary';
-        case 'medium': return 'bg-info';
-        case 'high': return 'bg-danger';
-        default: return 'bg-info';
+        case 'low': return 'bg-info'; // голубой
+        case 'medium': return 'bg-success'; // зеленый
+        case 'high': return 'bg-danger'; // красный
+        default: return 'bg-success';
     }
+}
+
+// Get select background style for status
+function getStatusSelectStyle(status) {
+    const colors = {
+        'created': { bg: '#6c757d', color: '#fff' },
+        'assigned': { bg: '#0d6efd', color: '#fff' },
+        'in_progress': { bg: '#0dcaf0', color: '#000' },
+        'on_review': { bg: '#ffc107', color: '#000' },
+        'rework': { bg: '#dc3545', color: '#fff' },
+        'accepted': { bg: '#198754', color: '#fff' },
+        'question': { bg: '#6f42c1', color: '#fff' },
+        'cancelled': { bg: '#212529', color: '#fff' },
+        'done': { bg: '#198754', color: '#fff' },
+    };
+    const c = colors[status] || colors['created'];
+    return { backgroundColor: c.bg, color: c.color, borderColor: c.bg };
+}
+
+// Get select background style for priority
+function getPrioritySelectStyle(priority) {
+    const colors = {
+        'low': { bg: '#0dcaf0', color: '#000' },
+        'medium': { bg: '#198754', color: '#fff' },
+        'high': { bg: '#dc3545', color: '#fff' },
+        'urgent': { bg: '#dc3545', color: '#fff' },
+    };
+    const c = colors[priority] || colors['medium'];
+    return { backgroundColor: c.bg, color: c.color, borderColor: c.bg };
 }
 
 function isSelected(id) {
@@ -444,8 +474,8 @@ function updateBodyScrollClass() {
                         </td>
                         <td style="vertical-align: middle;">
                             <div class="d-flex align-items-center gap-2">
-                                <select class="form-select form-select-sm w-auto" :value="t.status"
-                                    :style="{ color: getStatusColor(t.status) }"
+                                <select class="form-select form-select-sm w-auto fw-bold" :value="t.status"
+                                    :style="getStatusSelectStyle(t.status)"
                                     :disabled="isPerformer && t.status === 'accepted'" @change="(e) => {
                                         if (isAllowedStatusValue(e.target.value)) {
                                             emit('update-status', t, e.target.value);
@@ -455,7 +485,7 @@ function updateBodyScrollClass() {
                                     }">
                                     <option v-for="s in statusOptions" :key="s.value" :value="s.value"
                                         :disabled="!isAllowedStatusValue(s.value)"
-                                        :style="{ color: getStatusColor(s.value) }">
+                                        style="background-color: #fff; color: #000;">
                                         {{ s.label }}
                                     </option>
                                 </select>
@@ -463,10 +493,12 @@ function updateBodyScrollClass() {
                         </td>
                         <td style="vertical-align: middle;">
                             <div class="d-flex align-items-center gap-2">
-                                <select v-if="!isPerformer" class="form-select form-select-sm w-auto"
+                                <select v-if="!isPerformer" class="form-select form-select-sm w-auto fw-bold"
                                     :value="t.priority || 'medium'"
+                                    :style="getPrioritySelectStyle(t.priority || 'medium')"
                                     @change="(e) => emit('update-priority', t, e.target.value)">
-                                    <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{ p.label }}
+                                    <option v-for="p in priorityOptions" :key="p.value" :value="p.value"
+                                        style="background-color: #fff; color: #000;">{{ p.label }}
                                     </option>
                                 </select>
                                 <span v-else class="badge text-light" :class="priorityClass(t.priority || 'medium')">
@@ -476,8 +508,24 @@ function updateBodyScrollClass() {
                         </td>
                         <td v-if="!isPerformer" style="vertical-align: middle;">
                             <div class="d-flex gap-1 justify-content-end">
+                                <button class="btn btn-icon btn-ghost-success" @click="emit('create-based-on', t)"
+                                    type="button" title="Создать на основании">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        class="icon icon-tabler icons-tabler-outline icon-tabler-copy-plus">
+                                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                        <path
+                                            d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
+                                        <path
+                                            d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
+                                        <path d="M11 14h6" />
+                                        <path d="M14 11v6" />
+                                    </svg>
+                                </button>
                                 <button class="btn btn-icon btn-ghost-primary" @click="emit('edit-task', t)"
-                                    type="button">
+                                    type="button" title="Редактировать">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
                                         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                         stroke-linejoin="round"
@@ -490,7 +538,7 @@ function updateBodyScrollClass() {
                                     </svg>
                                 </button>
                                 <button v-if="!isManager && !isPerformer" class="btn btn-icon btn-ghost-danger"
-                                    @click="emit('delete-task', t)" type="button">
+                                    @click="emit('delete-task', t)" type="button" title="Удалить">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
                                         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                         stroke-linejoin="round"

@@ -447,11 +447,40 @@ function priorityLabel(priority) {
 
 function priorityClass(priority) {
     switch (priority) {
-        case 'low': return 'bg-secondary';
-        case 'medium': return 'bg-info';
-        case 'high': return 'bg-danger';
-        default: return 'bg-info';
+        case 'low': return 'bg-info'; // голубой
+        case 'medium': return 'bg-success'; // зеленый
+        case 'high': return 'bg-danger'; // красный (Срочный)
+        default: return 'bg-success';
     }
+}
+
+// Get select background style for status
+function getStatusSelectStyle(status) {
+    const colors = {
+        'created': { bg: '#6c757d', color: '#fff' }, // серый
+        'assigned': { bg: '#0d6efd', color: '#fff' }, // синий
+        'in_progress': { bg: '#0dcaf0', color: '#000' }, // голубой
+        'on_review': { bg: '#ffc107', color: '#000' }, // желтый
+        'rework': { bg: '#dc3545', color: '#fff' }, // красный
+        'accepted': { bg: '#198754', color: '#fff' }, // зеленый
+        'question': { bg: '#6f42c1', color: '#fff' }, // фиолетовый
+        'cancelled': { bg: '#212529', color: '#fff' }, // темный
+        'done': { bg: '#198754', color: '#fff' }, // зеленый
+    };
+    const c = colors[status] || colors['created'];
+    return { backgroundColor: c.bg, color: c.color, borderColor: c.bg };
+}
+
+// Get select background style for priority
+function getPrioritySelectStyle(priority) {
+    const colors = {
+        'low': { bg: '#0dcaf0', color: '#000' }, // голубой (Низкий)
+        'medium': { bg: '#198754', color: '#fff' }, // зеленый (Средний)
+        'high': { bg: '#dc3545', color: '#fff' }, // красный (Срочный)
+        'urgent': { bg: '#dc3545', color: '#fff' }, // красный
+    };
+    const c = colors[priority] || colors['medium'];
+    return { backgroundColor: c.bg, color: c.color, borderColor: c.bg };
 }
 
 function updateTaskStatus(task, status) {
@@ -742,6 +771,74 @@ function openCreate() {
     if (modal) {
         modal.show();
     }
+}
+
+// Create task based on another task
+// - Same brand and article
+// - Result folder URL of source task becomes first source file
+// - Source files of source task become second source file
+async function openCreateBasedOn(sourceTask) {
+    // Initialize source files array
+    const sourceFiles = [];
+
+    // 1. Add result folder URL (public_link) as first source
+    if (sourceTask.public_link) {
+        sourceFiles.push(sourceTask.public_link);
+    }
+
+    // 2. Add original source files as second source
+    if (Array.isArray(sourceTask.source_files) && sourceTask.source_files.length > 0) {
+        sourceTask.source_files.forEach(f => {
+            if (f && f.trim()) {
+                sourceFiles.push(f.trim());
+            }
+        });
+    }
+
+    // Ensure at least one empty field if no sources
+    if (sourceFiles.length === 0) {
+        sourceFiles.push('');
+    }
+
+    // Pre-fill the form
+    createForm.value = {
+        name: '',
+        brand_id: String(sourceTask.brand_id || ''),
+        task_type_id: '', // User should select new task type
+        article_id: String(sourceTask.article_id || ''),
+        assignee_id: '',
+        priority: 'medium',
+        source_files: sourceFiles,
+        source_comment: `Создано на основании задачи #${sourceTask.id}`
+    };
+
+    // Load articles for the brand
+    if (sourceTask.brand_id) {
+        await loadArticlesForBrand(sourceTask.brand_id);
+
+        // Set article search text if article exists
+        if (sourceTask.article_id) {
+            const article = brandArticles.value.find(a => a.id == sourceTask.article_id);
+            if (article) {
+                articleSearch.value = article.name;
+            } else if (sourceTask.article?.name) {
+                articleSearch.value = sourceTask.article.name;
+                // Add the article to the list if not found
+                brandArticles.value.unshift({
+                    id: sourceTask.article_id,
+                    name: sourceTask.article.name
+                });
+            }
+        }
+    }
+
+    // Show the modal
+    const modal = getBsModal('createModal');
+    if (modal) {
+        modal.show();
+    }
+
+    toast.info('Заполните тип задачи и при необходимости измените другие поля');
 }
 
 async function submitCreate() {
@@ -1570,6 +1667,204 @@ const inertiaPage = usePage();
 const currentUser = computed(() => inertiaPage.props?.auth?.user || null);
 const currentRoles = computed(() => (currentUser.value?.roles || []).map(r => (typeof r === 'string' ? r : r?.name)).filter(Boolean));
 const isManagerOrAdmin = computed(() => currentRoles.value.some(r => ['Administrator', 'admin', 'Manager', 'manager'].includes(r)));
+const canEditResult = computed(() => currentUser.value?.can_edit_result === true);
+
+// File operations state for Result files
+const selectedResultFiles = ref([]);
+const replaceFileInput = ref(null);
+const addFileInput = ref(null);
+const replacingFile = ref(null); // The file being replaced
+const fileOperationLoading = ref(false);
+const fileOperationError = ref('');
+
+// Get current task from offcanvas context
+const currentTask = computed(() => items.value.find(t => t.id === oc.value.taskId));
+const isTaskAccepted = computed(() => currentTask.value?.status === 'accepted');
+
+// Toggle file selection
+function toggleFileSelection(item) {
+    if (item.type !== 'file') return;
+    const path = item.path || `${yandexFolderPath()}/${item.name}`;
+    const idx = selectedResultFiles.value.findIndex(f => f.path === path);
+    if (idx >= 0) {
+        selectedResultFiles.value.splice(idx, 1);
+    } else {
+        selectedResultFiles.value.push({ ...item, path });
+    }
+}
+
+function isFileSelected(item) {
+    if (item.type !== 'file') return false;
+    const path = item.path || `${yandexFolderPath()}/${item.name}`;
+    return selectedResultFiles.value.some(f => f.path === path);
+}
+
+function clearFileSelection() {
+    selectedResultFiles.value = [];
+}
+
+// Replace file - opens file picker for a specific file
+function openReplaceFilePicker(item) {
+    if (!canEditResult.value || isTaskAccepted.value) return;
+    replacingFile.value = item;
+    replaceFileInput.value?.click();
+}
+
+// Handle replace file selection
+async function onReplaceFileSelected(event) {
+    const files = event.target.files;
+    if (!files || !files.length || !replacingFile.value) return;
+
+    const file = files[0];
+    const targetPath = replacingFile.value.path || `${yandexFolderPath()}/${replacingFile.value.name}`;
+    const expectedName = replacingFile.value.name;
+
+    // Check filename match
+    if (file.name !== expectedName) {
+        if (!confirm(`Имя файла не совпадает!\n\nОжидается: ${expectedName}\nВыбрано: ${file.name}\n\nПродолжить замену?`)) {
+            replaceFileInput.value.value = null;
+            replacingFile.value = null;
+            return;
+        }
+    }
+
+    // Confirm replacement
+    if (!confirm(`Будет заменён файл: ${expectedName}\n\nВы уверены?`)) {
+        replaceFileInput.value.value = null;
+        replacingFile.value = null;
+        return;
+    }
+
+    fileOperationLoading.value = true;
+    fileOperationError.value = '';
+
+    try {
+        const fd = new FormData();
+        fd.append('path', targetPath);
+        fd.append('file', file, expectedName); // Use expected name for the upload
+
+        const res = await fetch(route('integrations.yandex.replace_file'), {
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': getCsrfToken() },
+            body: fd,
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.message || `HTTP ${res.status}`);
+        }
+
+        toast.success('Файл успешно заменён');
+        await loadYandexFiles();
+    } catch (e) {
+        console.error('Replace file error:', e);
+        fileOperationError.value = e.message || 'Ошибка замены файла';
+        toast.error(fileOperationError.value);
+    } finally {
+        fileOperationLoading.value = false;
+        replaceFileInput.value.value = null;
+        replacingFile.value = null;
+    }
+}
+
+// Add new file
+function openAddFilePicker() {
+    if (!canEditResult.value || isTaskAccepted.value) return;
+    addFileInput.value?.click();
+}
+
+async function onAddFileSelected(event) {
+    const files = event.target.files;
+    if (!files || !files.length) return;
+
+    fileOperationLoading.value = true;
+    fileOperationError.value = '';
+
+    try {
+        const folder = yandexFolderPath();
+        if (!folder) throw new Error('Не удалось определить путь к папке');
+
+        for (const file of files) {
+            const fd = new FormData();
+            fd.append('path', `${folder}/${file.name}`);
+            fd.append('file', file, file.name);
+
+            const res = await fetch(route('integrations.yandex.upload'), {
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': getCsrfToken() },
+                body: fd,
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.message || `HTTP ${res.status}`);
+            }
+        }
+
+        toast.success(`Добавлено файлов: ${files.length}`);
+        await loadYandexFiles();
+    } catch (e) {
+        console.error('Add file error:', e);
+        fileOperationError.value = e.message || 'Ошибка добавления файла';
+        toast.error(fileOperationError.value);
+    } finally {
+        fileOperationLoading.value = false;
+        addFileInput.value.value = null;
+    }
+}
+
+// Archive selected files
+async function archiveSelectedFiles() {
+    if (!canEditResult.value || isTaskAccepted.value) return;
+    if (selectedResultFiles.value.length === 0) {
+        toast.error('Выберите файлы для архивирования');
+        return;
+    }
+
+    const fileNames = selectedResultFiles.value.map(f => f.name).join('\n');
+    if (!confirm(`Следующие файлы будут перемещены в папку "old":\n\n${fileNames}\n\nПродолжить?`)) {
+        return;
+    }
+
+    fileOperationLoading.value = true;
+    fileOperationError.value = '';
+
+    try {
+        const paths = selectedResultFiles.value.map(f => f.path);
+
+        const res = await fetch(route('integrations.yandex.archive_files'), {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': getCsrfToken(),
+            },
+            body: JSON.stringify({ paths }),
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.message || `HTTP ${res.status}`);
+        }
+
+        const result = await res.json();
+        if (result.archived?.length > 0) {
+            toast.success(`Архивировано файлов: ${result.archived.length}`);
+        }
+        if (result.errors?.length > 0) {
+            toast.error(`Ошибки: ${result.errors.length}`);
+        }
+
+        clearFileSelection();
+        await loadYandexFiles();
+    } catch (e) {
+        console.error('Archive files error:', e);
+        fileOperationError.value = e.message || 'Ошибка архивирования файлов';
+        toast.error(fileOperationError.value);
+    } finally {
+        fileOperationLoading.value = false;
+    }
+}
 
 function canDeleteSourceComment(c) {
     // Only allow delete if: the comment is the last in the list, authored by current user, and user is manager/admin
@@ -1722,7 +2017,7 @@ const copySourcePublicLink = async (task) => {
                                         @change="(e) => bulkUpdatePriority(e.target.value)">
                                         <option value="" selected disabled>Выбрать…</option>
                                         <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{ p.label
-                                            }}</option>
+                                        }}</option>
                                     </select>
                                 </div>
 
@@ -1778,7 +2073,7 @@ const copySourcePublicLink = async (task) => {
                                 <td style="vertical-align: middle;">{{ t.type?.name || '' }}</td>
                                 <td style="vertical-align: middle;" class="text-end">
                                     <span v-if="t.assignee?.name" class="text-secondary me-2">{{ t.assignee.name
-                                        }}</span>
+                                    }}</span>
                                     <button class="btn btn-sm btn-outline-primary" @click="openAssign(t)">
                                         {{ t.assignee?.name ? 'Изменить' : 'Назначить' }}
                                     </button>
@@ -1886,26 +2181,42 @@ const copySourcePublicLink = async (task) => {
                                 </td>
                                 <td style="vertical-align: middle;">
                                     <div class="d-flex align-items-center gap-2">
-                                        <select class="form-select form-select-sm w-auto" :value="t.status"
+                                        <select class="form-select form-select-sm w-auto fw-bold" :value="t.status"
+                                            :style="getStatusSelectStyle(t.status)"
                                             @change="(e) => updateTaskStatus(t, e.target.value)">
-                                            <option v-for="s in statusOptions" :key="s.value" :value="s.value">
+                                            <option v-for="s in statusOptions" :key="s.value" :value="s.value"
+                                                style="background-color: #fff; color: #000;">
                                                 {{ s.label }}</option>
                                         </select>
                                     </div>
                                 </td>
                                 <td style="vertical-align: middle;">
                                     <div class="d-flex align-items-center gap-2">
-                                        <select class="form-select form-select-sm w-auto"
+                                        <select class="form-select form-select-sm w-auto fw-bold"
                                             :value="t.priority || 'medium'"
+                                            :style="getPrioritySelectStyle(t.priority || 'medium')"
                                             @change="(e) => updateTaskPriority(t, e.target.value)">
-                                            <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{
-                                                p.label }}</option>
+                                            <option v-for="p in priorityOptions" :key="p.value" :value="p.value"
+                                                style="background-color: #fff; color: #000;">{{
+                                                    p.label }}</option>
                                         </select>
                                     </div>
                                 </td>
                                 <td class="text-nowrap">
                                     <div
                                         class="btn-list d-flex flex-nowrap align-items-center justify-content-end gap-2">
+                                        <button class="btn btn-icon btn-ghost-success" @click="openCreateBasedOn(t)"
+                                            title="Создать на основании">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24"
+                                                viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
+                                                stroke-linecap="round" stroke-linejoin="round">
+                                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                                <path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0" />
+                                                <path d="M6 21v-2a4 4 0 0 1 4 -4h3" />
+                                                <path d="M16 19h6" />
+                                                <path d="M19 16v6" />
+                                            </svg>
+                                        </button>
                                         <button class="btn btn-icon btn-ghost-primary" @click="onEditTask(t)"
                                             title="Редактировать">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24"
@@ -2213,11 +2524,13 @@ const copySourcePublicLink = async (task) => {
                 :class="{ show: offcanvasOpen && !hasOffcanvas }"
                 :style="offcanvasOpen && !hasOffcanvas ? 'visibility: visible; z-index: 1045;' : ''">
                 <div class="offcanvas-header">
+                    <button type="button" class="btn btn-outline-secondary btn-lg px-3 py-2 me-3" aria-label="Закрыть"
+                        @click="closeOffcanvas" title="Закрыть">
+                        <i class="ti ti-x fs-3"></i>
+                    </button>
                     <h5 class="offcanvas-title" :id="'task-offcanvas-title'">
                         {{ oc.brandName }} / {{ oc.taskName }}
                     </h5>
-                    <button type="button" class="btn-close text-reset" aria-label="Close"
-                        @click="closeOffcanvas"></button>
                 </div>
                 <div class="offcanvas-body">
                     <div class="mb-3">
@@ -2249,6 +2562,31 @@ const copySourcePublicLink = async (task) => {
                             </div>
                         </div>
 
+                        <!-- Manager file operations toolbar -->
+                        <div v-if="canEditResult && !isTaskAccepted"
+                            class="mb-3 d-flex flex-wrap gap-2 align-items-center">
+                            <input type="file" ref="replaceFileInput" class="d-none" @change="onReplaceFileSelected" />
+                            <input type="file" ref="addFileInput" class="d-none" multiple @change="onAddFileSelected" />
+
+                            <button class="btn btn-outline-primary btn-sm" @click="openAddFilePicker"
+                                :disabled="fileOperationLoading">
+                                <i class="ti ti-plus me-1"></i> Добавить
+                            </button>
+                            <button class="btn btn-outline-warning btn-sm" @click="archiveSelectedFiles"
+                                :disabled="fileOperationLoading || selectedResultFiles.length === 0">
+                                <i class="ti ti-archive me-1"></i> В Архив ({{ selectedResultFiles.length }})
+                            </button>
+                            <button v-if="selectedResultFiles.length > 0" class="btn btn-outline-secondary btn-sm"
+                                @click="clearFileSelection">
+                                Снять выделение
+                            </button>
+                            <span v-if="fileOperationLoading"
+                                class="spinner-border spinner-border-sm text-primary"></span>
+                        </div>
+                        <div v-if="isTaskAccepted && canEditResult" class="alert alert-info small mb-3">
+                            Задача принята. Редактирование файлов результата недоступно.
+                        </div>
+
                         <div v-if="filesLoading" class="text-secondary">Загрузка списка файлов…</div>
                         <div v-else>
                             <div v-if="filesError" class="text-danger">{{ filesError }}</div>
@@ -2256,21 +2594,30 @@ const copySourcePublicLink = async (task) => {
                                 <div v-if="!yandexItems.length" class="text-secondary">Файлы не найдены.</div>
                                 <ul v-else class="list-group">
                                     <li v-for="it in yandexItems" :key="it.resource_id || it.path || it.name"
-                                        class="list-group-item d-flex justify-content-between align-items-center">
+                                        class="list-group-item d-flex justify-content-between align-items-center"
+                                        :class="{ 'list-group-item-primary': isFileSelected(it) }">
                                         <div class="d-flex align-items-center gap-2">
+                                            <!-- Checkbox for file selection (only for files, when can edit) -->
+                                            <input v-if="canEditResult && !isTaskAccepted && it.type === 'file'"
+                                                type="checkbox" class="form-check-input" :checked="isFileSelected(it)"
+                                                @change="toggleFileSelection(it)" />
                                             <span class="badge"
                                                 :class="it.type === 'dir' ? 'bg-secondary' : 'bg-primary'">{{
-                                                    it.type
-                                                        ===
-                                                        'dir' ?
-                                                        'Папка' : 'Файл' }}</span>
+                                                    it.type === 'dir' ? 'Папка' : 'Файл' }}</span>
                                             <span>{{ it.name }}</span>
                                             <span v-if="it.size && it.type === 'file'" class="text-secondary small">{{
                                                 (it.size / 1024 / 1024).toFixed(2) }} MB</span>
                                         </div>
-                                        <div>
+                                        <div class="d-flex gap-1">
                                             <button v-if="it.type === 'file'" class="btn btn-sm btn-outline-primary"
                                                 @click="() => openYandexItemDirect(it)">ПОСМОТРЕТЬ</button>
+                                            <!-- Replace button for individual file -->
+                                            <button v-if="canEditResult && !isTaskAccepted && it.type === 'file'"
+                                                class="btn btn-sm btn-outline-warning"
+                                                @click="openReplaceFilePicker(it)" :disabled="fileOperationLoading"
+                                                title="Заменить файл">
+                                                <i class="ti ti-replace"></i>
+                                            </button>
                                         </div>
                                     </li>
                                 </ul>
@@ -2349,11 +2696,13 @@ const copySourcePublicLink = async (task) => {
                 :class="{ show: sourceOffcanvasOpen && !hasSourceOffcanvas }"
                 :style="sourceOffcanvasOpen && !hasSourceOffcanvas ? 'visibility: visible; z-index: 1045;' : ''">
                 <div class="offcanvas-header">
+                    <button type="button" class="btn btn-outline-secondary btn-lg px-3 py-2 me-3" aria-label="Закрыть"
+                        @click="closeSourceOffcanvas" title="Закрыть">
+                        <i class="ti ti-x fs-3"></i>
+                    </button>
                     <h5 class="offcanvas-title" :id="'task-source-offcanvas-title'">
                         {{ sourceOc.brandName }} / Исходник
                     </h5>
-                    <button type="button" class="btn-close text-reset" aria-label="Close"
-                        @click="closeSourceOffcanvas"></button>
                 </div>
                 <div class="offcanvas-body">
                     <div class="mb-3">
@@ -2453,13 +2802,16 @@ const copySourcePublicLink = async (task) => {
                 aria-hidden="true" @click.self="closeLightbox">
                 <div class="modal-dialog modal-xl" role="document">
                     <div class="modal-content bg-dark">
+                        <div class="modal-header border-0 pb-0">
+                            <button type="button" class="btn btn-light btn-lg px-3 py-2" aria-label="Закрыть"
+                                @click="closeLightbox" title="Закрыть">
+                                <i class="ti ti-x fs-3"></i>
+                            </button>
+                        </div>
                         <div class="modal-body p-0 d-flex justify-content-center align-items-center"
                             style="min-height: 60vh;">
                             <img v-if="lightboxSrc" :src="lightboxSrc" alt="preview"
                                 style="max-width: 100%; max-height: 80vh;" />
-                        </div>
-                        <div class="modal-footer border-0">
-                            <button type="button" class="btn btn-light" @click="closeLightbox">Закрыть</button>
                         </div>
                     </div>
                 </div>

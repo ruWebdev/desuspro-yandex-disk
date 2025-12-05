@@ -12,6 +12,8 @@ const user = usePage().props.auth.user;
 const roles = computed(() => (user?.roles || []).map(r => (typeof r === 'string' ? r : r.name)));
 const isPhotographer = computed(() => roles.value.includes('Photographer'));
 const isPhotoEditor = computed(() => roles.value.includes('PhotoEditor'));
+const isManager = computed(() => roles.value.includes('Manager') || roles.value.includes('manager'));
+const isAdmin = computed(() => roles.value.includes('Administrator') || roles.value.includes('admin'));
 const isDeletionRestricted = computed(() => isPhotographer.value || isPhotoEditor.value);
 
 // Profile form
@@ -21,6 +23,7 @@ const profileForm = useForm({
   first_name: user.first_name ?? '',
   middle_name: user.middle_name ?? '',
   email: user.email ?? '',
+  can_edit_result: user.can_edit_result ?? false,
 });
 
 function submitProfile() {
@@ -124,7 +127,7 @@ function submitDelete() {
                     autocomplete="given-name" />
                   <div v-if="profileForm.errors.first_name" class="text-danger small mt-1">{{
                     profileForm.errors.first_name
-                  }}</div>
+                    }}</div>
                 </div>
                 <div class="col-12 col-sm-4">
                   <label class="form-label" for="middle_name">Отчество</label>
@@ -147,6 +150,20 @@ function submitDelete() {
                 <Link :href="route('verification.send')" method="post" as="button" class="btn btn-link px-0">Отправить
                 письмо с подтверждением</Link>
                 <div v-show="props.status === 'verification-link-sent'" class="text-success small">Ссылка отправлена.
+                </div>
+              </div>
+
+              <!-- Manager setting: can edit result files -->
+              <div v-if="isManager || isAdmin" class="mt-3">
+                <div class="form-check">
+                  <input id="can_edit_result" type="checkbox" class="form-check-input"
+                    v-model="profileForm.can_edit_result" />
+                  <label class="form-check-label" for="can_edit_result">
+                    Править Результат
+                  </label>
+                </div>
+                <div class="form-text text-muted small">
+                  Разрешает заменять, добавлять и архивировать файлы в папке Результат задачи
                 </div>
               </div>
 
@@ -195,7 +212,7 @@ function submitDelete() {
                 <input id="password" ref="newPasswordInput" type="password" class="form-control"
                   v-model="passwordForm.password" autocomplete="new-password" />
                 <div v-if="passwordForm.errors.password" class="text-danger small mt-1">{{ passwordForm.errors.password
-                }}
+                  }}
                 </div>
               </div>
               <div class="mb-3">

@@ -110,6 +110,9 @@ Route::middleware('auth')->group(function () {
         // Temp download to public storage and cleanup
         Route::post('/download-public-to-temp', [YandexDiskController::class, 'downloadPublicToTemp'])->name('download_public_to_temp');
         Route::delete('/temp', [YandexDiskController::class, 'deleteTemp'])->name('delete_temp');
+        // Manager file operations (replace and archive)
+        Route::post('/replace-file', [YandexDiskController::class, 'replaceFile'])->name('replace_file');
+        Route::post('/archive-files', [YandexDiskController::class, 'archiveFiles'])->name('archive_files');
     });
 
     // Subtasks and comments should be available to authenticated users (Photographer/PhotoEditor/Manager)
