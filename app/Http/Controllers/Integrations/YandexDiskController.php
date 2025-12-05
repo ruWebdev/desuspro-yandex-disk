@@ -522,10 +522,34 @@ class YandexDiskController extends Controller
 
                 // Move file to archive folder
                 $newPath = $archiveDir . '/' . $filename;
-                $this->disk->moveResource($token->access_token, $path, $newPath, false);
-                $archived[] = ['from' => $path, 'to' => $newPath];
+                try {
+                    $this->disk->moveResource($token->access_token, $path, $newPath, false);
+                    $archived[] = ['from' => $path, 'to' => $newPath];
+                } catch (\Illuminate\Http\Client\RequestException $ex) {
+                    $status = optional($ex->response)->status();
+                    $body = optional($ex->response)->body();
+
+                    // Treat 409 Conflict on move as "already archived" to make operation idempotent
+                    if ($status === 409) {
+                        $archived[] = [
+                            'from' => $path,
+                            'to' => $newPath,
+                            'note' => 'already exists in old',
+                        ];
+                    } else {
+                        $errors[] = [
+                            'path' => $path,
+                            'error' => $ex->getMessage(),
+                            'status' => $status,
+                            'body' => Str::limit($body, 500),
+                        ];
+                    }
+                }
             } catch (\Throwable $e) {
-                $errors[] = ['path' => $path, 'error' => $e->getMessage()];
+                $errors[] = [
+                    'path' => $path,
+                    'error' => $e->getMessage(),
+                ];
             }
         }
 

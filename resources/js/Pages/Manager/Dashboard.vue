@@ -1847,11 +1847,15 @@ async function archiveSelectedFiles() {
         }
 
         const result = await res.json();
-        if (result.archived?.length > 0) {
+        if (Array.isArray(result.archived) && result.archived.length > 0) {
             toast.success(`Архивировано файлов: ${result.archived.length}`);
         }
-        if (result.errors?.length > 0) {
-            toast.error(`Ошибки: ${result.errors.length}`);
+        if (Array.isArray(result.errors) && result.errors.length > 0) {
+            const first = result.errors[0] || {};
+            const path = first.path || '';
+            let msg = first.error || 'Не удалось архивировать некоторые файлы';
+            if (first.status) msg += ` (HTTP ${first.status})`;
+            toast.error(`Не удалось архивировать ${result.errors.length} файл(ов).${path ? ` Пример: ${path} — ${msg}` : ` ${msg}`}`);
         }
 
         clearFileSelection();
@@ -2016,7 +2020,7 @@ const copySourcePublicLink = async (task) => {
                                         @change="(e) => bulkUpdatePriority(e.target.value)">
                                         <option value="" selected disabled>Выбрать…</option>
                                         <option v-for="p in priorityOptions" :key="p.value" :value="p.value">{{ p.label
-                                            }}</option>
+                                        }}</option>
                                     </select>
                                 </div>
 
@@ -2072,7 +2076,7 @@ const copySourcePublicLink = async (task) => {
                                 <td style="vertical-align: middle;">{{ t.type?.name || '' }}</td>
                                 <td style="vertical-align: middle;" class="text-end">
                                     <span v-if="t.assignee?.name" class="text-secondary me-2">{{ t.assignee.name
-                                        }}</span>
+                                    }}</span>
                                     <button class="btn btn-sm btn-outline-primary" @click="openAssign(t)">
                                         {{ t.assignee?.name ? 'Изменить' : 'Назначить' }}
                                     </button>

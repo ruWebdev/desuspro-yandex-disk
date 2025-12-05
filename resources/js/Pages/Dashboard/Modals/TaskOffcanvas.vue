@@ -206,11 +206,15 @@ async function archiveSelectedFiles() {
         }
 
         const result = await res.json();
-        if (result.archived?.length > 0) {
+        if (Array.isArray(result.archived) && result.archived.length > 0) {
             toast.success(`Архивировано файлов: ${result.archived.length}`);
         }
-        if (result.errors?.length > 0) {
-            toast.error(`Ошибки: ${result.errors.length}`);
+        if (Array.isArray(result.errors) && result.errors.length > 0) {
+            const first = result.errors[0] || {};
+            const path = first.path || '';
+            let msg = first.error || 'Не удалось архивировать некоторые файлы';
+            if (first.status) msg += ` (HTTP ${first.status})`;
+            toast.error(`Не удалось архивировать ${result.errors.length} файл(ов).${path ? ` Пример: ${path} — ${msg}` : ` ${msg}`}`);
         }
 
         clearResultFileSelection();
