@@ -39,6 +39,8 @@ const addFileInput = ref(null);
 const replacingFile = ref(null);
 const fileOperationLoading = ref(false);
 const selectedResultFiles = ref([]);
+const archiveInProgress = ref(false);
+const archiveTotal = ref(0);
 
 function toggleResultFileSelection(item) {
     if (item.type !== 'file') return;
@@ -224,6 +226,8 @@ async function archiveSelectedFiles() {
         toast.error(e.message || 'Ошибка архивирования файлов');
     } finally {
         fileOperationLoading.value = false;
+        archiveInProgress.value = false;
+        archiveTotal.value = 0;
     }
 }
 
@@ -955,7 +959,7 @@ function getObjectURL(file) {
                     </div>
 
                     <!-- Manager file operation buttons -->
-                    <div v-if="canEditResult && !isTaskAccepted" class="mb-3 d-flex flex-wrap gap-2 align-items-center">
+                    <div v-if="canEditResult && !isTaskAccepted" class="mb-2 d-flex flex-wrap gap-2 align-items-center">
                         <input type="file" ref="replaceFileInput" class="d-none" @change="onReplaceFileSelected" />
                         <input type="file" ref="addFileInput" multiple class="d-none" @change="onAddFileSelected" />
                         <button class="btn btn-sm btn-outline-primary" :disabled="fileOperationLoading"
@@ -968,6 +972,15 @@ function getObjectURL(file) {
                             <i class="ti ti-archive me-1"></i>В Архив ({{ selectedResultFiles.length }})
                         </button>
                         <span v-if="fileOperationLoading" class="spinner-border spinner-border-sm text-primary"></span>
+                    </div>
+                    <div v-if="archiveInProgress" class="mb-3">
+                        <div class="progress" style="height: 4px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning"
+                                style="width: 100%;"></div>
+                        </div>
+                        <div class="small text-muted mt-1">
+                            Архивирование файлов<span v-if="archiveTotal"> ({{ archiveTotal }})</span>...
+                        </div>
                     </div>
                     <div v-if="canEditResult && isTaskAccepted" class="mb-3">
                         <div class="alert alert-info py-2 mb-0">

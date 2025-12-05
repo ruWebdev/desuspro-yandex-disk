@@ -1676,6 +1676,8 @@ const addFileInput = ref(null);
 const replacingFile = ref(null); // The file being replaced
 const fileOperationLoading = ref(false);
 const fileOperationError = ref('');
+const archiveInProgress = ref(false);
+const archiveTotal = ref(0);
 
 // Get current task from offcanvas context
 const currentTask = computed(() => items.value.find(t => t.id === oc.value.taskId));
@@ -1866,6 +1868,8 @@ async function archiveSelectedFiles() {
         toast.error(fileOperationError.value);
     } finally {
         fileOperationLoading.value = false;
+        archiveInProgress.value = false;
+        archiveTotal.value = 0;
     }
 }
 
@@ -2567,7 +2571,7 @@ const copySourcePublicLink = async (task) => {
 
                         <!-- Manager file operations toolbar -->
                         <div v-if="canEditResult && !isTaskAccepted"
-                            class="mb-3 d-flex flex-wrap gap-2 align-items-center">
+                            class="mb-2 d-flex flex-wrap gap-2 align-items-center">
                             <input type="file" ref="replaceFileInput" class="d-none" @change="onReplaceFileSelected" />
                             <input type="file" ref="addFileInput" class="d-none" multiple @change="onAddFileSelected" />
 
@@ -2585,6 +2589,15 @@ const copySourcePublicLink = async (task) => {
                             </button>
                             <span v-if="fileOperationLoading"
                                 class="spinner-border spinner-border-sm text-primary"></span>
+                        </div>
+                        <div v-if="archiveInProgress" class="mb-3">
+                            <div class="progress" style="height: 4px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning"
+                                    style="width: 100%;"></div>
+                            </div>
+                            <div class="small text-muted mt-1">
+                                Архивирование файлов<span v-if="archiveTotal"> ({{ archiveTotal }})</span>...
+                            </div>
                         </div>
                         <div v-if="isTaskAccepted && canEditResult" class="alert alert-info small mb-3">
                             Задача принята. Редактирование файлов результата недоступно.
