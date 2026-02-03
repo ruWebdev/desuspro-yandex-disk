@@ -130,6 +130,22 @@ function resetFilters() {
     fetchPage(true);
 }
 
+// Применить фильтр по артикулу из строки таблицы
+function filterByArticleFromTask(task) {
+    if (!task || !task.article) return;
+
+    const brandId = task.brand_id || task.brand?.id;
+    const articleId = task.article.id;
+
+    if (!articleId) return;
+
+    if (brandId) {
+        brandFilter.value = String(brandId);
+    }
+
+    articleFilter.value = String(articleId);
+}
+
 function buildQueryParams(resetPage = false) {
     const params = {};
     if (search.value) params.search = search.value;
@@ -289,6 +305,75 @@ function onSelectAll(val, ids) {
 const anySelected = computed(() => selectedIds.value.length > 0);
 const selectedTasks = computed(() => items.value.filter(t => selectedIds.value.includes(t.id)));
 function clearSelection() { selectedIds.value = []; }
+
+function getTaskAcceptedAt(task) {
+    if (!task || task.status !== 'accepted') return null;
+    return task.accepted_at || task.updated_at || null;
+}
+
+function formatDateRu(value) {
+    if (!value) return '';
+    try {
+        const d = new Date(value);
+        return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('ru-RU');
+    } catch (e) {
+        return '';
+    }
+}
+
+async function exportSelectedToXls() {
+    const tasks = selectedTasks.value;
+    if (!tasks.length) return;
+
+    try {
+        const XLSX = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm');
+
+        const header = [
+            'Дата создания',
+            'Дата принятия',
+            'Наименование',
+            'Бренд',
+            'Артикул',
+            'Тип',
+            'Исполнитель',
+        ];
+
+        const rows = tasks.map((t) => {
+            const createdDate = formatDateRu(t.created_at);
+            const acceptedAt = getTaskAcceptedAt(t);
+            const acceptedDate = acceptedAt ? formatDateRu(acceptedAt) : '';
+            const name = t.name || (t.article?.name || '');
+            const brandName = t.brand?.name || (brands.find(b => b.id === t.brand_id)?.name) || '';
+            const articleName = t.article?.name || '';
+            const typeName = t.type?.name || '';
+            const assigneeName = t.assignee?.name || '';
+
+            return [
+                createdDate,
+                acceptedDate,
+                name,
+                brandName,
+                articleName,
+                typeName,
+                assigneeName,
+            ];
+        });
+
+        const sheetData = [header, ...rows];
+        const ws = XLSX.utils.aoa_to_sheet(sheetData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Задачи');
+
+        const now = new Date();
+        const yyyyMmDd = now.toISOString().slice(0, 10);
+        const fileName = `tasks_export_${yyyyMmDd}.xlsx`;
+
+        XLSX.writeFile(wb, fileName);
+    } catch (e) {
+        console.error('Export XLS failed', e);
+        toast.error('Не удалось сформировать XLS');
+    }
+}
 
 // Bulk delete (admin only)
 async function onBulkDelete() {
@@ -783,8 +868,11 @@ function lightboxNext() {
                                     <button v-if="isAdmin" class="btn btn-sm btn-outline-danger" @click="onBulkDelete">
                                         <i class="ti ti-trash me-1"></i> Удалить
                                     </button>
-                                    <button class="btn btn-sm btn-outline-secondary me-2" @click="clearSelection">
+                                    <button class="btn btn-sm btn-outline-secondary" @click="clearSelection">
                                         <i class="ti ti-x me-1"></i> Снять выделение
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-success" @click="exportSelectedToXls">
+                                        <i class="ti ti-file-spreadsheet me-1"></i> ЭКСПОРТ XLS
                                     </button>
                                 </div>
                             </div>
@@ -799,7 +887,8 @@ function lightboxNext() {
                     @open-source-comments="openSourceCommentsOffcanvas" @open-source-files="openSourceFilesOffcanvas"
                     @open-comments="openCommentsOffcanvas" @open-files="openFilesOffcanvas"
                     @copy-link="copyTaskPublicLink" @open-link="openTaskPublicLink" @edit-task="onEditTask"
-                    @delete-task="onDeleteTask" @create-based-on="openCreateBasedOn" />
+                    @delete-task="onDeleteTask" @create-based-on="openCreateBasedOn"
+                    @filter-by-article="filterByArticleFromTask" />
             </div>
         </div>
 

@@ -30,7 +30,8 @@ const emit = defineEmits([
     'open-link',
     'edit-task',
     'delete-task',
-    'create-based-on'
+    'create-based-on',
+    'filter-by-article',
 ]);
 
 // Computed
@@ -79,6 +80,66 @@ function onRowClick(task, event) {
     } else {
         activeRowId.value = rowId;
     }
+}
+
+// Карта индексов дублей задач (1,2,3...) по сочетанию бренд + артикул + тип задачи
+const duplicateIndexMap = computed(() => {
+    const indexMap = new Map();
+    const groups = new Map();
+
+    props.tasks.forEach((t) => {
+        const brandId = t.brand_id || (t.brand ? t.brand.id : null);
+        const articleId = t.article_id || (t.article ? t.article.id : null);
+        const taskTypeId = t.task_type_id || (t.type ? t.type.id : null);
+        if (!brandId || !articleId || !taskTypeId) return;
+        const key = `${brandId}|${articleId}|${taskTypeId}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(t);
+    });
+
+    groups.forEach((list) => {
+        if (!list || list.length <= 1) return;
+        const sorted = [...list].sort((a, b) => Number(a.id) - Number(b.id));
+        sorted.forEach((task, idx) => {
+            indexMap.set(task.id, idx + 1);
+        });
+    });
+
+    return indexMap;
+});
+
+function getDuplicateIndex(task) {
+    return duplicateIndexMap.value.has(task.id) ? duplicateIndexMap.value.get(task.id) : null;
+}
+
+function getBaseTaskName(task) {
+    return task.name || task.article?.name || '';
+}
+
+function parseDate(value) {
+    if (!value) return null;
+    try {
+        const d = new Date(value);
+        return Number.isNaN(d.getTime()) ? null : d;
+    } catch (e) {
+        return null;
+    }
+}
+
+function formatDateTimeRu(value) {
+    const d = parseDate(value);
+    return d ? d.toLocaleString('ru-RU') : '';
+}
+
+function formatDateRu(value) {
+    const d = parseDate(value);
+    return d ? d.toLocaleDateString('ru-RU') : '';
+}
+
+function getAcceptedAt(task) {
+    if (!task || task.status !== 'accepted') return null;
+    // Если в задаче появится отдельное поле accepted_at, используем его, иначе fallback на updated_at
+    return task.accepted_at || task.updated_at || null;
 }
 
 // Helper functions
@@ -182,6 +243,33 @@ function isSelected(id) {
 function openSourceFileLink(task) {
     if (!task.source_files || !task.source_files.length || !task.source_files[0]) return;
     window.open(task.source_files[0], '_blank', 'noopener,noreferrer');
+}
+
+// Copy article name to clipboard
+async function copyArticleCode(task) {
+    const articleName = task?.article?.name;
+    if (!articleName) return;
+
+    try {
+        const text = articleName.toString().trim();
+        if (!text) return;
+
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+        }
+
+        toast.success('Артикул скопирован в буфер обмена');
+    } catch (e) {
+        console.error('Copy article failed', e);
+        toast.error('Не удалось скопировать артикул');
+    }
 }
 
 // Role-based status allowance
@@ -341,12 +429,43 @@ function updateBodyScrollClass() {
                             <input type="checkbox" class="form-check-input" :checked="isSelected(t.id)"
                                 @change="emit('toggle-row', t.id)" />
                         </td>
-                        <td class="text-start" style="vertical-align: middle;">{{ new
-                            Date(t.created_at).toLocaleString('ru-RU') }}</td>
-                        <td style="vertical-align: middle;">{{ t.name || t.article?.name || '' }}</td>
+                        <td class="text-start" style="vertical-align: middle;">
+                            <div>{{ formatDateTimeRu(t.created_at) }}</div>
+                            <div v-if="getAcceptedAt(t)" class="text-success small">
+                                Принята: {{ formatDateRu(getAcceptedAt(t)) }}
+                            </div>
+                        </td>
                         <td style="vertical-align: middle;">
-                            {{t.brand?.name || (brands.find(b => b.id === t.brand_id)?.name)}}<br />{{ t.article?.name
-                                || '' }}
+                            <span v-if="getDuplicateIndex(t) !== null"
+                                class="badge rounded-pill bg-secondary me-1 text-light">
+                                {{ getDuplicateIndex(t) }}
+                            </span>
+                            <span>{{ getBaseTaskName(t) }}</span>
+                        </td>
+                        <td style="vertical-align: middle;">
+                            {{ t.brand?.name || (brands.find(b => b.id === t.brand_id)?.name) }}<br />
+                            <template v-if="t.article?.name">
+                                <div class="d-inline-flex align-items-center gap-1">
+                                    <button type="button" class="btn btn-link p-0 m-0 align-baseline"
+                                        style="font-size: 13px; text-decoration: underline;"
+                                        @click.stop="emit('filter-by-article', t)">
+                                        {{ t.article.name }}
+                                    </button>
+                                    <button type="button" class="btn btn-icon btn-ghost-secondary p-0 ms-1"
+                                        title="Скопировать артикул" @click.stop="copyArticleCode(t)">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
+                                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round"
+                                            class="icon icon-tabler icons-tabler-outline icon-tabler-files">
+                                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                            <path d="M15 3v4a1 1 0 0 0 1 1h4" />
+                                            <path
+                                                d="M18 17h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h4l5 5v7a2 2 0 0 1 -2 2z" />
+                                            <path d="M16 17v2a2 2 0 0 1 -2 2h-7a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2h2" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </template>
                         </td>
                         <td style="vertical-align: middle;">{{ t.type?.name || '' }}</td>
                         <td style="vertical-align: middle;" class="text-end">

@@ -560,12 +560,6 @@ function getObjectURL(file) {
                 <div v-else>
                     <div class="mb-3 d-flex align-items-center justify-content-between">
                         <label class="form-label m-0">Файл(ы) исходника</label>
-                        <div class="d-flex gap-2">
-                            <button v-if="!isPerformer" type="button" class="btn btn-sm btn-outline-primary"
-                                @click="addSourceFilesField">+</button>
-                            <button v-if="!isPerformer" type="button" class="btn btn-sm btn-primary"
-                                @click="saveSourceFiles">Сохранить</button>
-                        </div>
                     </div>
                     <div v-for="(f, idx) in sourceFiles" :key="idx" class="input-group mb-2">
                         <input type="text" class="form-control" v-model="sourceFiles[idx]"
@@ -576,6 +570,10 @@ function getObjectURL(file) {
                             @click="removeSourceFilesField(idx)" :disabled="sourceFiles.length <= 1">-</button>
                     </div>
                     <div class="form-text">Добавляйте ссылки (кликабельны) или простые названия файлов.</div>
+                    <div v-if="!isPerformer" class="d-flex justify-content-end gap-2 mt-3">
+                        <button type="button" class="btn btn-outline-primary" @click="addSourceFilesField">+</button>
+                        <button type="button" class="btn btn-primary" @click="saveSourceFiles">Сохранить</button>
+                    </div>
                 </div>
             </div>
         </div>

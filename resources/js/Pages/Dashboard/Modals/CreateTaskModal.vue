@@ -85,8 +85,8 @@ const filteredArticles = computed(() => {
 
 const canSubmit = computed(() => {
     if (!createForm.value.brand_id || !createForm.value.task_type_id) return false;
-    // Block if duplicate check is in progress or duplicate exists
-    if (duplicateChecking.value || duplicateExists.value) return false;
+    // Блокируем только во время проверки дублей, но не при их наличии
+    if (duplicateChecking.value) return false;
     if (xlsMode.value) {
         const validCount = xlsRows.value.filter(r => r.articleId).length;
         return validCount > 0 && !validating.value && !creating.value;
@@ -139,9 +139,11 @@ function scheduleDuplicateCheck() {
 watch(
     () => [createForm.value.brand_id, createForm.value.task_type_id, createForm.value.article_ids],
     () => {
-        // Only check when we have a single article (basedOnTask mode)
-        if (props.basedOnTask && createForm.value.article_ids.length === 1) {
+        // Проверяем дубликаты только когда выбран один артикул
+        if (createForm.value.article_ids.length === 1) {
             scheduleDuplicateCheck();
+        } else {
+            duplicateExists.value = false;
         }
     },
     { deep: true }
@@ -266,10 +268,15 @@ async function submitCreate() {
     }
     creating.value = true;
     try {
-        const anyLinks = validRows.some(r => (r.link ?? '').toString().trim().length > 0);
+        const anyLinks = validRows.some(r =>
+            Array.isArray(r.links) && r.links.some(v => (v ?? '').toString().trim().length > 0)
+        );
         if (anyLinks) {
             for (const r of validRows) {
-                const perRowPayload = buildCommonPayload([r.articleId], (r.link ?? '').toString().trim() ? [r.link.toString().trim()] : undefined);
+                const links = Array.isArray(r.links)
+                    ? r.links.map(v => (v ?? '').toString().trim()).filter(v => v.length > 0)
+                    : [];
+                const perRowPayload = buildCommonPayload([r.articleId], links.length ? links : undefined);
                 await axios.post(route('tasks.store'), perRowPayload);
             }
             toast.success(`Создано задач: ${validRows.length}`);
@@ -468,10 +475,16 @@ async function onFileChosen(e) {
             const r = rows[i];
             if (!r || r.length === 0) continue;
             const c0 = (r[0] ?? '').toString().trim();
-            const c1 = (r[1] ?? '').toString().trim();
             if (i === 0 && /артик/i.test(c0)) continue;
             if (!c0) continue;
-            parsed.push({ article: c0, link: c1, exists: null, articleId: null });
+            const links = [];
+            for (let col = 1; col <= 5; col++) {
+                const raw = (r[col] ?? '').toString().trim();
+                if (raw) {
+                    links.push(raw);
+                }
+            }
+            parsed.push({ article: c0, links, exists: null, articleId: null });
         }
         if (!parsed.length) {
             toast.error('Файл не содержит данных');
@@ -634,8 +647,8 @@ const xlsTotalCount = computed(() => xlsRows.value.length);
                                     <table class="table table-sm table-hover align-middle">
                                         <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
                                             <tr>
-                                                <th style="width: 40%;">Артикул</th>
-                                                <th style="width: 50%;">Ссылка</th>
+                                                <th style="width: 30%;">Артикул</th>
+                                                <th style="width: 60%;">Ссылки (до 5 шт.)</th>
                                                 <th style="width: 10%;"></th>
                                             </tr>
                                         </thead>
@@ -644,8 +657,11 @@ const xlsTotalCount = computed(() => xlsRows.value.length);
                                                 :class="{ 'table-danger': row.exists === false }">
                                                 <td>{{ row.article }}</td>
                                                 <td>
-                                                    <input type="text" class="form-control form-control-sm"
-                                                        v-model="row.link" placeholder="Ссылка (необязательно)" />
+                                                    <div v-for="i in 5" :key="i" class="mb-1">
+                                                        <input type="text" class="form-control form-control-sm"
+                                                            v-model="row.links[i - 1]"
+                                                            :placeholder="`Ссылка ${i} (необязательно)`" />
+                                                    </div>
                                                 </td>
                                                 <td class="text-end">
                                                     <button type="button" class="btn btn-sm btn-outline-danger"
@@ -658,6 +674,10 @@ const xlsTotalCount = computed(() => xlsRows.value.length);
                                 <div class="form-text"
                                     :class="{ 'text-danger': xlsRows.some(r => r.exists === false) }">
                                     Строки, отмеченные красным, отсутствуют в БД для выбранного бренда.
+                                </div>
+                                <div class="form-text">
+                                    Для каждой позиции можно указать до 5 ссылок: используйте 2–6 столбцы файла
+                                    (B–F) под ссылки 1–5. Пустые ячейки будут проигнорированы.
                                 </div>
                             </div>
                             <div class="col-md-12">
@@ -701,7 +721,7 @@ const xlsTotalCount = computed(() => xlsRows.value.length);
                     </div>
                     <div class="modal-footer">
                         <div v-if="duplicateExists" class="text-danger me-auto">
-                            <i class="ti ti-alert-circle me-1"></i>Такая задача уже существует!
+                            <i class="ti ti-alert-circle me-1"></i>Внимание: задача с таким брендом, артикулом и типом уже существует. Будет создан ещё один дубль.
                         </div>
                         <div v-else-if="duplicateChecking" class="text-secondary me-auto">
                             <span class="spinner-border spinner-border-sm me-1"></span>Проверка дубликатов...
