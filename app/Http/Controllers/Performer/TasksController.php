@@ -97,12 +97,29 @@ class TasksController extends Controller
         }
         // Created date
         $created = $request->query('created');
-        $date = $request->query('date');
-        if (in_array($created, ['today','yesterday'], true) || ($created === 'date' && $date)) {
+        $dateFrom = $request->query('date_from');
+        $dateTo = $request->query('date_to');
+        $singleDate = $request->query('date');
+
+        if (in_array($created, ['today','yesterday'], true)
+            || ($created === 'date' && ($singleDate || $dateFrom || $dateTo))) {
             $today = now();
-            if ($created === 'today') $q->whereDate('created_at', $today->toDateString());
-            elseif ($created === 'yesterday') $q->whereDate('created_at', $today->copy()->subDay()->toDateString());
-            elseif ($created === 'date' && $date) $q->whereDate('created_at', $date);
+            if ($created === 'today') {
+                $q->whereDate('created_at', $today->toDateString());
+            } elseif ($created === 'yesterday') {
+                $q->whereDate('created_at', $today->copy()->subDay()->toDateString());
+            } elseif ($created === 'date') {
+                if ($dateFrom && $dateTo) {
+                    $q->whereDate('created_at', '>=', $dateFrom)
+                      ->whereDate('created_at', '<=', $dateTo);
+                } elseif ($dateFrom) {
+                    $q->whereDate('created_at', '>=', $dateFrom);
+                } elseif ($dateTo) {
+                    $q->whereDate('created_at', '<=', $dateTo);
+                } elseif ($singleDate) {
+                    $q->whereDate('created_at', $singleDate);
+                }
+            }
         }
 
         $perPage = (int)($request->query('per_page', 20));

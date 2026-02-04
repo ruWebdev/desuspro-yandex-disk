@@ -105,7 +105,8 @@ const articleFilter = ref('');
 const filterArticles = ref([]);
 const performerFilter = ref('');
 const createdFilter = ref('');
-const createdDate = ref('');
+const createdDateFrom = ref('');
+const createdDateTo = ref('');
 if (props.initialBrandId) brandFilter.value = String(props.initialBrandId);
 
 // Состояние списка на стороне сервера
@@ -126,7 +127,8 @@ function resetFilters() {
     articleFilter.value = '';
     performerFilter.value = '';
     createdFilter.value = '';
-    createdDate.value = '';
+    createdDateFrom.value = '';
+    createdDateTo.value = '';
     fetchPage(true);
 }
 
@@ -156,7 +158,10 @@ function buildQueryParams(resetPage = false) {
     if (articleFilter.value) params.article_id = articleFilter.value;
     if (performerFilter.value) params.assignee_id = performerFilter.value;
     if (createdFilter.value) params.created = createdFilter.value;
-    if (createdDate.value) params.date = createdDate.value;
+    if (createdFilter.value === 'date') {
+        if (createdDateFrom.value) params.date_from = createdDateFrom.value;
+        if (createdDateTo.value) params.date_to = createdDateTo.value;
+    }
 
     // Role-based filtering
     if (props.currentUser) {
@@ -241,7 +246,18 @@ onUnmounted(() => {
 });
 
 // Filters reactive watchers
-watch([search, globalSearch, brandFilter, statusFilter, priorityFilter, articleFilter, performerFilter, createdFilter, createdDate], () => {
+watch([
+    search,
+    globalSearch,
+    brandFilter,
+    statusFilter,
+    priorityFilter,
+    articleFilter,
+    performerFilter,
+    createdFilter,
+    createdDateFrom,
+    createdDateTo,
+], () => {
     fetchPage(true);
 });
 
@@ -822,14 +838,16 @@ function lightboxNext() {
         <template #TopButtons>
             <Filters :search="search" :globalSearch="globalSearch" :brandFilter="brandFilter"
                 :statusFilter="statusFilter" :priorityFilter="priorityFilter" :articleFilter="articleFilter"
-                :performerFilter="performerFilter" :createdFilter="createdFilter" :createdDate="createdDate"
-                :brands="brands" :performers="performers" :statusOptions="statusOptions"
-                :priorityOptions="priorityOptions" :filterArticles="filterArticles" :currentUser="currentUser"
+                :performerFilter="performerFilter" :createdFilter="createdFilter"
+                :createdDateFrom="createdDateFrom" :createdDateTo="createdDateTo" :brands="brands"
+                :performers="performers" :statusOptions="statusOptions" :priorityOptions="priorityOptions"
+                :filterArticles="filterArticles" :currentUser="currentUser"
                 @update:search="(v) => search = v" @update:globalSearch="(v) => globalSearch = v"
                 @update:brandFilter="(v) => brandFilter = v" @update:statusFilter="(v) => statusFilter = v"
                 @update:priorityFilter="(v) => priorityFilter = v" @update:articleFilter="(v) => articleFilter = v"
                 @update:performerFilter="(v) => performerFilter = v" @update:createdFilter="(v) => createdFilter = v"
-                @update:createdDate="(v) => createdDate = v" @reset="resetFilters" @create="openCreate" />
+                @update:createdDateFrom="(v) => createdDateFrom = v" @update:createdDateTo="(v) => createdDateTo = v"
+                @reset="resetFilters" @create="openCreate" />
         </template>
 
         <div class="row">

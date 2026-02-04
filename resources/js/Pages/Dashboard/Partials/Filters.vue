@@ -12,7 +12,8 @@ const props = defineProps({
     articleFilter: { type: [String, Number], default: '' },
     performerFilter: { type: [String, Number], default: '' },
     createdFilter: { type: String, default: '' },
-    createdDate: { type: String, default: '' },
+    createdDateFrom: { type: String, default: '' },
+    createdDateTo: { type: String, default: '' },
 
     // data
     brands: { type: Array, required: true },
@@ -32,7 +33,8 @@ const emit = defineEmits([
     'update:articleFilter',
     'update:performerFilter',
     'update:createdFilter',
-    'update:createdDate',
+    'update:createdDateFrom',
+    'update:createdDateTo',
     'reset'
 ]);
 
@@ -110,8 +112,12 @@ const isAdminOrPerformer = computed(() => {
             </select>
         </div>
         <div class="p-1 flex-fill" v-if="createdFilter === 'date'">
-            <input type="date" class="form-control" :value="createdDate"
-                @input="$emit('update:createdDate', $event.target.value)" />
+            <div class="d-flex gap-1">
+                <input type="date" class="form-control" :value="createdDateFrom"
+                    @input="$emit('update:createdDateFrom', $event.target.value)" placeholder="С" />
+                <input type="date" class="form-control" :value="createdDateTo"
+                    @input="$emit('update:createdDateTo', $event.target.value)" placeholder="По" />
+            </div>
         </div>
         <div class="p-1 flex-fill">
             <button class="btn btn-secondary w-100" @click="$emit('reset')">СБРОСИТЬ ФИЛЬТРЫ</button>
