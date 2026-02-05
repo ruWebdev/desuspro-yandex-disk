@@ -81,9 +81,10 @@ class TaskController extends Controller
             }
         }
 
+        $statusFilter = null;
         if ($request->filled('status')) {
-            $status = $this->normalizeStatus($request->query('status'));
-            $q->where('status', $status);
+            $statusFilter = $this->normalizeStatus($request->query('status'));
+            $q->where('status', $statusFilter);
         }
 
         // Поиск по имени (только по названию задачи)
@@ -125,33 +126,60 @@ class TaskController extends Controller
             || ($created === 'date' && ($singleDate || $dateFrom || $dateTo))) {
             $today = now();
 
-            $q->where(function ($qq) use ($created, $today, $dateFrom, $dateTo, $singleDate) {
+            $isAcceptedFilter = ($statusFilter === 'accepted');
+
+            $q->where(function ($qq) use ($created, $today, $dateFrom, $dateTo, $singleDate, $isAcceptedFilter) {
                 if ($created === 'today') {
                     $date = $today->toDateString();
-                    $qq->whereDate('created_at', $date)
-                       ->orWhereDate('updated_at', $date);
+                    if ($isAcceptedFilter) {
+                        $qq->whereDate('updated_at', $date);
+                    } else {
+                        $qq->whereDate('created_at', $date)
+                           ->orWhereDate('updated_at', $date);
+                    }
                 } elseif ($created === 'yesterday') {
                     $date = $today->copy()->subDay()->toDateString();
-                    $qq->whereDate('created_at', $date)
-                       ->orWhereDate('updated_at', $date);
+                    if ($isAcceptedFilter) {
+                        $qq->whereDate('updated_at', $date);
+                    } else {
+                        $qq->whereDate('created_at', $date)
+                           ->orWhereDate('updated_at', $date);
+                    }
                 } elseif ($created === 'date') {
                     if ($dateFrom && $dateTo) {
-                        $qq->where(function ($sub) use ($dateFrom, $dateTo) {
-                            $sub->whereDate('created_at', '>=', $dateFrom)
-                                ->whereDate('created_at', '<=', $dateTo);
-                        })->orWhere(function ($sub) use ($dateFrom, $dateTo) {
-                            $sub->whereDate('updated_at', '>=', $dateFrom)
-                                ->whereDate('updated_at', '<=', $dateTo);
-                        });
+                        if ($isAcceptedFilter) {
+                            $qq->whereDate('updated_at', '>=', $dateFrom)
+                               ->whereDate('updated_at', '<=', $dateTo);
+                        } else {
+                            $qq->where(function ($sub) use ($dateFrom, $dateTo) {
+                                $sub->whereDate('created_at', '>=', $dateFrom)
+                                    ->whereDate('created_at', '<=', $dateTo);
+                            })->orWhere(function ($sub) use ($dateFrom, $dateTo) {
+                                $sub->whereDate('updated_at', '>=', $dateFrom)
+                                    ->whereDate('updated_at', '<=', $dateTo);
+                            });
+                        }
                     } elseif ($dateFrom) {
-                        $qq->whereDate('created_at', '>=', $dateFrom)
-                           ->orWhereDate('updated_at', '>=', $dateFrom);
+                        if ($isAcceptedFilter) {
+                            $qq->whereDate('updated_at', '>=', $dateFrom);
+                        } else {
+                            $qq->whereDate('created_at', '>=', $dateFrom)
+                               ->orWhereDate('updated_at', '>=', $dateFrom);
+                        }
                     } elseif ($dateTo) {
-                        $qq->whereDate('created_at', '<=', $dateTo)
-                           ->orWhereDate('updated_at', '<=', $dateTo);
+                        if ($isAcceptedFilter) {
+                            $qq->whereDate('updated_at', '<=', $dateTo);
+                        } else {
+                            $qq->whereDate('created_at', '<=', $dateTo)
+                               ->orWhereDate('updated_at', '<=', $dateTo);
+                        }
                     } elseif ($singleDate) {
-                        $qq->whereDate('created_at', $singleDate)
-                           ->orWhereDate('updated_at', $singleDate);
+                        if ($isAcceptedFilter) {
+                            $qq->whereDate('updated_at', $singleDate);
+                        } else {
+                            $qq->whereDate('created_at', $singleDate)
+                               ->orWhereDate('updated_at', $singleDate);
+                        }
                     }
                 }
             });
