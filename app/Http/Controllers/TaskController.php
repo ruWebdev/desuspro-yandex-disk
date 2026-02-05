@@ -124,22 +124,37 @@ class TaskController extends Controller
         if (in_array($created, ['today','yesterday'], true)
             || ($created === 'date' && ($singleDate || $dateFrom || $dateTo))) {
             $today = now();
-            if ($created === 'today') {
-                $q->whereDate('created_at', $today->toDateString());
-            } elseif ($created === 'yesterday') {
-                $q->whereDate('created_at', $today->copy()->subDay()->toDateString());
-            } elseif ($created === 'date') {
-                if ($dateFrom && $dateTo) {
-                    $q->whereDate('created_at', '>=', $dateFrom)
-                      ->whereDate('created_at', '<=', $dateTo);
-                } elseif ($dateFrom) {
-                    $q->whereDate('created_at', '>=', $dateFrom);
-                } elseif ($dateTo) {
-                    $q->whereDate('created_at', '<=', $dateTo);
-                } elseif ($singleDate) {
-                    $q->whereDate('created_at', $singleDate);
+
+            $q->where(function ($qq) use ($created, $today, $dateFrom, $dateTo, $singleDate) {
+                if ($created === 'today') {
+                    $date = $today->toDateString();
+                    $qq->whereDate('created_at', $date)
+                       ->orWhereDate('updated_at', $date);
+                } elseif ($created === 'yesterday') {
+                    $date = $today->copy()->subDay()->toDateString();
+                    $qq->whereDate('created_at', $date)
+                       ->orWhereDate('updated_at', $date);
+                } elseif ($created === 'date') {
+                    if ($dateFrom && $dateTo) {
+                        $qq->where(function ($sub) use ($dateFrom, $dateTo) {
+                            $sub->whereDate('created_at', '>=', $dateFrom)
+                                ->whereDate('created_at', '<=', $dateTo);
+                        })->orWhere(function ($sub) use ($dateFrom, $dateTo) {
+                            $sub->whereDate('updated_at', '>=', $dateFrom)
+                                ->whereDate('updated_at', '<=', $dateTo);
+                        });
+                    } elseif ($dateFrom) {
+                        $qq->whereDate('created_at', '>=', $dateFrom)
+                           ->orWhereDate('updated_at', '>=', $dateFrom);
+                    } elseif ($dateTo) {
+                        $qq->whereDate('created_at', '<=', $dateTo)
+                           ->orWhereDate('updated_at', '<=', $dateTo);
+                    } elseif ($singleDate) {
+                        $qq->whereDate('created_at', $singleDate)
+                           ->orWhereDate('updated_at', $singleDate);
+                    }
                 }
-            }
+            });
         }
 
         $perPage = (int)($request->query('per_page', 20));
